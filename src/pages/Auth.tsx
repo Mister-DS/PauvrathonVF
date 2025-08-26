@@ -93,7 +93,10 @@ export default function Auth() {
         <CardContent>
           <div className="space-y-4">
             <Button 
-              onClick={connectTwitch}
+              onClick={() => {
+                console.log('🖱️ Main Twitch button clicked');
+                connectTwitch();
+              }}
               className="w-full neon-glow pulse-neon"
               size="lg"
               disabled={loading}

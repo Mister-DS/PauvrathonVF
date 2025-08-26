@@ -51,7 +51,14 @@ export function TwitchDebug() {
           <Button onClick={fetchClientId} disabled={loading} size="sm">
             {loading ? 'Loading...' : 'Test Client ID'}
           </Button>
-          <Button onClick={connectTwitch} size="sm" variant="outline">
+          <Button 
+            onClick={() => {
+              console.log('🖱️ Debug: Test Auth Flow clicked');
+              connectTwitch();
+            }} 
+            size="sm" 
+            variant="outline"
+          >
             Test Auth Flow
           </Button>
         </div>

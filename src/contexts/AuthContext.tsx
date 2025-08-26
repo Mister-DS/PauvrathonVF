@@ -101,43 +101,82 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const connectTwitch = async () => {
+    console.log('🚀 Starting Twitch connection...');
+    
     try {
+      console.log('📞 Fetching Twitch Client ID...');
       const clientId = await fetchTwitchClientId();
-      if (!clientId) return;
+      console.log('🔑 Client ID received:', clientId ? 'SUCCESS' : 'FAILED');
+      
+      if (!clientId) {
+        console.error('❌ No client ID - aborting');
+        toast({
+          title: "Erreur",
+          description: "Impossible de récupérer le Client ID Twitch.",
+          variant: "destructive",
+        });
+        return;
+      }
       
       // Utilise l'URL actuelle pour la redirection
       const currentOrigin = window.location.origin;
       const redirectUri = `${currentOrigin}/auth/callback`;
       
-      console.log('Twitch redirect URL:', redirectUri);
+      console.log('🌍 Current origin:', currentOrigin);
+      console.log('🔄 Redirect URI:', redirectUri);
       
       const twitchAuthUrl = `https://id.twitch.tv/oauth2/authorize?` +
         `client_id=${clientId}&` +
         `redirect_uri=${encodeURIComponent(redirectUri)}&` +
         `response_type=code&` +
         `scope=user:read:email&` +
-        `force_verify=true`; // Force la verification pour les tests
+        `force_verify=true`;
 
-      console.log('Twitch auth URL:', twitchAuthUrl);
+      console.log('🔗 Full Twitch auth URL:', twitchAuthUrl);
+      console.log('🏃‍♂️ Attempting redirect...');
       
+      // Test if we can access window.location
+      console.log('🪟 Current window.location.href:', window.location.href);
+      
+      // Try the redirect
       window.location.href = twitchAuthUrl;
+      
+      // This should not execute if redirect works
+      console.log('⚠️ Still here after redirect attempt - this might indicate a problem');
+      
     } catch (error) {
-      console.error('Error initiating Twitch auth:', error);
+      console.error('💥 Error in connectTwitch:', error);
       toast({
-        title: "Erreur",
-        description: "Impossible d'initier la connexion Twitch.",
+        title: "Erreur de connexion",
+        description: `Erreur: ${error.message}`,
         variant: "destructive",
       });
     }
   };
 
   const fetchTwitchClientId = async () => {
+    console.log('🔍 fetchTwitchClientId called...');
     try {
+      console.log('📡 Calling supabase function...');
       const response = await supabase.functions.invoke('twitch-client-id');
-      if (response.error) throw response.error;
+      
+      console.log('📨 Supabase response:', response);
+      
+      if (response.error) {
+        console.error('❌ Supabase function error:', response.error);
+        throw response.error;
+      }
+      
+      if (!response.data || !response.data.client_id) {
+        console.error('❌ No client_id in response data:', response.data);
+        throw new Error('No client_id in response');
+      }
+      
+      console.log('✅ Client ID retrieved successfully:', response.data.client_id);
       return response.data.client_id;
+      
     } catch (error) {
-      console.error('Error fetching Twitch Client ID:', error);
+      console.error('💥 Error fetching Twitch Client ID:', error);
       toast({
         title: "Erreur",
         description: "Impossible de récupérer la configuration Twitch.",
