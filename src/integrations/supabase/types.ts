@@ -172,7 +172,10 @@ export type Database = {
           current_clicks: number | null
           id: string
           is_live: boolean | null
+          max_random_time: number | null
+          stream_title: string | null
           time_increment: number | null
+          time_mode: string | null
           total_time_added: number | null
           twitch_id: string
           updated_at: string
@@ -186,7 +189,10 @@ export type Database = {
           current_clicks?: number | null
           id?: string
           is_live?: boolean | null
+          max_random_time?: number | null
+          stream_title?: string | null
           time_increment?: number | null
+          time_mode?: string | null
           total_time_added?: number | null
           twitch_id: string
           updated_at?: string
@@ -200,7 +206,10 @@ export type Database = {
           current_clicks?: number | null
           id?: string
           is_live?: boolean | null
+          max_random_time?: number | null
+          stream_title?: string | null
           time_increment?: number | null
+          time_mode?: string | null
           total_time_added?: number | null
           twitch_id?: string
           updated_at?: string

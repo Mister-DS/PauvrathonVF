@@ -8,6 +8,7 @@ import { Progress } from '@/components/ui/progress';
 import { Navigation } from '@/components/Navigation';
 import { GuessNumber } from '@/components/minigames/GuessNumber';
 import { Hangman } from '@/components/minigames/Hangman';
+import { TimeRewardModal } from '@/components/TimeRewardModal';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
@@ -32,6 +33,7 @@ export default function SubathonPage() {
   const [gameAttempts, setGameAttempts] = useState(0);
   const [cooldownActive, setCooldownActive] = useState(false);
   const [cooldownTime, setCooldownTime] = useState(0);
+  const [showTimeReward, setShowTimeReward] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -162,32 +164,31 @@ export default function SubathonPage() {
         })
         .eq('id', currentGame.id);
 
-      // Add time increment
-      const newTotalTime = streamer.total_time_added + streamer.time_increment;
-      await supabase
-        .from('streamers')
-        .update({ total_time_added: newTotalTime })
-        .eq('id', streamer.id);
+      // Show time reward modal for streamer or auto-add for viewers
+      if (profile?.role === 'streamer' && streamer.user_id === user?.id) {
+        setShowTimeReward(true);
+      } else {
+        // For viewers, use the default time increment
+        await addTimeToSubathon(streamer.time_increment);
+      }
 
-      setStreamer(prev => prev ? { 
-        ...prev, 
-        total_time_added: newTotalTime 
-      } : null);
+      // Update user stats (time will be added later)
+      await updateUserStats(0, 1, 1, 0);
 
-      // Update user stats
-      await updateUserStats(0, 1, 1, streamer.time_increment);
+      if (!(profile?.role === 'streamer' && streamer.user_id === user?.id)) {
+        toast({
+          title: "🎉 Victoire !",
+          description: `Vous avez ajouté ${streamer.time_increment} secondes au subathon !`,
+        });
 
-      toast({
-        title: "🎉 Victoire !",
-        description: `Vous avez ajouté ${streamer.time_increment} secondes au subathon !`,
-      });
-
-      // Start cooldown
-      startCooldown();
+        // Start cooldown for viewers
+        startCooldown();
+        setCurrentGame(null);
+        setGameAttempts(0);
+      }
       
     } catch (error) {
       console.error('Error handling game win:', error);
-    } finally {
       setCurrentGame(null);
       setGameAttempts(0);
     }
@@ -278,6 +279,45 @@ export default function SubathonPage() {
         return prev - 1;
       });
     }, 1000);
+  };
+
+  const addTimeToSubathon = async (timeToAdd: number) => {
+    if (!streamer) return;
+
+    try {
+      const newTotalTime = streamer.total_time_added + timeToAdd;
+      await supabase
+        .from('streamers')
+        .update({ total_time_added: newTotalTime })
+        .eq('id', streamer.id);
+
+      setStreamer(prev => prev ? { 
+        ...prev, 
+        total_time_added: newTotalTime 
+      } : null);
+
+      // Update user stats with actual time added
+      await updateUserStats(0, 0, 0, timeToAdd);
+
+      toast({
+        title: "🎉 Temps ajouté !",
+        description: `${timeToAdd} seconde${timeToAdd > 1 ? 's' : ''} ajoutée${timeToAdd > 1 ? 's' : ''} au subathon !`,
+      });
+
+      // Close modal and cleanup
+      setShowTimeReward(false);
+      setCurrentGame(null);
+      setGameAttempts(0);
+      startCooldown();
+
+    } catch (error) {
+      console.error('Error adding time to subathon:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible d'ajouter le temps au subathon.",
+        variant: "destructive",
+      });
+    }
   };
 
   if (loading) {
@@ -464,6 +504,20 @@ export default function SubathonPage() {
           </div>
         </div>
       </div>
+      
+      {/* Time Reward Modal */}
+      {showTimeReward && (
+        <TimeRewardModal
+          streamer={streamer}
+          onConfirm={addTimeToSubathon}
+          onCancel={() => {
+            setShowTimeReward(false);
+            setCurrentGame(null);
+            setGameAttempts(0);
+            startCooldown();
+          }}
+        />
+      )}
     </div>
   );
 }

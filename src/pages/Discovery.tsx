@@ -6,12 +6,16 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useStreamers } from '@/hooks/useStreamers';
+import { useStreamUpdates } from '@/hooks/useStreamUpdates';
 import { Navigation } from '@/components/Navigation';
 import { Search, Users, Clock, Gamepad2 } from 'lucide-react';
 
 export default function Discovery() {
   const { streamers, loading } = useStreamers();
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // Auto-update stream info periodically
+  useStreamUpdates();
 
   const filteredStreamers = streamers.filter(streamer =>
     streamer.profile?.twitch_display_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||

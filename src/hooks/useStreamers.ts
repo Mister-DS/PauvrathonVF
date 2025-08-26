@@ -6,9 +6,22 @@ import { toast } from './use-toast';
 export function useStreamers() {
   const [streamers, setStreamers] = useState<Streamer[]>([]);
   const [loading, setLoading] = useState(true);
+  const [lastFetch, setLastFetch] = useState<number>(0);
 
-  const fetchStreamers = async () => {
+  const fetchStreamers = async (force: boolean = false) => {
+    const now = Date.now();
+    const timeSinceLastFetch = now - lastFetch;
+    
+    // Only fetch if forced or more than 10 minutes have passed
+    if (!force && timeSinceLastFetch < 10 * 60 * 1000 && streamers.length > 0) {
+      console.log('Skipping fetch, too recent:', timeSinceLastFetch / 1000, 'seconds ago');
+      return;
+    }
+
     try {
+      setLoading(true);
+      
+      // First get all live streamers
       const { data, error } = await supabase
         .from('streamers')
         .select(`
@@ -24,7 +37,17 @@ export function useStreamers() {
         profile: streamer.profiles?.[0] || null
       }));
       
-      setStreamers(streamersWithProfile as unknown as Streamer[]);
+      // Filter streamers with "Subathon" in stream title (case insensitive)
+      const subathonStreamers = streamersWithProfile.filter(streamer => 
+        streamer.stream_title && 
+        streamer.stream_title.toLowerCase().includes('subathon')
+      );
+      
+      setStreamers(subathonStreamers as unknown as Streamer[]);
+      setLastFetch(now);
+      
+      console.log(`Found ${subathonStreamers.length} Subathon streamers out of ${streamersWithProfile.length} live streamers`);
+      
     } catch (error) {
       console.error('Error fetching streamers:', error);
       toast({
@@ -38,8 +61,15 @@ export function useStreamers() {
   };
 
   useEffect(() => {
-    fetchStreamers();
+    fetchStreamers(true); // Force initial fetch
+    
+    // Set up interval to refresh every 10-15 minutes (12.5 min average)
+    const interval = setInterval(() => {
+      fetchStreamers(true);
+    }, 12.5 * 60 * 1000);
+
+    return () => clearInterval(interval);
   }, []);
 
-  return { streamers, loading, refetch: fetchStreamers };
+  return { streamers, loading, refetch: () => fetchStreamers(true) };
 }

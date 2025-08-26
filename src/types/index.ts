@@ -45,6 +45,9 @@ export interface Streamer {
   current_clicks: number;
   total_time_added: number;
   is_live: boolean;
+  stream_title?: string;
+  time_mode: 'fixed' | 'random';
+  max_random_time: number;
   created_at: string;
   updated_at: string;
   profile?: Profile | null;
