@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Navigation } from '@/components/Navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -23,7 +24,8 @@ import {
   Save,
   Play,
   Pause,
-  RotateCcw
+  RotateCcw,
+  Dice1
 } from 'lucide-react';
 
 export default function StreamerPanel() {
@@ -37,6 +39,8 @@ export default function StreamerPanel() {
     clicks_required: 100,
     cooldown_seconds: 300,
     is_live: false,
+    time_mode: 'fixed' as 'fixed' | 'random',
+    max_random_time: 60,
   });
 
   // Redirect if not authenticated or not a streamer
@@ -68,6 +72,8 @@ export default function StreamerPanel() {
           clicks_required: data.clicks_required,
           cooldown_seconds: data.cooldown_seconds,
           is_live: data.is_live,
+          time_mode: (data.time_mode as 'fixed' | 'random') || 'fixed',
+          max_random_time: data.max_random_time || 60,
         });
       }
     } catch (error) {
@@ -224,22 +230,82 @@ export default function StreamerPanel() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="time_increment">Temps ajouté par victoire (secondes)</Label>
-                    <Input
-                      id="time_increment"
-                      type="number"
-                      min="1"
-                      max="300"
-                      value={settings.time_increment}
-                      onChange={(e) => setSettings(prev => ({ 
-                        ...prev, 
-                        time_increment: parseInt(e.target.value) 
-                      }))}
-                    />
-                  </div>
+                {/* Time Configuration Section */}
+                <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
+                  <h3 className="font-medium flex items-center">
+                    <Clock className="mr-2 h-4 w-4" />
+                    Configuration du Temps
+                  </h3>
                   
+                  <RadioGroup
+                    value={settings.time_mode}
+                    onValueChange={(value) => setSettings(prev => ({ 
+                      ...prev, 
+                      time_mode: value as 'fixed' | 'random' 
+                    }))}
+                    className="grid grid-cols-2 gap-4"
+                  >
+                    <div className="flex items-center space-x-2 p-3 rounded-lg border">
+                      <RadioGroupItem value="fixed" id="fixed" />
+                      <Label htmlFor="fixed" className="flex-1 cursor-pointer">
+                        <div className="flex items-center">
+                          <Clock className="mr-2 h-4 w-4" />
+                          Temps fixe
+                        </div>
+                      </Label>
+                    </div>
+                    
+                    <div className="flex items-center space-x-2 p-3 rounded-lg border">
+                      <RadioGroupItem value="random" id="random" />
+                      <Label htmlFor="random" className="flex-1 cursor-pointer">
+                        <div className="flex items-center">
+                          <Dice1 className="mr-2 h-4 w-4" />
+                          Temps aléatoire
+                        </div>
+                      </Label>
+                    </div>
+                  </RadioGroup>
+
+                  <div className="grid md:grid-cols-2 gap-4">
+                    {settings.time_mode === 'fixed' ? (
+                      <div>
+                        <Label htmlFor="time_increment">Temps ajouté par victoire (secondes)</Label>
+                        <Input
+                          id="time_increment"
+                          type="number"
+                          min="1"
+                          max="300"
+                          value={settings.time_increment}
+                          onChange={(e) => setSettings(prev => ({ 
+                            ...prev, 
+                            time_increment: parseInt(e.target.value) || 1
+                          }))}
+                        />
+                      </div>
+                    ) : (
+                      <div>
+                        <Label htmlFor="max_random_time">Temps maximum aléatoire (secondes)</Label>
+                        <Input
+                          id="max_random_time"
+                          type="number"
+                          min="1"
+                          max="300"
+                          value={settings.max_random_time}
+                          onChange={(e) => setSettings(prev => ({ 
+                            ...prev, 
+                            max_random_time: parseInt(e.target.value) || 1
+                          }))}
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Entre 1 et {settings.max_random_time} secondes seront ajoutées
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Other Settings */}
+                <div className="grid md:grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="clicks_required">Clics requis pour mini-jeu</Label>
                     <Input
@@ -250,7 +316,7 @@ export default function StreamerPanel() {
                       value={settings.clicks_required}
                       onChange={(e) => setSettings(prev => ({ 
                         ...prev, 
-                        clicks_required: parseInt(e.target.value) 
+                        clicks_required: parseInt(e.target.value) || 10
                       }))}
                     />
                   </div>
@@ -265,22 +331,22 @@ export default function StreamerPanel() {
                       value={settings.cooldown_seconds}
                       onChange={(e) => setSettings(prev => ({ 
                         ...prev, 
-                        cooldown_seconds: parseInt(e.target.value) 
+                        cooldown_seconds: parseInt(e.target.value) || 0
                       }))}
                     />
                   </div>
-                  
-                  <div className="flex items-center space-x-2">
-                    <Switch
-                      id="is_live"
-                      checked={settings.is_live}
-                      onCheckedChange={(checked) => setSettings(prev => ({ 
-                        ...prev, 
-                        is_live: checked 
-                      }))}
-                    />
-                    <Label htmlFor="is_live">Subathon en direct</Label>
-                  </div>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <Switch
+                    id="is_live"
+                    checked={settings.is_live}
+                    onCheckedChange={(checked) => setSettings(prev => ({ 
+                      ...prev, 
+                      is_live: checked 
+                    }))}
+                  />
+                  <Label htmlFor="is_live">Subathon en direct</Label>
                 </div>
 
                 <div className="flex space-x-4">

@@ -8,7 +8,6 @@ import { Progress } from '@/components/ui/progress';
 import { Navigation } from '@/components/Navigation';
 import { GuessNumber } from '@/components/minigames/GuessNumber';
 import { Hangman } from '@/components/minigames/Hangman';
-import { TimeRewardModal } from '@/components/TimeRewardModal';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from '@/hooks/use-toast';
@@ -33,7 +32,6 @@ export default function SubathonPage() {
   const [gameAttempts, setGameAttempts] = useState(0);
   const [cooldownActive, setCooldownActive] = useState(false);
   const [cooldownTime, setCooldownTime] = useState(0);
-  const [showTimeReward, setShowTimeReward] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -164,28 +162,29 @@ export default function SubathonPage() {
         })
         .eq('id', currentGame.id);
 
-      // Show time reward modal for streamer or auto-add for viewers
-      if (profile?.role === 'streamer' && streamer.user_id === user?.id) {
-        setShowTimeReward(true);
+      // Calculate time to add based on streamer's configuration
+      let timeToAdd: number;
+      if (streamer.time_mode === 'random') {
+        timeToAdd = Math.floor(Math.random() * streamer.max_random_time) + 1;
       } else {
-        // For viewers, use the default time increment
-        await addTimeToSubathon(streamer.time_increment);
+        timeToAdd = streamer.time_increment;
       }
 
-      // Update user stats (time will be added later)
-      await updateUserStats(0, 1, 1, 0);
+      // Add time to subathon
+      await addTimeToSubathon(timeToAdd);
 
-      if (!(profile?.role === 'streamer' && streamer.user_id === user?.id)) {
-        toast({
-          title: "🎉 Victoire !",
-          description: `Vous avez ajouté ${streamer.time_increment} secondes au subathon !`,
-        });
+      // Update user stats
+      await updateUserStats(0, 1, 1, timeToAdd);
 
-        // Start cooldown for viewers
-        startCooldown();
-        setCurrentGame(null);
-        setGameAttempts(0);
-      }
+      toast({
+        title: "🎉 Victoire !",
+        description: `Vous avez ajouté ${timeToAdd} seconde${timeToAdd > 1 ? 's' : ''} au subathon !`,
+      });
+
+      // Start cooldown and cleanup
+      startCooldown();
+      setCurrentGame(null);
+      setGameAttempts(0);
       
     } catch (error) {
       console.error('Error handling game win:', error);
@@ -299,13 +298,7 @@ export default function SubathonPage() {
       // Update user stats with actual time added
       await updateUserStats(0, 0, 0, timeToAdd);
 
-      toast({
-        title: "🎉 Temps ajouté !",
-        description: `${timeToAdd} seconde${timeToAdd > 1 ? 's' : ''} ajoutée${timeToAdd > 1 ? 's' : ''} au subathon !`,
-      });
-
-      // Close modal and cleanup
-      setShowTimeReward(false);
+      // Cleanup
       setCurrentGame(null);
       setGameAttempts(0);
       startCooldown();
@@ -504,20 +497,6 @@ export default function SubathonPage() {
           </div>
         </div>
       </div>
-      
-      {/* Time Reward Modal */}
-      {showTimeReward && (
-        <TimeRewardModal
-          streamer={streamer}
-          onConfirm={addTimeToSubathon}
-          onCancel={() => {
-            setShowTimeReward(false);
-            setCurrentGame(null);
-            setGameAttempts(0);
-            startCooldown();
-          }}
-        />
-      )}
     </div>
   );
 }
