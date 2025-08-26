@@ -14,7 +14,244 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      game_sessions: {
+        Row: {
+          attempts: number | null
+          completed_at: string | null
+          game_data: Json | null
+          id: string
+          max_attempts: number | null
+          minigame_name: string
+          player_twitch_username: string | null
+          started_at: string
+          status: string | null
+          streamer_id: string
+        }
+        Insert: {
+          attempts?: number | null
+          completed_at?: string | null
+          game_data?: Json | null
+          id?: string
+          max_attempts?: number | null
+          minigame_name: string
+          player_twitch_username?: string | null
+          started_at?: string
+          status?: string | null
+          streamer_id: string
+        }
+        Update: {
+          attempts?: number | null
+          completed_at?: string | null
+          game_data?: Json | null
+          id?: string
+          max_attempts?: number | null
+          minigame_name?: string
+          player_twitch_username?: string | null
+          started_at?: string
+          status?: string | null
+          streamer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "game_sessions_streamer_id_fkey"
+            columns: ["streamer_id"]
+            isOneToOne: false
+            referencedRelation: "streamers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      minigames: {
+        Row: {
+          code: string
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["user_role"] | null
+          twitch_display_name: string | null
+          twitch_id: string | null
+          twitch_username: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["user_role"] | null
+          twitch_display_name?: string | null
+          twitch_id?: string | null
+          twitch_username?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["user_role"] | null
+          twitch_display_name?: string | null
+          twitch_id?: string | null
+          twitch_username?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      streamer_requests: {
+        Row: {
+          created_at: string
+          id: string
+          motivation: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string | null
+          stream_link: string
+          twitch_username: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          motivation: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string | null
+          stream_link: string
+          twitch_username: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          motivation?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string | null
+          stream_link?: string
+          twitch_username?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      streamers: {
+        Row: {
+          active_minigames: string[] | null
+          clicks_required: number | null
+          cooldown_seconds: number | null
+          created_at: string
+          current_clicks: number | null
+          id: string
+          is_live: boolean | null
+          time_increment: number | null
+          total_time_added: number | null
+          twitch_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          active_minigames?: string[] | null
+          clicks_required?: number | null
+          cooldown_seconds?: number | null
+          created_at?: string
+          current_clicks?: number | null
+          id?: string
+          is_live?: boolean | null
+          time_increment?: number | null
+          total_time_added?: number | null
+          twitch_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          active_minigames?: string[] | null
+          clicks_required?: number | null
+          cooldown_seconds?: number | null
+          created_at?: string
+          current_clicks?: number | null
+          id?: string
+          is_live?: boolean | null
+          time_increment?: number | null
+          total_time_added?: number | null
+          twitch_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      subathon_stats: {
+        Row: {
+          clicks_contributed: number | null
+          created_at: string
+          games_played: number | null
+          games_won: number | null
+          id: string
+          last_activity: string | null
+          player_twitch_username: string | null
+          streamer_id: string
+          time_contributed: number | null
+        }
+        Insert: {
+          clicks_contributed?: number | null
+          created_at?: string
+          games_played?: number | null
+          games_won?: number | null
+          id?: string
+          last_activity?: string | null
+          player_twitch_username?: string | null
+          streamer_id: string
+          time_contributed?: number | null
+        }
+        Update: {
+          clicks_contributed?: number | null
+          created_at?: string
+          games_played?: number | null
+          games_won?: number | null
+          id?: string
+          last_activity?: string | null
+          player_twitch_username?: string | null
+          streamer_id?: string
+          time_contributed?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subathon_stats_streamer_id_fkey"
+            columns: ["streamer_id"]
+            isOneToOne: false
+            referencedRelation: "streamers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +260,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      user_role: "viewer" | "streamer" | "admin"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +387,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      user_role: ["viewer", "streamer", "admin"],
+    },
   },
 } as const
