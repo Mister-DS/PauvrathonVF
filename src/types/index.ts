@@ -24,10 +24,14 @@ export interface StreamerRequest {
   twitch_username: string;
   stream_link: string;
   motivation: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: string;
   created_at: string;
-  reviewed_at?: string;
-  reviewed_by?: string;
+  reviewed_at?: string | null;
+  reviewed_by?: string | null;
+  profiles?: {
+    twitch_display_name?: string;
+    avatar_url?: string;
+  };
 }
 
 export interface Streamer {

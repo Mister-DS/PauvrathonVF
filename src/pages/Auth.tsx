@@ -81,8 +81,8 @@ export default function Auth() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-950 dark:to-blue-950 p-4">
-      <Card className="w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+      <Card className="w-full max-w-md neon-border glass-effect">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">Rejoindre Pauvrathon</CardTitle>
           <CardDescription>
@@ -93,7 +93,7 @@ export default function Auth() {
           <div className="space-y-4">
             <Button 
               onClick={connectTwitch}
-              className="w-full"
+              className="w-full neon-glow pulse-neon"
               size="lg"
               disabled={loading}
             >

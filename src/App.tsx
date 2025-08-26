@@ -10,6 +10,8 @@ import Discovery from "./pages/Discovery";
 import Following from "./pages/Following";
 import Profile from "./pages/Profile";
 import StreamerRequest from "./pages/StreamerRequest";
+import StreamerPanel from "./pages/StreamerPanel";
+import AdminPanel from "./pages/AdminPanel";
 import SubathonPage from "./pages/SubathonPage";
 import NotFound from "./pages/NotFound";
 
@@ -29,6 +31,8 @@ const App = () => (
             <Route path="/suivis" element={<Following />} />
             <Route path="/profil" element={<Profile />} />
             <Route path="/demande-streamer" element={<StreamerRequest />} />
+            <Route path="/streamer" element={<StreamerPanel />} />
+            <Route path="/admin" element={<AdminPanel />} />
             <Route path="/streamer/:id" element={<SubathonPage />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />

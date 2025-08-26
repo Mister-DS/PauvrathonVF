@@ -8,10 +8,10 @@ export default function Home() {
   const { user } = useAuth();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 dark:from-purple-950 dark:to-blue-950">
+    <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8">
         <div className="text-center mb-12">
-          <h1 className="text-5xl font-bold text-primary mb-4">
+          <h1 className="text-5xl font-bold gradient-text mb-4 neon-glow-strong">
             Pauvrathon
           </h1>
           <p className="text-xl text-muted-foreground mb-8">
@@ -21,13 +21,13 @@ export default function Home() {
           {!user ? (
             <div className="space-y-4">
               <Link to="/auth">
-                <Button size="lg" className="mr-4">
+                <Button size="lg" className="mr-4 neon-glow pulse-neon">
                   <Twitch className="mr-2 h-5 w-5" />
                   Connexion Twitch
                 </Button>
               </Link>
               <Link to="/decouverte">
-                <Button variant="outline" size="lg">
+                <Button variant="outline" size="lg" className="neon-border">
                   <Search className="mr-2 h-5 w-5" />
                   Découverte
                 </Button>
@@ -36,13 +36,13 @@ export default function Home() {
           ) : (
             <div className="space-y-4">
               <Link to="/decouverte">
-                <Button size="lg" className="mr-4">
+                <Button size="lg" className="mr-4 neon-glow">
                   <Search className="mr-2 h-5 w-5" />
                   Découverte
                 </Button>
               </Link>
               <Link to="/suivis">
-                <Button variant="outline" size="lg">
+                <Button variant="outline" size="lg" className="neon-border">
                   <Trophy className="mr-2 h-5 w-5" />
                   Mes Suivis
                 </Button>
@@ -52,9 +52,9 @@ export default function Home() {
         </div>
 
         <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
-          <Card>
+          <Card className="neon-border glass-effect">
             <CardHeader>
-              <CardTitle className="flex items-center">
+              <CardTitle className="flex items-center text-primary">
                 <Search className="mr-2 h-5 w-5" />
                 Découvrir
               </CardTitle>
@@ -66,9 +66,9 @@ export default function Home() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="neon-border glass-effect">
             <CardHeader>
-              <CardTitle className="flex items-center">
+              <CardTitle className="flex items-center text-accent">
                 <Trophy className="mr-2 h-5 w-5" />
                 Participer
               </CardTitle>
@@ -80,9 +80,9 @@ export default function Home() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="neon-border glass-effect">
             <CardHeader>
-              <CardTitle className="flex items-center">
+              <CardTitle className="flex items-center text-primary">
                 <Twitch className="mr-2 h-5 w-5" />
                 Streamer
               </CardTitle>
