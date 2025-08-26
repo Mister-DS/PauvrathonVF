@@ -12,7 +12,7 @@ import { toast } from '@/hooks/use-toast';
 import { Twitch, Loader2 } from 'lucide-react';
 
 export default function Auth() {
-  const { user, connectTwitch } = useAuth();
+  const { user, connectTwitch, refreshProfile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -21,6 +21,26 @@ export default function Auth() {
   if (user) {
     return <Navigate to="/decouverte" replace />;
   }
+
+  // Also listen for auth success messages
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      
+      if (event.data.type === 'TWITCH_AUTH_SUCCESS') {
+        console.log('🎉 Auth success received on Auth page, redirecting...');
+        
+        // Refresh profile and redirect
+        refreshProfile().then(() => {
+          console.log('📍 Redirecting to discovery from Auth page');
+          window.location.href = '/decouverte';
+        });
+      }
+    };
+    
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [refreshProfile]);
 
   const handleEmailSignUp = async (e: React.FormEvent) => {
     e.preventDefault();

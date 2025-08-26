@@ -162,9 +162,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Monitor when popup closes and refresh the page
           const checkClosed = setInterval(() => {
             if (popup.closed) {
-              console.log('🔄 Popup closed, refreshing page to check auth status');
+              console.log('🔄 Popup closed, checking auth status...');
               clearInterval(checkClosed);
-              window.location.reload();
+              
+              // Wait a bit for auth to process, then check
+              setTimeout(async () => {
+                console.log('🔍 Checking if user is now authenticated...');
+                await refreshProfile();
+                
+                // Check if we have a session now
+                const { data: { session } } = await supabase.auth.getSession();
+                if (session) {
+                  console.log('✅ User is authenticated, redirecting to discovery');
+                  window.location.href = '/decouverte';
+                } else {
+                  console.log('❌ User not authenticated, staying on auth page');
+                  toast({
+                    title: "Connexion échouée",
+                    description: "Veuillez réessayer la connexion Twitch.",
+                    variant: "destructive",
+                  });
+                }
+              }, 1000);
             }
           }, 1000);
           
