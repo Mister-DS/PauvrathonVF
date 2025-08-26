@@ -138,8 +138,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Test if we can access window.location
       console.log('🪟 Current window.location.href:', window.location.href);
       
-      // Try the redirect
-      window.location.href = twitchAuthUrl;
+      // Use window.top to escape iframe (Lovable runs in iframe)
+      if (window.top) {
+        console.log('🚀 Using window.top.location.href to escape iframe');
+        window.top.location.href = twitchAuthUrl;
+      } else {
+        console.log('🚀 Using window.location.href as fallback');
+        window.location.href = twitchAuthUrl;
+      }
       
       // This should not execute if redirect works
       console.log('⚠️ Still here after redirect attempt - this might indicate a problem');

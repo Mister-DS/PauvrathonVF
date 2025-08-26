@@ -123,6 +123,12 @@ export function TwitchDebug() {
                 <li>Ajoute cette URL de redirection: <code className="bg-muted px-1 rounded">{callbackUrl}</code></li>
                 <li>Sauvegarde et teste</li>
               </ol>
+              
+              <div className="mt-3 p-2 bg-green-100 dark:bg-green-900 rounded">
+                <p className="text-sm font-medium text-green-800 dark:text-green-200">
+                  💡 <strong>Fix appliqué:</strong> Utilisation de window.top.location.href pour échapper à l'iframe Lovable
+                </p>
+              </div>
             </div>
           </div>
         )}
