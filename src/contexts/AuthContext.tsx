@@ -100,18 +100,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const connectTwitch = () => {
-    // Get the client ID from the edge function or use a public environment variable
-    // For now, we'll need to fetch it from our backend
-    fetchTwitchClientId().then(clientId => {
+  const connectTwitch = async () => {
+    try {
+      const clientId = await fetchTwitchClientId();
+      if (!clientId) return;
+      
+      // Utilise l'URL actuelle pour la redirection
+      const currentOrigin = window.location.origin;
+      const redirectUri = `${currentOrigin}/auth/callback`;
+      
+      console.log('Twitch redirect URL:', redirectUri);
+      
       const twitchAuthUrl = `https://id.twitch.tv/oauth2/authorize?` +
         `client_id=${clientId}&` +
-        `redirect_uri=${encodeURIComponent(`${window.location.origin}/auth/callback`)}&` +
+        `redirect_uri=${encodeURIComponent(redirectUri)}&` +
         `response_type=code&` +
-        `scope=user:read:email`;
+        `scope=user:read:email&` +
+        `force_verify=true`; // Force la verification pour les tests
 
+      console.log('Twitch auth URL:', twitchAuthUrl);
+      
       window.location.href = twitchAuthUrl;
-    });
+    } catch (error) {
+      console.error('Error initiating Twitch auth:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible d'initier la connexion Twitch.",
+        variant: "destructive",
+      });
+    }
   };
 
   const fetchTwitchClientId = async () => {
