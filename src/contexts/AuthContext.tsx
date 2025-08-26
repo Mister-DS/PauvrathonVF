@@ -17,7 +17,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const TWITCH_CLIENT_ID = 'your_twitch_client_id'; // À remplacer par votre client ID Twitch
+const TWITCH_CLIENT_ID = 'your_twitch_client_id'; // Sera remplacé par la vraie clé
 const REDIRECT_URI = `${window.location.origin}/auth/callback`;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -101,13 +101,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const connectTwitch = () => {
-    const twitchAuthUrl = `https://id.twitch.tv/oauth2/authorize?` +
-      `client_id=${TWITCH_CLIENT_ID}&` +
-      `redirect_uri=${encodeURIComponent(REDIRECT_URI)}&` +
-      `response_type=code&` +
-      `scope=user:read:email`;
+    // Get the client ID from the edge function or use a public environment variable
+    // For now, we'll need to fetch it from our backend
+    fetchTwitchClientId().then(clientId => {
+      const twitchAuthUrl = `https://id.twitch.tv/oauth2/authorize?` +
+        `client_id=${clientId}&` +
+        `redirect_uri=${encodeURIComponent(`${window.location.origin}/auth/callback`)}&` +
+        `response_type=code&` +
+        `scope=user:read:email`;
 
-    window.location.href = twitchAuthUrl;
+      window.location.href = twitchAuthUrl;
+    });
+  };
+
+  const fetchTwitchClientId = async () => {
+    try {
+      const response = await supabase.functions.invoke('twitch-client-id');
+      if (response.error) throw response.error;
+      return response.data.client_id;
+    } catch (error) {
+      console.error('Error fetching Twitch Client ID:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de récupérer la configuration Twitch.",
+        variant: "destructive",
+      });
+      return null;
+    }
   };
 
   const signOut = async () => {

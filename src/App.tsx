@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
 import Home from "./pages/Home";
 import Auth from "./pages/Auth";
+import AuthCallback from "./pages/AuthCallback";
 import Discovery from "./pages/Discovery";
 import Following from "./pages/Following";
 import Profile from "./pages/Profile";
@@ -27,6 +28,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/auth/callback" element={<AuthCallback />} />
             <Route path="/decouverte" element={<Discovery />} />
             <Route path="/suivis" element={<Following />} />
             <Route path="/profil" element={<Profile />} />
