@@ -124,9 +124,12 @@ export function TwitchDebug() {
                 <li>Sauvegarde et teste</li>
               </ol>
               
-              <div className="mt-3 p-2 bg-green-100 dark:bg-green-900 rounded">
-                <p className="text-sm font-medium text-green-800 dark:text-green-200">
-                  💡 <strong>Fix appliqué:</strong> Utilisation de window.top.location.href pour échapper à l'iframe Lovable
+              <div className="mt-3 p-2 bg-yellow-100 dark:bg-yellow-900 rounded">
+                <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+                  💡 <strong>Nouvelle approche:</strong> Ouverture de Twitch dans un nouvel onglet pour contourner les restrictions sandbox
+                </p>
+                <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
+                  Autorisez les popups si demandé par votre navigateur
                 </p>
               </div>
             </div>

@@ -15,6 +15,19 @@ export default function AuthCallback() {
 
   useEffect(() => {
     handleTwitchCallback();
+    
+    // Also listen for messages from popup window
+    const handleMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      
+      if (event.data.type === 'TWITCH_AUTH_SUCCESS') {
+        console.log('🎉 Received auth success message from popup');
+        window.location.reload();
+      }
+    };
+    
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
   }, []);
 
   const handleTwitchCallback = async () => {
@@ -77,9 +90,23 @@ export default function AuthCallback() {
       // Refresh profile and redirect
       await refreshProfile();
       
-      setTimeout(() => {
-        navigate('/decouverte');
-      }, 2000);
+      // If we're in a popup, notify parent and close
+      if (window.opener) {
+        console.log('🚪 We are in a popup, notifying parent window');
+        window.opener.postMessage({ 
+          type: 'TWITCH_AUTH_SUCCESS', 
+          user: data.twitch_user 
+        }, window.location.origin);
+        
+        setTimeout(() => {
+          window.close();
+        }, 1000);
+      } else {
+        // Normal redirect
+        setTimeout(() => {
+          navigate('/decouverte');
+        }, 2000);
+      }
 
     } catch (error: any) {
       console.error('Twitch callback error:', error);

@@ -138,17 +138,57 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Test if we can access window.location
       console.log('🪟 Current window.location.href:', window.location.href);
       
-      // Use window.top to escape iframe (Lovable runs in iframe)
-      if (window.top) {
-        console.log('🚀 Using window.top.location.href to escape iframe');
-        window.top.location.href = twitchAuthUrl;
-      } else {
-        console.log('🚀 Using window.location.href as fallback');
-        window.location.href = twitchAuthUrl;
+      // Try different methods to escape the sandboxed iframe
+      try {
+        // Method 1: Try window.top (we know this fails)
+        if (window.top && window.top !== window) {
+          console.log('🚀 Trying window.top.location.href');
+          window.top.location.href = twitchAuthUrl;
+        }
+      } catch (error) {
+        console.log('❌ window.top failed:', error.message);
+        
+        // Method 2: Use window.open in a new tab
+        console.log('🆕 Using window.open as fallback');
+        const popup = window.open(twitchAuthUrl, '_blank', 'width=600,height=700,scrollbars=yes,resizable=yes');
+        
+        if (popup) {
+          console.log('✅ Popup opened successfully');
+          toast({
+            title: "Redirection Twitch",
+            description: "Une nouvelle fenêtre s'est ouverte pour l'authentification Twitch.",
+          });
+          
+          // Monitor when popup closes and refresh the page
+          const checkClosed = setInterval(() => {
+            if (popup.closed) {
+              console.log('🔄 Popup closed, refreshing page to check auth status');
+              clearInterval(checkClosed);
+              window.location.reload();
+            }
+          }, 1000);
+          
+        } else {
+          console.log('❌ Popup blocked');
+          
+          // Method 3: Create a link and click it
+          console.log('🔗 Creating link as final fallback');
+          const link = document.createElement('a');
+          link.href = twitchAuthUrl;
+          link.target = '_blank';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          
+          toast({
+            title: "Authentification Twitch",
+            description: "Cliquez sur le lien si une nouvelle fenêtre ne s'ouvre pas automatiquement.",
+          });
+        }
       }
       
       // This should not execute if redirect works
-      console.log('⚠️ Still here after redirect attempt - this might indicate a problem');
+      console.log('⚠️ Still here after redirect attempt');
       
     } catch (error) {
       console.error('💥 Error in connectTwitch:', error);
