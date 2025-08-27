@@ -99,10 +99,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const connectTwitch = async () => {
+    console.log('🚀 connectTwitch called - starting process');
+    
     try {
+      console.log('📞 Fetching Twitch Client ID...');
       const clientId = await fetchTwitchClientId();
+      console.log('🔑 Client ID result:', clientId ? 'SUCCESS' : 'FAILED');
       
       if (!clientId) {
+        console.error('❌ No client ID received');
         toast({
           title: "Erreur",
           description: "Impossible de récupérer le Client ID Twitch.",
@@ -117,6 +122,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ? 'http://localhost:5173/auth/callback'
         : `${window.location.origin}/auth/callback`;
       
+      console.log('🌍 Current URL:', window.location.href);
+      console.log('🔄 Redirect URI:', redirectUri);
+      
       const twitchAuthUrl = `https://id.twitch.tv/oauth2/authorize?` +
         `client_id=${clientId}&` +
         `redirect_uri=${encodeURIComponent(redirectUri)}&` +
@@ -124,17 +132,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         `scope=user:read:email&` +
         `force_verify=true`;
 
+      console.log('🔗 Full Twitch auth URL:', twitchAuthUrl);
+
       // Try different methods to escape the sandboxed iframe
       try {
+        console.log('🚀 Trying window.top redirect...');
         // Method 1: Try window.top (we know this fails)
         if (window.top && window.top !== window) {
           window.top.location.href = twitchAuthUrl;
+          console.log('✅ window.top redirect attempted');
+          return;
         }
       } catch (error) {
+        console.log('❌ window.top failed:', error);
+        
         // Method 2: Use window.open in a new tab
+        console.log('🆕 Using window.open fallback...');
         const popup = window.open(twitchAuthUrl, '_blank', 'width=600,height=700,scrollbars=yes,resizable=yes');
         
         if (popup) {
+          console.log('✅ Popup opened successfully');
           toast({
             title: "Redirection Twitch",
             description: "Une nouvelle fenêtre s'est ouverte pour l'authentification Twitch.",
@@ -143,17 +160,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Monitor when popup closes and refresh the page
           const checkClosed = setInterval(() => {
             if (popup.closed) {
+              console.log('🔄 Popup closed, checking auth status...');
               clearInterval(checkClosed);
               
               // Wait a bit for auth to process, then check
               setTimeout(async () => {
+                console.log('🔍 Refreshing profile and checking session...');
                 await refreshProfile();
                 
                 // Check if we have a session now
                 const { data: { session } } = await supabase.auth.getSession();
                 if (session) {
+                  console.log('✅ User authenticated, redirecting');
                   window.location.href = '/decouverte';
                 } else {
+                  console.log('❌ No session found');
                   toast({
                     title: "Connexion échouée",
                     description: "Veuillez réessayer la connexion Twitch.",
@@ -165,7 +186,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }, 1000);
           
         } else {
+          console.log('❌ Popup was blocked');
+          
           // Method 3: Create a link and click it
+          console.log('🔗 Creating manual link fallback');
           const link = document.createElement('a');
           link.href = twitchAuthUrl;
           link.target = '_blank';
@@ -181,6 +205,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       
     } catch (error: any) {
+      console.error('💥 Error in connectTwitch:', error);
       toast({
         title: "Erreur de connexion",
         description: `Erreur: ${error.message}`,
@@ -190,20 +215,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const fetchTwitchClientId = async () => {
+    console.log('🔍 fetchTwitchClientId called');
     try {
+      console.log('📡 Making request to Supabase function...');
       const response = await supabase.functions.invoke('twitch-client-id');
       
+      console.log('📨 Response received:', response);
+      
       if (response.error) {
+        console.error('❌ Supabase function error:', response.error);
         throw response.error;
       }
       
       if (!response.data || !response.data.client_id) {
+        console.error('❌ Invalid response data:', response.data);
         throw new Error('No client_id in response');
       }
       
+      console.log('✅ Client ID retrieved successfully');
       return response.data.client_id;
       
     } catch (error) {
+      console.error('💥 Error in fetchTwitchClientId:', error);
       toast({
         title: "Erreur",
         description: "Impossible de récupérer la configuration Twitch.",
