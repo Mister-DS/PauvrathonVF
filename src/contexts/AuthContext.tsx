@@ -278,20 +278,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const initializeAuth = async () => {
       try {
+        console.log('🔍 Checking for existing session...');
         // Get initial session
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('❌ Error getting session:', error);
+        }
+        
+        console.log('📊 Session found:', session ? `User: ${session.user.email}` : 'No session');
         
         if (mounted) {
           setSession(session);
           setUser(session?.user ?? null);
           
           if (session?.user) {
-            await fetchProfile(session.user.id);
+            console.log('👤 Fetching profile for user:', session.user.id);
+            try {
+              await fetchProfile(session.user.id);
+            } catch (profileError) {
+              console.error('❌ Error fetching profile:', profileError);
+            }
           }
           
           setLoading(false);
         }
       } catch (error) {
+        console.error('❌ Error initializing auth:', error);
         if (mounted) {
           setLoading(false);
         }
@@ -301,12 +314,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Set up auth state listener  
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        console.log('🔄 Auth state change:', event, session ? `Session for: ${session.user.email}` : 'No session');
+        
         if (!mounted) return;
         
         setSession(session);
         setUser(session?.user ?? null);
         
         if (session?.user) {
+          console.log('👤 User signed in, fetching profile...');
           // Use setTimeout to avoid blocking the auth callback
           setTimeout(() => {
             if (mounted) {
@@ -314,6 +330,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
           }, 0);
         } else {
+          console.log('👤 User signed out, clearing profile data');
           setProfile(null);
           setTwitchUser(null);
         }
