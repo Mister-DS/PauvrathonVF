@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { FollowButton } from '@/components/FollowButton';
 import { useStreamers } from '@/hooks/useStreamers';
 import { useStreamUpdates } from '@/hooks/useStreamUpdates';
 import { Navigation } from '@/components/Navigation';
@@ -139,11 +140,14 @@ export default function Discovery() {
                     </span>
                   </div>
 
-                  <Link to={`/streamer/${streamer.id}`}>
-                    <Button className="w-full">
-                      Participer au Subathon
-                    </Button>
-                  </Link>
+                  <div className="flex flex-col gap-2">
+                    <FollowButton streamerId={streamer.id} showCount />
+                    <Link to={`/streamer/${streamer.id}`}>
+                      <Button className="w-full">
+                        Participer au Subathon
+                      </Button>
+                    </Link>
+                  </div>
                 </CardContent>
               </Card>
             ))}

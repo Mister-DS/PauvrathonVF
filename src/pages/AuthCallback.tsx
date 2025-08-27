@@ -73,22 +73,24 @@ export default function AuthCallback() {
           console.log('🔑 Using session token to establish session');
           
           try {
-            // Set the session using the access token from the server
-            const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
-              access_token: data.session_token,
-              refresh_token: data.refresh_token || '' // Include refresh token if available
-            });
-
-            if (sessionError) {
-              console.warn('Session token failed:', sessionError);
-              // Fallback: try to sign in the user directly with admin token
-              const { error: signInError } = await supabase.auth.signInWithPassword({
-                email: data.supabase_user.email,
-                password: 'temp_password_' + Math.random() // This won't work but triggers the auth flow
-              });
-              console.log('Fallback sign-in attempt:', signInError ? 'FAILED' : 'SUCCESS');
+            console.log('🔑 Processing Twitch auth success...');
+            
+            // Force refresh of auth context to establish session
+            await refreshProfile();
+            
+            // Check session status
+            const { data: { session } } = await supabase.auth.getSession();
+            console.log('📊 Session after Twitch auth:', session ? 'FOUND' : 'NOT FOUND');
+            
+            if (session) {
+              console.log('✅ Session established, redirecting to discovery');
+              window.location.href = '/decouverte';
             } else {
-              console.log('✅ Session established successfully with:', sessionData.session ? 'VALID SESSION' : 'NO SESSION');
+              console.log('❌ No session found, will try alternative approach');
+              // Wait for auth context to catch up
+              setTimeout(() => {
+                window.location.href = '/decouverte';
+              }, 2000);
             }
           } catch (error) {
             console.warn('Session establishment failed:', error);

@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Navigation } from '@/components/Navigation';
+import { FollowButton } from '@/components/FollowButton';
 import { GuessNumber } from '@/components/minigames/GuessNumber';
 import { Hangman } from '@/components/minigames/Hangman';
 import { supabase } from '@/integrations/supabase/client';
@@ -359,14 +360,17 @@ export default function SubathonPage() {
                   <p className="text-muted-foreground">
                     @{streamer.profile?.twitch_username}
                   </p>
-                  <div className="flex items-center space-x-4 mt-2">
-                    <Badge variant={streamer.is_live ? 'default' : 'secondary'}>
-                      {streamer.is_live ? 'En direct' : 'Hors ligne'}
-                    </Badge>
-                    <div className="flex items-center space-x-1 text-sm text-muted-foreground">
-                      <Clock className="h-4 w-4" />
-                      <span>+{streamer.time_increment}s par victoire</span>
+                  <div className="flex items-center justify-between mt-2">
+                    <div className="flex items-center space-x-4">
+                      <Badge variant={streamer.is_live ? 'default' : 'secondary'}>
+                        {streamer.is_live ? 'En direct' : 'Hors ligne'}
+                      </Badge>
+                      <div className="flex items-center space-x-1 text-sm text-muted-foreground">
+                        <Clock className="h-4 w-4" />
+                        <span>+{streamer.time_increment}s par victoire</span>
+                      </div>
                     </div>
+                    <FollowButton streamerId={streamer.id} showCount />
                   </div>
                 </div>
               </div>

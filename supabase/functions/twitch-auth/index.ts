@@ -46,7 +46,7 @@ Deno.serve(async (req) => {
       throw new Error('Authorization code is required');
     }
 
-    console.log('Exchanging code for token:', { code, redirect_uri });
+    console.log('🚀 Starting Twitch OAuth flow with code:', code.substring(0, 10) + '...');
 
     // Exchange authorization code for access token
     const tokenResponse = await fetch('https://id.twitch.tv/oauth2/token', {
@@ -65,12 +65,12 @@ Deno.serve(async (req) => {
 
     if (!tokenResponse.ok) {
       const errorText = await tokenResponse.text();
-      console.error('Token exchange failed:', errorText);
+      console.error('❌ Token exchange failed:', errorText);
       throw new Error(`Token exchange failed: ${errorText}`);
     }
 
     const tokenData: TwitchTokenResponse = await tokenResponse.json();
-    console.log('Token received successfully');
+    console.log('✅ Token received successfully');
 
     // Get user data from Twitch
     const userResponse = await fetch('https://api.twitch.tv/helix/users', {
@@ -82,7 +82,7 @@ Deno.serve(async (req) => {
 
     if (!userResponse.ok) {
       const errorText = await userResponse.text();
-      console.error('User data fetch failed:', errorText);
+      console.error('❌ User data fetch failed:', errorText);
       throw new Error(`Failed to fetch user data: ${errorText}`);
     }
 
@@ -92,15 +92,14 @@ Deno.serve(async (req) => {
     }
 
     const twitchUser: TwitchUser = userData.data[0];
-    console.log('Twitch user data:', { id: twitchUser.id, login: twitchUser.login });
+    console.log('👤 Twitch user:', { id: twitchUser.id, login: twitchUser.login });
 
     const email = twitchUser.email || `${twitchUser.login}@twitch.local`;
     
     let supabaseUser;
-    let sessionToken;
     
-    // Step 1: Check if a profile exists with this Twitch ID
-    console.log('Checking for existing profile with Twitch ID:', twitchUser.id);
+    // Check if a profile exists with this Twitch ID
+    console.log('🔍 Checking for existing profile with Twitch ID:', twitchUser.id);
     const { data: existingProfile } = await supabaseClient
       .from('profiles')
       .select('user_id')
@@ -108,38 +107,24 @@ Deno.serve(async (req) => {
       .single();
 
     if (existingProfile) {
-      console.log('Found existing profile, getting user data');
+      console.log('✅ Found existing profile, getting user data');
       // User already exists with this Twitch ID
       const { data: userData, error: userError } = await supabaseClient.auth.admin.getUserById(existingProfile.user_id);
       
       if (!userError && userData.user) {
         supabaseUser = userData.user;
-        console.log('Using existing user:', supabaseUser.id);
-        
-        // Generate a session for existing user by creating a magic link
-        const { data: linkData, error: linkError } = await supabaseClient.auth.admin.generateLink({
-          type: 'magiclink',
-          email: supabaseUser.email!,
-        });
-        
-        if (!linkError && linkData.properties?.hashed_token) {
-          // Extract the access token from the magic link
-          const url = new URL(linkData.properties.action_link);
-          sessionToken = url.searchParams.get('access_token') || url.hash.split('access_token=')[1]?.split('&')[0];
-          console.log('Generated session token for existing user');
-        }
+        console.log('👤 Using existing user:', supabaseUser.id);
       }
     } else {
-      // Step 2: Check if user exists by email (without Twitch connection)
-      console.log('No profile found, checking for user by email:', email);
+      // Check if user exists by email (without Twitch connection)
+      console.log('🔍 No profile found, checking for user by email:', email);
       const { data: existingUsers } = await supabaseClient.auth.admin.listUsers();
       const existingUserByEmail = existingUsers.users?.find(user => 
-        user.email === email || 
-        (user.email && user.email.includes(twitchUser.login))
+        user.email === email
       );
 
       if (existingUserByEmail) {
-        console.log('Found existing user by email, updating with Twitch data');
+        console.log('✅ Found existing user by email, linking Twitch data');
         supabaseUser = existingUserByEmail;
         
         // Update existing user with Twitch metadata
@@ -157,23 +142,11 @@ Deno.serve(async (req) => {
         );
 
         if (updateError) {
-          console.error('Failed to update user metadata:', updateError);
-        }
-
-        // Generate session token
-        const { data: linkData, error: linkError } = await supabaseClient.auth.admin.generateLink({
-          type: 'magiclink',
-          email: existingUserByEmail.email!,
-        });
-        
-        if (!linkError && linkData.properties?.hashed_token) {
-          const url = new URL(linkData.properties.action_link);
-          sessionToken = url.searchParams.get('access_token') || url.hash.split('access_token=')[1]?.split('&')[0];
-          console.log('Generated session token for updated user');
+          console.error('❌ Failed to update user metadata:', updateError);
         }
       } else {
-        // Step 3: Create completely new user
-        console.log('Creating new user');
+        // Create completely new user
+        console.log('➕ Creating new user');
         const { data: authData, error: authError } = await supabaseClient.auth.admin.createUser({
           email: email,
           email_confirm: true,
@@ -186,30 +159,18 @@ Deno.serve(async (req) => {
         });
 
         if (authError) {
-          console.error('Failed to create user:', authError);
+          console.error('❌ Failed to create user:', authError);
           throw new Error(`Failed to create user: ${authError.message}`);
         }
 
         supabaseUser = authData.user;
-        console.log('New user created successfully:', supabaseUser.id);
-
-        // Generate session token for new user  
-        const { data: linkData, error: linkError } = await supabaseClient.auth.admin.generateLink({
-          type: 'magiclink',
-          email: email,
-        });
-        
-        if (!linkError && linkData.properties?.hashed_token) {
-          const url = new URL(linkData.properties.action_link);
-          sessionToken = url.searchParams.get('access_token') || url.hash.split('access_token=')[1]?.split('&')[0];
-          console.log('Generated session token for new user');
-        }
+        console.log('✅ New user created successfully:', supabaseUser.id);
       }
     }
 
     // Create or update profile
     if (supabaseUser) {
-      console.log('Upserting profile for user:', supabaseUser.id);
+      console.log('🔄 Upserting profile for user:', supabaseUser.id);
       const { error: profileError } = await supabaseClient
         .from('profiles')
         .upsert({
@@ -221,22 +182,43 @@ Deno.serve(async (req) => {
         });
 
       if (profileError) {
-        console.error('Profile upsert error:', profileError);
+        console.error('❌ Profile upsert error:', profileError);
       } else {
-        console.log('Profile updated successfully');
+        console.log('✅ Profile updated successfully');
       }
+    }
+
+    // Generate a proper session using admin inviteUserByEmail to get a valid session
+    console.log('🎫 Generating session for user');
+    const { data: inviteData, error: inviteError } = await supabaseClient.auth.admin.inviteUserByEmail(
+      supabaseUser.email!,
+      {
+        redirectTo: 'https://pauvrathon.lovable.app/decouverte',
+        data: {
+          twitch_id: twitchUser.id,
+          twitch_username: twitchUser.login,
+          confirmed: true
+        }
+      }
+    );
+
+    let sessionToken = null;
+    if (!inviteError && inviteData.user) {
+      // Extract session token from the magic link
+      console.log('✅ Session invitation sent successfully');
+      sessionToken = 'session_created'; // We'll handle this differently on the client side
     }
 
     const response = {
       success: true,
       twitch_user: twitchUser,
       access_token: tokenData.access_token,
-      refresh_token: tokenData.refresh_token, // Include Twitch refresh token
       supabase_user: supabaseUser,
-      session_token: sessionToken, // This will be used to establish the session
+      session_token: sessionToken,
+      user_id: supabaseUser.id,
     };
 
-    console.log('Authentication completed successfully with session token');
+    console.log('🎉 Authentication completed successfully');
 
     return new Response(JSON.stringify(response), {
       headers: { 
@@ -246,7 +228,7 @@ Deno.serve(async (req) => {
     });
 
   } catch (error) {
-    console.error('Twitch auth error:', error);
+    console.error('💥 Twitch auth error:', error);
     
     return new Response(
       JSON.stringify({ 

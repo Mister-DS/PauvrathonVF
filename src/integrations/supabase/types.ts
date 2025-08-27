@@ -269,6 +269,27 @@ export type Database = {
           },
         ]
       }
+      user_follows: {
+        Row: {
+          created_at: string
+          follower_user_id: string
+          id: string
+          streamer_id: string
+        }
+        Insert: {
+          created_at?: string
+          follower_user_id: string
+          id?: string
+          streamer_id: string
+        }
+        Update: {
+          created_at?: string
+          follower_user_id?: string
+          id?: string
+          streamer_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

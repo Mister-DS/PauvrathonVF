@@ -13,6 +13,8 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   connectTwitch: () => void;
+  signUp: (email: string, password: string) => Promise<{ error?: any }>;
+  signIn: (email: string, password: string) => Promise<{ error?: any }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -26,6 +28,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchProfile = async (userId: string) => {
     try {
+      console.log('📋 Fetching profile for user:', userId);
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -33,96 +36,63 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .single();
       
       if (error && error.code !== 'PGRST116') {
+        console.error('❌ Error fetching profile:', error);
         return;
       }
       
-      setProfile(data);
-    } catch (error) {
-      // Error handled silently
-    }
-  };
-
-  const fetchTwitchUserData = async (accessToken: string) => {
-    try {
-      const clientId = await fetchTwitchClientId();
-      if (!clientId) return null;
-      
-      const response = await fetch('https://api.twitch.tv/helix/users', {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Client-Id': clientId,
-        },
-      });
-      
-      if (!response.ok) throw new Error('Failed to fetch Twitch user data');
-      
-      const data = await response.json();
-      if (data.data && data.data.length > 0) {
-        const twitchUserData: TwitchUser = {
-          id: data.data[0].id,
-          login: data.data[0].login,
-          display_name: data.data[0].display_name,
-          profile_image_url: data.data[0].profile_image_url,
-          email: data.data[0].email,
-        };
-        setTwitchUser(twitchUserData);
-        return twitchUserData;
+      if (data) {
+        console.log('✅ Profile found:', data.twitch_username || data.user_id);
+        setProfile(data);
+        
+        // Set Twitch user data if available
+        if (data.twitch_id) {
+          setTwitchUser({
+            id: data.twitch_id,
+            login: data.twitch_username,
+            display_name: data.twitch_display_name,
+            profile_image_url: data.avatar_url,
+            email: user?.email,
+          });
+        }
+      } else {
+        // Create a basic profile if none exists
+        console.log('📝 Creating basic profile for user');
+        const { error: createError } = await supabase
+          .from('profiles')
+          .insert({
+            user_id: userId,
+          });
+        
+        if (!createError) {
+          await fetchProfile(userId);
+        }
       }
     } catch (error) {
-      // Error handled silently
-    }
-    return null;
-  };
-
-  const createOrUpdateProfile = async (user: User, twitchData?: TwitchUser) => {
-    try {
-      const profileData = {
-        user_id: user.id,
-        twitch_id: twitchData?.id,
-        twitch_username: twitchData?.login,
-        twitch_display_name: twitchData?.display_name,
-        avatar_url: twitchData?.profile_image_url,
-      };
-
-      const { error } = await supabase
-        .from('profiles')
-        .upsert(profileData);
-
-      if (error) {
-        return;
-      }
-
-      await fetchProfile(user.id);
-    } catch (error) {
-      // Error handled silently
+      console.error('💥 Error in fetchProfile:', error);
     }
   };
 
   const connectTwitch = async () => {
-    console.log('🚀 connectTwitch called - starting process');
+    console.log('🚀 Starting Twitch connection flow');
     
     try {
       console.log('📞 Fetching Twitch Client ID...');
-      const clientId = await fetchTwitchClientId();
-      console.log('🔑 Client ID result:', clientId ? 'SUCCESS' : 'FAILED');
+      const { data: clientIdData, error: clientIdError } = await supabase.functions.invoke('twitch-client-id');
       
-      if (!clientId) {
-        console.error('❌ No client ID received');
+      if (clientIdError || !clientIdData?.client_id) {
+        console.error('❌ Failed to get client ID:', clientIdError);
         toast({
           title: "Erreur",
-          description: "Impossible de récupérer le Client ID Twitch.",
+          description: "Impossible de récupérer la configuration Twitch.",
           variant: "destructive",
         });
         return;
       }
       
-      // Utilise localhost en développement  
-      const isLocalhost = window.location.hostname === 'localhost';
-      const redirectUri = isLocalhost 
-        ? 'http://localhost:5173/auth/callback'
-        : `${window.location.origin}/auth/callback`;
+      const clientId = clientIdData.client_id;
+      console.log('✅ Client ID retrieved');
       
-      console.log('🌍 Current URL:', window.location.href);
+      const redirectUri = `${window.location.origin}/auth/callback`;
       console.log('🔄 Redirect URI:', redirectUri);
       
       const twitchAuthUrl = `https://id.twitch.tv/oauth2/authorize?` +
@@ -132,74 +102,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         `scope=user:read:email&` +
         `force_verify=true`;
 
-      console.log('🔗 Full Twitch auth URL:', twitchAuthUrl);
+      console.log('🔗 Opening Twitch auth URL');
 
-      // Force popup method since window.top doesn't work reliably
-      console.log('🆕 Using popup method directly...');
-      const popup = window.open(twitchAuthUrl, 'twitchAuth', 'width=600,height=700,scrollbars=yes,resizable=yes,location=yes');
+      // Open popup for auth
+      const popup = window.open(twitchAuthUrl, 'twitchAuth', 'width=600,height=700,scrollbars=yes,resizable=yes');
       
       if (popup) {
         console.log('✅ Popup opened successfully');
         toast({
           title: "Redirection Twitch",
-          description: "Une nouvelle fenêtre s'est ouverte pour l'authentification Twitch.",
+          description: "Une nouvelle fenêtre s'est ouverte pour l'authentification.",
         });
         
-        // Monitor when popup closes and refresh the page
+        // Monitor popup for completion
         const checkClosed = setInterval(() => {
           if (popup.closed) {
             console.log('🔄 Popup closed, checking auth status...');
             clearInterval(checkClosed);
             
-              // Wait a bit for auth to process, then check
-              setTimeout(async () => {
-                console.log('🔍 Refreshing profile and checking session...');
-                await refreshProfile();
+            // Refresh to check auth status
+            setTimeout(async () => {
+              console.log('🔍 Refreshing auth state...');
+              const { data: { session } } = await supabase.auth.getSession();
+              
+              if (session) {
+                console.log('✅ Session found after popup');
+                setSession(session);
+                setUser(session.user);
+                await fetchProfile(session.user.id);
                 
-                // Check if we have a session now
-                const { data: { session } } = await supabase.auth.getSession();
-                console.log('📊 Session status:', session ? 'FOUND' : 'NOT FOUND');
+                toast({
+                  title: "Connexion réussie !",
+                  description: "Vous êtes maintenant connecté avec Twitch.",
+                });
                 
-                if (session) {
-                  console.log('✅ User authenticated, redirecting');
-                  window.location.href = '/decouverte';
-                } else {
-                  console.log('❌ No session found after popup closed');
-                  // Try one more refresh in case of timing issues
-                  setTimeout(async () => {
-                    await refreshProfile();
-                    const { data: { session: secondCheck } } = await supabase.auth.getSession();
-                    if (secondCheck) {
-                      window.location.href = '/decouverte';
-                    } else {
-                      toast({
-                        title: "Connexion échouée",
-                        description: "Veuillez réessayer la connexion Twitch.",
-                        variant: "destructive",
-                      });
-                    }
-                  }, 2000);
-                }
-              }, 1000);
+                // Redirect to discovery
+                window.location.href = '/decouverte';
+              }
+            }, 1000);
           }
         }, 1000);
-        
       } else {
-        console.log('❌ Popup was blocked');
-        
-        // Fallback: Create a link and click it
-        console.log('🔗 Creating manual link fallback');
-        const link = document.createElement('a');
-        link.href = twitchAuthUrl;
-        link.target = '_blank';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        
-        toast({
-          title: "Authentification Twitch",
-          description: "Cliquez sur le lien si une nouvelle fenêtre ne s'ouvre pas automatiquement.",
-        });
+        // Fallback to direct redirect
+        console.log('⚠️ Popup blocked, using direct redirect');
+        window.location.href = twitchAuthUrl;
       }
       
     } catch (error: any) {
@@ -212,43 +158,71 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const fetchTwitchClientId = async () => {
-    console.log('🔍 fetchTwitchClientId called');
+  const signUp = async (email: string, password: string) => {
+    console.log('📝 Signing up user:', email);
+    
     try {
-      console.log('📡 Making request to Supabase function...');
-      const response = await supabase.functions.invoke('twitch-client-id');
-      
-      console.log('📨 Response received:', response);
-      
-      if (response.error) {
-        console.error('❌ Supabase function error:', response.error);
-        throw response.error;
-      }
-      
-      if (!response.data || !response.data.client_id) {
-        console.error('❌ Invalid response data:', response.data);
-        throw new Error('No client_id in response');
-      }
-      
-      console.log('✅ Client ID retrieved successfully');
-      return response.data.client_id;
-      
-    } catch (error) {
-      console.error('💥 Error in fetchTwitchClientId:', error);
-      toast({
-        title: "Erreur",
-        description: "Impossible de récupérer la configuration Twitch.",
-        variant: "destructive",
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/decouverte`
+        }
       });
-      return null;
+      
+      if (error) {
+        console.error('❌ Sign up error:', error);
+        return { error };
+      }
+      
+      console.log('✅ Sign up successful');
+      toast({
+        title: "Inscription réussie !",
+        description: "Vérifiez votre email pour confirmer votre compte.",
+      });
+      
+      return {};
+    } catch (error) {
+      console.error('💥 Sign up exception:', error);
+      return { error };
+    }
+  };
+
+  const signIn = async (email: string, password: string) => {
+    console.log('🔐 Signing in user:', email);
+    
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      
+      if (error) {
+        console.error('❌ Sign in error:', error);
+        return { error };
+      }
+      
+      console.log('✅ Sign in successful');
+      toast({
+        title: "Connexion réussie !",
+        description: "Vous êtes maintenant connecté.",
+      });
+      
+      return {};
+    } catch (error) {
+      console.error('💥 Sign in exception:', error);
+      return { error };
     }
   };
 
   const signOut = async () => {
+    console.log('🚪 Signing out user');
+    
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
       
+      // Clear state
       setUser(null);
       setSession(null);
       setProfile(null);
@@ -259,6 +233,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         description: "Vous avez été déconnecté avec succès.",
       });
     } catch (error) {
+      console.error('❌ Sign out error:', error);
       toast({
         title: "Erreur",
         description: "Erreur lors de la déconnexion.",
@@ -269,6 +244,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshProfile = async () => {
     if (user) {
+      console.log('🔄 Refreshing profile for user:', user.id);
       await fetchProfile(user.id);
     }
   };
@@ -278,7 +254,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const initializeAuth = async () => {
       try {
-        console.log('🔍 Checking for existing session...');
+        console.log('🔍 Initializing auth state...');
+        
         // Get initial session
         const { data: { session }, error } = await supabase.auth.getSession();
         
@@ -286,14 +263,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.error('❌ Error getting session:', error);
         }
         
-        console.log('📊 Session found:', session ? `User: ${session.user.email}` : 'No session');
+        console.log('📊 Initial session:', session ? `User: ${session.user.email}` : 'No session');
         
         if (mounted) {
           setSession(session);
           setUser(session?.user ?? null);
           
           if (session?.user) {
-            console.log('👤 Fetching profile for user:', session.user.id);
+            console.log('👤 Fetching profile for authenticated user');
             try {
               await fetchProfile(session.user.id);
             } catch (profileError) {
@@ -357,6 +334,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signOut,
     refreshProfile,
     connectTwitch,
+    signUp,
+    signIn,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

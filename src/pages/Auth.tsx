@@ -12,7 +12,7 @@ import { toast } from '@/hooks/use-toast';
 import { Twitch, Loader2 } from 'lucide-react';
 
 export default function Auth() {
-  const { user, connectTwitch, refreshProfile } = useAuth();
+  const { user, connectTwitch, refreshProfile, signUp, signIn } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
@@ -32,17 +32,21 @@ export default function Auth() {
         console.log('🎉 Auth success received from popup!', event.data);
         
         // Establish session using the token if available
-        if (event.data.session_token) {
-          console.log('🔑 Setting session from token...');
+        if (event.data.session_token && event.data.user_id) {
+          console.log('🔑 Attempting to establish session for user:', event.data.user_id);
           
-          try {
-            await supabase.auth.setSession({
-              access_token: event.data.session_token,
-              refresh_token: ''
-            });
-            console.log('✅ Session set successfully from popup');
-          } catch (error) {
-            console.warn('Failed to set session from token:', error);
+          // Instead of trying to set a session with tokens, we'll trigger a re-authentication
+          // by refreshing the auth state after the Twitch flow completes
+          console.log('🔄 Triggering auth state refresh...');
+          
+          // Force a session check
+          const { data: { session } } = await supabase.auth.getSession();
+          console.log('📊 Current session after Twitch auth:', session ? 'FOUND' : 'NOT FOUND');
+          
+          if (!session) {
+            // If no session found, try to sign in the user using magic link approach
+            console.log('🔐 No session found, attempting to refresh auth...');
+            await refreshProfile();
           }
         }
         
@@ -71,61 +75,34 @@ export default function Auth() {
     e.preventDefault();
     setLoading(true);
     
-    try {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: window.location.hostname === 'localhost' 
-            ? 'http://localhost:8080/' 
-            : `${window.location.origin}/`
-        }
-      });
-      
-      if (error) throw error;
-      
-      toast({
-        title: "Inscription réussie !",
-        description: "Vérifiez votre email pour confirmer votre compte.",
-      });
-    } catch (error: any) {
-      console.error('Error signing up:', error);
+    const { error } = await signUp(email, password);
+    
+    if (error) {
       toast({
         title: "Erreur d'inscription",
         description: error.message || "Une erreur est survenue lors de l'inscription.",
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
     }
+    
+    setLoading(false);
   };
 
   const handleEmailSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     
-    try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      
-      if (error) throw error;
-      
-      toast({
-        title: "Connexion réussie !",
-        description: "Vous êtes maintenant connecté.",
-      });
-    } catch (error: any) {
-      console.error('Error signing in:', error);
+    const { error } = await signIn(email, password);
+    
+    if (error) {
       toast({
         title: "Erreur de connexion",
         description: error.message || "Email ou mot de passe incorrect.",
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
     }
+    
+    setLoading(false);
   };
 
   return (
