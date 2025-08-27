@@ -94,79 +94,85 @@ Deno.serve(async (req) => {
     const twitchUser: TwitchUser = userData.data[0];
     console.log('Twitch user data:', { id: twitchUser.id, login: twitchUser.login });
 
-    // Create or get existing user using Twitch ID as unique identifier
     const email = twitchUser.email || `${twitchUser.login}@twitch.local`;
     
-    // Try to find existing user by Twitch ID first
+    let supabaseUser;
+    let magicLinkData;
+    
+    // Step 1: Check if a profile exists with this Twitch ID
+    console.log('Checking for existing profile with Twitch ID:', twitchUser.id);
     const { data: existingProfile } = await supabaseClient
       .from('profiles')
       .select('user_id')
       .eq('twitch_id', twitchUser.id)
       .single();
 
-    let supabaseUser;
-    let magicLinkData;
-    
     if (existingProfile) {
-      // User already exists, get their info
+      console.log('Found existing profile, getting user data');
+      // User already exists with this Twitch ID
       const { data: userData, error: userError } = await supabaseClient.auth.admin.getUserById(existingProfile.user_id);
       
       if (!userError && userData.user) {
         supabaseUser = userData.user;
+        console.log('Using existing user:', supabaseUser.id);
+      }
+    } else {
+      // Step 2: Check if user exists by email (without Twitch connection)
+      console.log('No profile found, checking for user by email:', email);
+      const { data: existingUsers } = await supabaseClient.auth.admin.listUsers();
+      const existingUserByEmail = existingUsers.users?.find(user => 
+        user.email === email || 
+        (user.email && user.email.includes(twitchUser.login))
+      );
+
+      if (existingUserByEmail) {
+        console.log('Found existing user by email, updating with Twitch data');
+        supabaseUser = existingUserByEmail;
         
-        // Generate a magic link for automatic sign-in
-        const { data: linkData, error: linkError } = await supabaseClient.auth.admin.generateLink({
-          type: 'magiclink',
-          email: userData.user.email!,
-          options: {
-            redirectTo: redirect_uri.replace('/auth/callback', '/decouverte')
+        // Update existing user with Twitch metadata
+        const { error: updateError } = await supabaseClient.auth.admin.updateUserById(
+          existingUserByEmail.id,
+          {
+            user_metadata: {
+              ...existingUserByEmail.user_metadata,
+              twitch_id: twitchUser.id,
+              twitch_username: twitchUser.login,
+              twitch_display_name: twitchUser.display_name,
+              avatar_url: twitchUser.profile_image_url,
+            }
+          }
+        );
+
+        if (updateError) {
+          console.error('Failed to update user metadata:', updateError);
+        }
+      } else {
+        // Step 3: Create completely new user
+        console.log('Creating new user');
+        const { data: authData, error: authError } = await supabaseClient.auth.admin.createUser({
+          email: email,
+          email_confirm: true,
+          user_metadata: {
+            twitch_id: twitchUser.id,
+            twitch_username: twitchUser.login,
+            twitch_display_name: twitchUser.display_name,
+            avatar_url: twitchUser.profile_image_url,
           }
         });
 
-        if (!linkError && linkData.properties?.action_link) {
-          magicLinkData = linkData;
-          console.log('Magic link generated for existing user');
+        if (authError) {
+          console.error('Failed to create user:', authError);
+          throw new Error(`Failed to create user: ${authError.message}`);
         }
+
+        supabaseUser = authData.user;
+        console.log('New user created successfully:', supabaseUser.id);
       }
-    } else {
-      // Create new user
-      const { data: authData, error: authError } = await supabaseClient.auth.admin.createUser({
-        email: email,
-        email_confirm: true,
-        user_metadata: {
-          twitch_id: twitchUser.id,
-          twitch_username: twitchUser.login,
-          twitch_display_name: twitchUser.display_name,
-          avatar_url: twitchUser.profile_image_url,
-        }
-      });
-
-      if (authError) {
-        console.error('Failed to create user:', authError);
-        throw new Error(`Failed to create user: ${authError.message}`);
-      }
-
-      supabaseUser = authData.user;
-      
-      // Generate a magic link for the new user
-      const { data: linkData, error: linkError } = await supabaseClient.auth.admin.generateLink({
-        type: 'magiclink',
-        email: email,
-        options: {
-          redirectTo: redirect_uri.replace('/auth/callback', '/decouverte')
-        }
-      });
-
-      if (!linkError && linkData.properties?.action_link) {
-        magicLinkData = linkData;
-        console.log('Magic link generated for new user');
-      }
-
-      console.log('New user created successfully');
     }
 
     // Create or update profile
     if (supabaseUser) {
+      console.log('Upserting profile for user:', supabaseUser.id);
       const { error: profileError } = await supabaseClient
         .from('profiles')
         .upsert({
@@ -179,6 +185,25 @@ Deno.serve(async (req) => {
 
       if (profileError) {
         console.error('Profile upsert error:', profileError);
+      } else {
+        console.log('Profile updated successfully');
+      }
+
+      // Generate magic link for automatic sign-in
+      console.log('Generating magic link for user:', supabaseUser.email);
+      const { data: linkData, error: linkError } = await supabaseClient.auth.admin.generateLink({
+        type: 'magiclink',
+        email: supabaseUser.email!,
+        options: {
+          redirectTo: redirect_uri.replace('/auth/callback', '/decouverte')
+        }
+      });
+
+      if (!linkError && linkData.properties?.action_link) {
+        magicLinkData = linkData;
+        console.log('Magic link generated successfully');
+      } else {
+        console.error('Failed to generate magic link:', linkError);
       }
     }
 
@@ -190,7 +215,7 @@ Deno.serve(async (req) => {
       magic_link: magicLinkData?.properties?.action_link,
     };
 
-    console.log('Authentication successful');
+    console.log('Authentication completed successfully');
 
     return new Response(JSON.stringify(response), {
       headers: { 
