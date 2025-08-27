@@ -116,12 +116,17 @@ Deno.serve(async (req) => {
         supabaseUser = userData.user;
         console.log('Using existing user:', supabaseUser.id);
         
-        // Generate a session token for existing user
-        const { data: tokenData, error: tokenError } = await supabaseClient.auth.admin.generateAccessToken(existingProfile.user_id);
+        // Generate a session for existing user by creating a magic link
+        const { data: linkData, error: linkError } = await supabaseClient.auth.admin.generateLink({
+          type: 'magiclink',
+          email: supabaseUser.email!,
+        });
         
-        if (!tokenError && tokenData) {
-          sessionToken = tokenData.access_token;
-          console.log('Generated access token for existing user');
+        if (!linkError && linkData.properties?.hashed_token) {
+          // Extract the access token from the magic link
+          const url = new URL(linkData.properties.action_link);
+          sessionToken = url.searchParams.get('access_token') || url.hash.split('access_token=')[1]?.split('&')[0];
+          console.log('Generated session token for existing user');
         }
       }
     } else {
@@ -156,11 +161,15 @@ Deno.serve(async (req) => {
         }
 
         // Generate session token
-        const { data: tokenData, error: tokenError } = await supabaseClient.auth.admin.generateAccessToken(existingUserByEmail.id);
+        const { data: linkData, error: linkError } = await supabaseClient.auth.admin.generateLink({
+          type: 'magiclink',
+          email: existingUserByEmail.email!,
+        });
         
-        if (!tokenError && tokenData) {
-          sessionToken = tokenData.access_token;
-          console.log('Generated access token for updated user');
+        if (!linkError && linkData.properties?.hashed_token) {
+          const url = new URL(linkData.properties.action_link);
+          sessionToken = url.searchParams.get('access_token') || url.hash.split('access_token=')[1]?.split('&')[0];
+          console.log('Generated session token for updated user');
         }
       } else {
         // Step 3: Create completely new user
@@ -185,11 +194,15 @@ Deno.serve(async (req) => {
         console.log('New user created successfully:', supabaseUser.id);
 
         // Generate session token for new user  
-        const { data: tokenData, error: tokenError } = await supabaseClient.auth.admin.generateAccessToken(authData.user.id);
+        const { data: linkData, error: linkError } = await supabaseClient.auth.admin.generateLink({
+          type: 'magiclink',
+          email: email,
+        });
         
-        if (!tokenError && tokenData) {
-          sessionToken = tokenData.access_token;
-          console.log('Generated access token for new user');
+        if (!linkError && linkData.properties?.hashed_token) {
+          const url = new URL(linkData.properties.action_link);
+          sessionToken = url.searchParams.get('access_token') || url.hash.split('access_token=')[1]?.split('&')[0];
+          console.log('Generated session token for new user');
         }
       }
     }
