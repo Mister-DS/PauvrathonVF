@@ -31,24 +31,42 @@ export default function Auth() {
       if (event.data && event.data.type === 'TWITCH_AUTH_SUCCESS') {
         console.log('🎉 Auth success received from popup!', event.data);
         
-        // Establish session using the token if available
-        if (event.data.session_token && event.data.user_id) {
-          console.log('🔑 Attempting to establish session for user:', event.data.user_id);
+        // Force refresh of auth context after credentials sign-in
+        if (event.data.credentials) {
+          console.log('🔐 Signing in with Twitch credentials...');
           
-          // Instead of trying to set a session with tokens, we'll trigger a re-authentication
-          // by refreshing the auth state after the Twitch flow completes
-          console.log('🔄 Triggering auth state refresh...');
-          
-          // Force a session check
-          const { data: { session } } = await supabase.auth.getSession();
-          console.log('📊 Current session after Twitch auth:', session ? 'FOUND' : 'NOT FOUND');
-          
-          if (!session) {
-            // If no session found, try to sign in the user using magic link approach
-            console.log('🔐 No session found, attempting to refresh auth...');
-            await refreshProfile();
+          try {
+            const { error: signInError } = await supabase.auth.signInWithPassword({
+              email: event.data.credentials.email,
+              password: event.data.credentials.password,
+            });
+            
+            if (!signInError) {
+              console.log('✅ Credentials sign-in successful');
+              await refreshProfile();
+              
+              // Force redirect to production
+              setTimeout(() => {
+                window.location.replace('https://pauvrathon.lovable.app/decouverte');
+              }, 1000);
+              
+              return;
+            }
+          } catch (error) {
+            console.error('❌ Credentials sign-in error:', error);
           }
         }
+        
+        // Fallback approach
+        console.log('🔄 Using fallback auth approach');
+        await refreshProfile();
+        
+        setTimeout(async () => {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session) {
+            window.location.replace('https://pauvrathon.lovable.app/decouverte');
+          }
+        }, 2000);
         
         // Force refresh of auth context to establish session
         console.log('🔄 Refreshing auth context...');

@@ -17,14 +17,46 @@ export default function AuthCallback() {
     handleTwitchCallback();
     
     // Also listen for messages from popup window
-    const handleMessage = (event: MessageEvent) => {
+    const handleMessage = async (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return;
       
       if (event.data.type === 'TWITCH_AUTH_SUCCESS') {
-        // Update profile immediately
-        refreshProfile().then(() => {
-          navigate('/decouverte');
-        });
+        // Force refresh of auth context after credentials sign-in
+        if (event.data.credentials) {
+          console.log('🔐 Signing in with Twitch credentials...');
+          
+          try {
+            const { error: signInError } = await supabase.auth.signInWithPassword({
+              email: event.data.credentials.email,
+              password: event.data.credentials.password,
+            });
+            
+            if (!signInError) {
+              console.log('✅ Credentials sign-in successful');
+              await refreshProfile();
+              
+              // Force redirect to production
+              setTimeout(() => {
+                window.location.replace('https://pauvrathon.lovable.app/decouverte');
+              }, 1000);
+              
+              return;
+            }
+          } catch (error) {
+            console.error('❌ Credentials sign-in error:', error);
+          }
+        }
+        
+        // Fallback approach
+        console.log('🔄 Using fallback auth approach');
+        await refreshProfile();
+        
+        setTimeout(async () => {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session) {
+            window.location.replace('https://pauvrathon.lovable.app/decouverte');
+          }
+        }, 2000);
       }
     };
     
@@ -68,32 +100,43 @@ export default function AuthCallback() {
       if (data.supabase_user) {
         setMessage('Création de la session...');
         
-        // Use the session token if available to establish the session
-        if (data.session_token) {
-          console.log('🔑 Using session token to establish session');
+        // Use credentials if available to establish the session
+        if (data.credentials) {
+          console.log('🔑 Using credentials to establish session');
           
           try {
-            console.log('🔑 Processing Twitch auth success...');
+            console.log('🔑 Processing Twitch auth with credentials...');
             
-            // Force refresh of auth context to establish session
-            await refreshProfile();
+            // Sign in directly with received credentials  
+            const { error: signInError } = await supabase.auth.signInWithPassword({
+              email: data.credentials.email,
+              password: data.credentials.password,
+            });
             
-            // Check session status
-            const { data: { session } } = await supabase.auth.getSession();
-            console.log('📊 Session after Twitch auth:', session ? 'FOUND' : 'NOT FOUND');
-            
-            if (session) {
-              console.log('✅ Session established, redirecting to discovery');
-              window.location.href = '/decouverte';
+            if (signInError) {
+              console.error('❌ Direct sign in failed:', signInError);
             } else {
-              console.log('❌ No session found, will try alternative approach');
-              // Wait for auth context to catch up
+              console.log('✅ Direct sign in successful');
+              
+              // Force refresh of auth context
+              await refreshProfile();
+              
+              setStatus('success');
+              setMessage('Connexion Twitch réussie !');
+              
+              toast({
+                title: "Connexion réussie !",
+                description: `Bienvenue ${data.twitch_user.display_name} !`,
+              });
+              
+              // Redirect to discovery
               setTimeout(() => {
                 window.location.href = '/decouverte';
-              }, 2000);
+              }, 1500);
+              return;
             }
           } catch (error) {
-            console.warn('Session establishment failed:', error);
+            console.warn('Credential sign in failed:', error);
           }
         }
         
@@ -112,12 +155,12 @@ export default function AuthCallback() {
         if (window.opener) {
           console.log('🚪 Notifying parent window of successful auth');
           
-          // Send the auth success to parent window with session info
+          // Send the auth success to parent window with credentials
           window.opener.postMessage({ 
             type: 'TWITCH_AUTH_SUCCESS', 
             user: data.twitch_user,
             supabase_user: data.supabase_user,
-            session_token: data.session_token,
+            credentials: data.credentials,
             success: true
           }, '*');
           
