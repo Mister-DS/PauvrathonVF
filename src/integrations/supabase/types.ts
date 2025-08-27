@@ -292,35 +292,22 @@ export type Database = {
       }
     }
     Views: {
-      safe_minigames: {
-        Row: {
-          created_at: string | null
-          description: string | null
-          id: string | null
-          is_active: boolean | null
-          name: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          description?: string | null
-          id?: string | null
-          is_active?: boolean | null
-          name?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          description?: string | null
-          id?: string | null
-          is_active?: boolean | null
-          name?: string | null
-        }
-        Relationships: []
-      }
+      [_ in never]: never
     }
     Functions: {
       get_current_user_role: {
         Args: Record<PropertyKey, never>
         Returns: string
+      }
+      get_safe_minigames: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          created_at: string
+          description: string
+          id: string
+          is_active: boolean
+          name: string
+        }[]
       }
     }
     Enums: {
