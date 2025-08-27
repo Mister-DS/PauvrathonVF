@@ -73,86 +73,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const connectTwitch = async () => {
-    console.log('🚀 Starting Twitch connection flow');
+    console.log('🚀 Démarrage connexion Twitch');
     
     try {
-      console.log('📞 Fetching Twitch Client ID...');
+      // Get Twitch Client ID
       const { data: clientIdData, error: clientIdError } = await supabase.functions.invoke('twitch-client-id');
       
       if (clientIdError || !clientIdData?.client_id) {
-        console.error('❌ Failed to get client ID:', clientIdError);
+        console.error('❌ Échec récupération client ID:', clientIdError);
         toast({
-          title: "Erreur",
-          description: "Impossible de récupérer la configuration Twitch.",
+          title: "Erreur de configuration",
+          description: "Impossible de récupérer la configuration Twitch",
           variant: "destructive",
         });
         return;
       }
       
       const clientId = clientIdData.client_id;
-      console.log('✅ Client ID retrieved');
-      
       const redirectUri = `${window.location.origin}/auth/callback`;
-      console.log('🔄 Redirect URI:', redirectUri);
+      const scopes = ['user:read:email'];
       
       const twitchAuthUrl = `https://id.twitch.tv/oauth2/authorize?` +
         `client_id=${clientId}&` +
         `redirect_uri=${encodeURIComponent(redirectUri)}&` +
         `response_type=code&` +
-        `scope=user:read:email&` +
-        `force_verify=true`;
-
-      console.log('🔗 Opening Twitch auth URL');
-
-      // Open popup for auth
-      const popup = window.open(twitchAuthUrl, 'twitchAuth', 'width=600,height=700,scrollbars=yes,resizable=yes');
+        `scope=${encodeURIComponent(scopes.join(' '))}`;
       
-      if (popup) {
-        console.log('✅ Popup opened successfully');
-        toast({
-          title: "Redirection Twitch",
-          description: "Une nouvelle fenêtre s'est ouverte pour l'authentification.",
-        });
-        
-        // Monitor popup for completion
-        const checkClosed = setInterval(() => {
-          if (popup.closed) {
-            console.log('🔄 Popup closed, checking auth status...');
-            clearInterval(checkClosed);
-            
-            // Refresh to check auth status
-            setTimeout(async () => {
-              console.log('🔍 Refreshing auth state...');
-              const { data: { session } } = await supabase.auth.getSession();
-              
-              if (session) {
-                console.log('✅ Session found after popup');
-                setSession(session);
-                setUser(session.user);
-                await fetchProfile(session.user.id);
-                
-                toast({
-                  title: "Connexion réussie !",
-                  description: "Vous êtes maintenant connecté avec Twitch.",
-                });
-                
-                // Redirect to discovery
-                window.location.href = '/decouverte';
-              }
-            }, 1000);
-          }
-        }, 1000);
-      } else {
-        // Fallback to direct redirect
-        console.log('⚠️ Popup blocked, using direct redirect');
-        window.location.href = twitchAuthUrl;
-      }
+      console.log('🔗 Redirection vers Twitch');
+      window.location.href = twitchAuthUrl;
       
     } catch (error: any) {
-      console.error('💥 Error in connectTwitch:', error);
+      console.error('💥 Erreur connectTwitch:', error);
       toast({
         title: "Erreur de connexion",
-        description: `Erreur: ${error.message}`,
+        description: error.message || "Impossible de se connecter à Twitch",
         variant: "destructive",
       });
     }
