@@ -117,14 +117,11 @@ Deno.serve(async (req) => {
         console.log('Using existing user:', supabaseUser.id);
         
         // Generate a session token for existing user
-        const { data: sessionData, error: sessionError } = await supabaseClient.auth.admin.generateLink({
-          type: 'signup',
-          email: supabaseUser.email!,
-        });
+        const { data: tokenData, error: tokenError } = await supabaseClient.auth.admin.generateAccessToken(existingProfile.user_id);
         
-        if (!sessionError && sessionData.properties?.access_token) {
-          sessionToken = sessionData.properties.access_token;
-          console.log('Generated session token for existing user');
+        if (!tokenError && tokenData) {
+          sessionToken = tokenData.access_token;
+          console.log('Generated access token for existing user');
         }
       }
     } else {
@@ -159,14 +156,11 @@ Deno.serve(async (req) => {
         }
 
         // Generate session token
-        const { data: sessionData, error: sessionError } = await supabaseClient.auth.admin.generateLink({
-          type: 'signup',
-          email: existingUserByEmail.email!,
-        });
+        const { data: tokenData, error: tokenError } = await supabaseClient.auth.admin.generateAccessToken(existingUserByEmail.id);
         
-        if (!sessionError && sessionData.properties?.access_token) {
-          sessionToken = sessionData.properties.access_token;
-          console.log('Generated session token for updated user');
+        if (!tokenError && tokenData) {
+          sessionToken = tokenData.access_token;
+          console.log('Generated access token for updated user');
         }
       } else {
         // Step 3: Create completely new user
@@ -190,15 +184,12 @@ Deno.serve(async (req) => {
         supabaseUser = authData.user;
         console.log('New user created successfully:', supabaseUser.id);
 
-        // Generate session token for new user
-        const { data: sessionData, error: sessionError } = await supabaseClient.auth.admin.generateLink({
-          type: 'signup',
-          email: email,
-        });
+        // Generate session token for new user  
+        const { data: tokenData, error: tokenError } = await supabaseClient.auth.admin.generateAccessToken(authData.user.id);
         
-        if (!sessionError && sessionData.properties?.access_token) {
-          sessionToken = sessionData.properties.access_token;
-          console.log('Generated session token for new user');
+        if (!tokenError && tokenData) {
+          sessionToken = tokenData.access_token;
+          console.log('Generated access token for new user');
         }
       }
     }
@@ -227,6 +218,7 @@ Deno.serve(async (req) => {
       success: true,
       twitch_user: twitchUser,
       access_token: tokenData.access_token,
+      refresh_token: tokenData.refresh_token, // Include Twitch refresh token
       supabase_user: supabaseUser,
       session_token: sessionToken, // This will be used to establish the session
     };

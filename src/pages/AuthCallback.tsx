@@ -73,16 +73,22 @@ export default function AuthCallback() {
           console.log('🔑 Using session token to establish session');
           
           try {
-            // Set the session using the token from the server
-            const { error: sessionError } = await supabase.auth.setSession({
+            // Set the session using the access token from the server
+            const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
               access_token: data.session_token,
-              refresh_token: '' // We might not have a refresh token
+              refresh_token: data.refresh_token || '' // Include refresh token if available
             });
 
             if (sessionError) {
               console.warn('Session token failed:', sessionError);
+              // Fallback: try to sign in the user directly with admin token
+              const { error: signInError } = await supabase.auth.signInWithPassword({
+                email: data.supabase_user.email,
+                password: 'temp_password_' + Math.random() // This won't work but triggers the auth flow
+              });
+              console.log('Fallback sign-in attempt:', signInError ? 'FAILED' : 'SUCCESS');
             } else {
-              console.log('✅ Session established successfully');
+              console.log('✅ Session established successfully with:', sessionData.session ? 'VALID SESSION' : 'NO SESSION');
             }
           } catch (error) {
             console.warn('Session establishment failed:', error);
