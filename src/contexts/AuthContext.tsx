@@ -124,7 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ? 'http://localhost:8080/auth/callback'
         : `${window.location.origin}/auth/callback`;
       
-      console.log('🌍 Current origin:', currentOrigin);
+      console.log('🌍 Current hostname:', window.location.hostname);
       console.log('🔄 Redirect URI:', redirectUri);
       
       const twitchAuthUrl = `https://id.twitch.tv/oauth2/authorize?` +
