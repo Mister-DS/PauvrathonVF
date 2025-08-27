@@ -469,7 +469,7 @@ export default function StreamerPanel() {
                 </Button>
                 
                 <Button 
-                  variant={settings.is_live ? "destructive" : "default"}
+                  variant={settings.is_live ? "secondary" : "default"}
                   className="w-full"
                   onClick={async () => {
                     const newLiveStatus = !settings.is_live;
@@ -487,7 +487,7 @@ export default function StreamerPanel() {
                       setStreamer(prev => prev ? { ...prev, is_live: newLiveStatus } : null);
                       
                       toast({
-                        title: newLiveStatus ? "🔴 Stream démarré" : "⏸️ Stream en pause",
+                        title: newLiveStatus ? "🔴 Stream repris" : "⏸️ Stream en pause",
                         description: newLiveStatus ? 
                           "Votre subathon est maintenant en direct !" : 
                           "Votre subathon est maintenant en pause.",
@@ -512,9 +512,57 @@ export default function StreamerPanel() {
                   ) : (
                     <>
                       <Play className="mr-2 h-4 w-4" />
-                      Démarrer le stream
+                      Reprendre le stream
                     </>
                   )}
+                </Button>
+
+                {/* Bouton Arrêter */}
+                <Button 
+                  variant="destructive"
+                  className="w-full"
+                  onClick={async () => {
+                    // Confirmer l'arrêt
+                    if (!confirm("Êtes-vous sûr de vouloir arrêter complètement le subathon ? Cela remettra les clics à zéro.")) {
+                      return;
+                    }
+
+                    setSettings(prev => ({ ...prev, is_live: false }));
+                    
+                    try {
+                      // Arrêter le stream et remettre les clics à zéro
+                      const { error } = await supabase
+                        .from('streamers')
+                        .update({ 
+                          is_live: false,
+                          current_clicks: 0
+                        })
+                        .eq('id', streamer.id);
+
+                      if (error) throw error;
+
+                      setStreamer(prev => prev ? { 
+                        ...prev, 
+                        is_live: false,
+                        current_clicks: 0
+                      } : null);
+                      
+                      toast({
+                        title: "⏹️ Stream arrêté",
+                        description: "Votre subathon a été arrêté et les clics remis à zéro.",
+                      });
+                    } catch (error) {
+                      console.error('Error stopping stream:', error);
+                      toast({
+                        title: "Erreur",
+                        description: "Impossible d'arrêter le stream.",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
+                >
+                  <Settings className="mr-2 h-4 w-4" />
+                  Arrêter le stream
                 </Button>
               </CardContent>
             </Card>
