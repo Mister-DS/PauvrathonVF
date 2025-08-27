@@ -317,10 +317,29 @@ export type Database = {
           twitch_username: string
         }[]
       }
+      get_minigame_code: {
+        Args: { minigame_id: string }
+        Returns: {
+          code: string
+          description: string
+          id: string
+          is_active: boolean
+          name: string
+        }[]
+      }
       get_safe_minigames: {
         Args: Record<PropertyKey, never>
         Returns: {
           created_at: string
+          description: string
+          id: string
+          is_active: boolean
+          name: string
+        }[]
+      }
+      get_safe_minigames_public: {
+        Args: Record<PropertyKey, never>
+        Returns: {
           description: string
           id: string
           is_active: boolean
