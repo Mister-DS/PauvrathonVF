@@ -59,13 +59,6 @@ export type Database = {
             referencedRelation: "streamers"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "game_sessions_streamer_id_fkey"
-            columns: ["streamer_id"]
-            isOneToOne: false
-            referencedRelation: "streamers_public"
-            referencedColumns: ["id"]
-          },
         ]
       }
       minigames: {
@@ -274,13 +267,6 @@ export type Database = {
             referencedRelation: "streamers"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "subathon_stats_streamer_id_fkey"
-            columns: ["streamer_id"]
-            isOneToOne: false
-            referencedRelation: "streamers_public"
-            referencedColumns: ["id"]
-          },
         ]
       }
       user_follows: {
@@ -306,22 +292,7 @@ export type Database = {
       }
     }
     Views: {
-      streamers_public: {
-        Row: {
-          active_minigames: string[] | null
-          avatar_url: string | null
-          clicks_required: number | null
-          created_at: string | null
-          current_clicks: number | null
-          id: string | null
-          is_live: boolean | null
-          stream_title: string | null
-          time_increment: number | null
-          twitch_display_name: string | null
-          twitch_username: string | null
-        }
-        Relationships: []
-      }
+      [_ in never]: never
     }
     Functions: {
       create_admin_streamer_profile: {
@@ -332,7 +303,7 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: string
       }
-      get_public_streamers: {
+      get_live_streamers_safe: {
         Args: Record<PropertyKey, never>
         Returns: {
           active_minigames: string[]

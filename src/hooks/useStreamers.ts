@@ -20,20 +20,19 @@ export function useStreamers() {
     try {
       setLoading(true);
       
-      // Get all live streamers
-      const { data, error } = await supabase
-        .from('streamers')
-        .select(`
-          *,
-          profiles!inner(*)
-        `)
-        .eq('is_live', true);
+      // Use secure function that only exposes safe public data
+      const { data, error } = await supabase.rpc('get_live_streamers_safe');
 
       if (error) throw error;
       
+      // Transform data to match expected format
       const streamersWithProfile = (data || []).map(streamer => ({
         ...streamer,
-        profile: Array.isArray(streamer.profiles) ? streamer.profiles[0] : streamer.profiles
+        profile: {
+          twitch_display_name: streamer.twitch_display_name,
+          twitch_username: streamer.twitch_username,
+          avatar_url: streamer.avatar_url
+        }
       }));
       
       setStreamers(streamersWithProfile as unknown as Streamer[]);
