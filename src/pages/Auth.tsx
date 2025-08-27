@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -13,6 +13,7 @@ import { Twitch, Loader2 } from 'lucide-react';
 
 export default function Auth() {
   const { user, connectTwitch, refreshProfile } = useAuth();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -27,17 +28,23 @@ export default function Auth() {
     const handleMessage = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return;
       
-      if (event.data.type === 'TWITCH_AUTH_SUCCESS') {
+      if (event.data && event.data.type === 'TWITCH_AUTH_SUCCESS') {
+        console.log('🎉 Auth success received from popup!');
+        
         // Refresh profile and redirect
         refreshProfile().then(() => {
-          window.location.href = '/decouverte';
+          // Wait a moment for the session to be established
+          setTimeout(() => {
+            console.log('📍 Redirecting to discovery page');
+            navigate('/decouverte');
+          }, 1000);
         });
       }
     };
     
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [refreshProfile]);
+  }, [refreshProfile, navigate]);
 
   const handleEmailSignUp = async (e: React.FormEvent) => {
     e.preventDefault();

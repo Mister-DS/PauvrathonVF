@@ -151,25 +151,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             console.log('🔄 Popup closed, checking auth status...');
             clearInterval(checkClosed);
             
-            // Wait a bit for auth to process, then check
-            setTimeout(async () => {
-              console.log('🔍 Refreshing profile and checking session...');
-              await refreshProfile();
-              
-              // Check if we have a session now
-              const { data: { session } } = await supabase.auth.getSession();
-              if (session) {
-                console.log('✅ User authenticated, redirecting');
-                window.location.href = '/decouverte';
-              } else {
-                console.log('❌ No session found');
-                toast({
-                  title: "Connexion échouée",
-                  description: "Veuillez réessayer la connexion Twitch.",
-                  variant: "destructive",
-                });
-              }
-            }, 1000);
+              // Wait a bit for auth to process, then check
+              setTimeout(async () => {
+                console.log('🔍 Refreshing profile and checking session...');
+                await refreshProfile();
+                
+                // Check if we have a session now
+                const { data: { session } } = await supabase.auth.getSession();
+                console.log('📊 Session status:', session ? 'FOUND' : 'NOT FOUND');
+                
+                if (session) {
+                  console.log('✅ User authenticated, redirecting');
+                  window.location.href = '/decouverte';
+                } else {
+                  console.log('❌ No session found after popup closed');
+                  // Try one more refresh in case of timing issues
+                  setTimeout(async () => {
+                    await refreshProfile();
+                    const { data: { session: secondCheck } } = await supabase.auth.getSession();
+                    if (secondCheck) {
+                      window.location.href = '/decouverte';
+                    } else {
+                      toast({
+                        title: "Connexion échouée",
+                        description: "Veuillez réessayer la connexion Twitch.",
+                        variant: "destructive",
+                      });
+                    }
+                  }, 2000);
+                }
+              }, 1000);
           }
         }, 1000);
         

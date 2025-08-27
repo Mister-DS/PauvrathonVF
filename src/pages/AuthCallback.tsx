@@ -65,19 +65,54 @@ export default function AuthCallback() {
 
       setMessage('Mise à jour du profil...');
 
-      // Skip magic link - redirect directly to success page
-      setStatus('success');
-      setMessage('Connexion Twitch réussie !');
-      
-      toast({
-        title: "Connexion réussie !",
-        description: `Bienvenue ${data.twitch_user.display_name} !`,
-      });
+      // If we got a magic link, use it to automatically sign in
+      if (data.magic_link) {
+        setMessage('Connexion automatique...');
+        
+        // Use the magic link to sign in automatically
+        window.location.href = data.magic_link;
+        return;
+      }
 
-      // Force direct redirect to your site
-      setTimeout(() => {
-        window.location.href = 'https://pauvrathon.lovable.app/decouverte';
-      }, 1500);
+      // Create manual session using the Supabase user data
+      if (data.supabase_user) {
+        setMessage('Finalisation de la connexion...');
+        
+        // Update profile first
+        await refreshProfile();
+        
+        setStatus('success');
+        setMessage('Connexion Twitch réussie !');
+        
+        toast({
+          title: "Connexion réussie !",
+          description: `Bienvenue ${data.twitch_user.display_name} !`,
+        });
+
+        // If we're in a popup, notify parent and close
+        if (window.opener) {
+          // Send the auth success to parent window
+          window.opener.postMessage({ 
+            type: 'TWITCH_AUTH_SUCCESS', 
+            user: data.twitch_user,
+            supabase_user: data.supabase_user
+          }, window.location.origin);
+          
+          // Show success message briefly before closing
+          setMessage('Connexion réussie ! Fermeture de la fenêtre...');
+          
+          setTimeout(() => {
+            window.close();
+          }, 1500);
+        } else {
+          // Normal redirect (not in popup)
+          setTimeout(() => {
+            window.location.href = 'https://pauvrathon.lovable.app/decouverte';
+          }, 1500);
+        }
+      } else {
+        throw new Error('User authentication failed');
+      }
 
     } catch (error: any) {
       console.error('Twitch callback error:', error);
