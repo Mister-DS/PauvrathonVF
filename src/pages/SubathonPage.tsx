@@ -31,10 +31,23 @@ const SubathonPage = () => {
   const [showVictoryButton, setShowVictoryButton] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const [gameWon, setGameWon] = useState(false);
+  const [streamData, setStreamData] = useState<any>(null);
+  const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
     fetchStreamerData();
+    // Vérifier le statut du stream régulièrement
+    const interval = setInterval(checkStreamStatus, 30000); // Toutes les 30 secondes
+    return () => clearInterval(interval);
   }, [id]);
+
+  // Horloge en temps réel
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Countdown timer for game restart
   useEffect(() => {
@@ -79,6 +92,24 @@ const SubathonPage = () => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const checkStreamStatus = async () => {
+    if (!streamer?.profile?.twitch_username) return;
+
+    try {
+      // Appel à l'API Twitch pour vérifier si le stream est en ligne
+      const response = await fetch(`/api/twitch/stream-status/${streamer.profile.twitch_username}`);
+      if (response.ok) {
+        const data = await response.json();
+        setStreamOnline(data.isLive);
+        setStreamData(data.streamData);
+      }
+    } catch (error) {
+      console.error('Error checking stream status:', error);
+      // En cas d'erreur, essayer de détecter via le player Twitch
+      setStreamOnline(true); // Par défaut en ligne si erreur API
     }
   };
 
@@ -219,6 +250,7 @@ const SubathonPage = () => {
   const handlePlayerReady = () => {
     console.log('Twitch player is ready');
     setStreamOnline(true);
+    checkStreamStatus(); // Vérifier immédiatement le statut
   };
 
   const handleStreamOnline = () => {
@@ -284,23 +316,37 @@ const SubathonPage = () => {
       
       <div className="container mx-auto p-4 max-w-6xl">
         {/* Header avec photo et nom du STREAMER */}
-        <div className="flex items-center gap-4 mb-6">
-          <Avatar className="h-20 w-20">
-            <AvatarImage src={streamer.profile?.avatar_url} />
-            <AvatarFallback className="text-xl">
+        <div className="flex items-center gap-6 mb-6 p-6 bg-card rounded-lg border">
+          <Avatar className="h-24 w-24 border-4 border-primary">
+            <AvatarImage 
+              src={streamer.profile?.avatar_url} 
+              alt={streamer.profile?.twitch_display_name || 'Streamer'}
+            />
+            <AvatarFallback className="text-2xl bg-primary text-primary-foreground">
               {streamer.profile?.twitch_display_name?.charAt(0) || 'S'}
             </AvatarFallback>
           </Avatar>
-          <div>
-            <h1 className="text-3xl font-bold">
-              {streamer.profile?.twitch_display_name || 'Streamer'}
-            </h1>
-            <p className="text-muted-foreground text-lg">Subathon en cours</p>
-            <div className="flex items-center gap-2 mt-2">
-              <div className={`w-3 h-3 rounded-full ${streamOnline ? 'bg-red-500 animate-pulse' : 'bg-gray-500'}`}></div>
-              <span className={`text-sm font-medium ${streamOnline ? 'text-red-500' : 'text-gray-500'}`}>
-                {streamOnline ? 'EN DIRECT' : 'HORS LIGNE'}
-              </span>
+          <div className="flex-1">
+            <div className="flex items-center gap-4 mb-2">
+              <h1 className="text-4xl font-bold">
+                {streamer.profile?.twitch_display_name || 'Streamer'}
+              </h1>
+              <div className="flex items-center gap-2">
+                <div className={`w-4 h-4 rounded-full ${streamOnline ? 'bg-red-500 animate-pulse' : 'bg-gray-500'}`}></div>
+                <span className={`text-lg font-bold ${streamOnline ? 'text-red-500' : 'text-gray-500'}`}>
+                  {streamOnline ? 'EN DIRECT' : 'HORS LIGNE'}
+                </span>
+              </div>
+            </div>
+            <p className="text-muted-foreground text-xl mb-2">Pauvrathon en cours</p>
+            <div className="flex items-center gap-4 text-sm text-muted-foreground">
+              <span>🕐 {currentTime.toLocaleTimeString('fr-FR')}</span>
+              {streamData?.started_at && (
+                <span>📺 Stream depuis {new Date(streamData.started_at).toLocaleTimeString('fr-FR')}</span>
+              )}
+              {streamData?.viewer_count && (
+                <span>👥 {streamData.viewer_count} spectateurs</span>
+              )}
             </div>
           </div>
         </div>
@@ -445,32 +491,70 @@ const SubathonPage = () => {
                 <CardHeader>
                   <CardTitle>📊 Statistiques du Pauvrathon</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3">
+                <CardContent className="space-y-4">
+                  <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
+                    <span>👤 Streamer:</span>
+                    <div className="flex items-center gap-2">
+                      <Avatar className="h-6 w-6">
+                        <AvatarImage src={streamer.profile?.avatar_url} />
+                        <AvatarFallback className="text-xs">
+                          {streamer.profile?.twitch_display_name?.charAt(0) || 'S'}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="font-bold text-purple-600">
+                        {streamer.profile?.twitch_display_name || 'Non configuré'}
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div className="flex justify-between items-center">
+                    <span>🕐 Heure actuelle:</span>
+                    <span className="font-bold text-blue-600 font-mono">
+                      {currentTime.toLocaleTimeString('fr-FR')}
+                    </span>
+                  </div>
+                  
+                  {streamOnline && streamData?.started_at && (
+                    <div className="flex justify-between items-center">
+                      <span>📺 Stream depuis:</span>
+                      <span className="font-bold text-green-600">
+                        {new Date(streamData.started_at).toLocaleTimeString('fr-FR')}
+                      </span>
+                    </div>
+                  )}
+                  
+                  {streamData?.viewer_count && (
+                    <div className="flex justify-between items-center">
+                      <span>👥 Spectateurs:</span>
+                      <span className="font-bold text-orange-600">{streamData.viewer_count}</span>
+                    </div>
+                  )}
+
                   <div className="flex justify-between items-center">
                     <span>⏰ Temps ajouté total:</span>
                     <span className="font-bold text-lg text-green-600">
                       {Math.floor((streamer.total_time_added || 0) / 3600)}h {Math.floor(((streamer.total_time_added || 0) % 3600) / 60)}m {(streamer.total_time_added || 0) % 60}s
                     </span>
                   </div>
+                  
                   <div className="flex justify-between items-center">
                     <span>🎯 Temps par victoire:</span>
                     <span className="font-bold text-blue-600">{streamer.time_increment || 30}s</span>
                   </div>
+                  
                   <div className="flex justify-between items-center">
                     <span>🎮 Clics requis:</span>
                     <span className="font-bold text-orange-600">{clicksRequired} clics</span>
                   </div>
-                  <div className="flex justify-between items-center">
+                  
+                  <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
                     <span>📺 Statut du stream:</span>
-                    <span className={`font-bold ${streamOnline ? 'text-red-500' : 'text-gray-500'}`}>
-                      {streamOnline ? '🔴 EN DIRECT' : '⚫ HORS LIGNE'}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span>👥 Streamer:</span>
-                    <span className="font-bold text-purple-600">
-                      {streamer.profile?.twitch_display_name || 'Non configuré'}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2 h-2 rounded-full ${streamOnline ? 'bg-red-500 animate-pulse' : 'bg-gray-500'}`}></div>
+                      <span className={`font-bold ${streamOnline ? 'text-red-500' : 'text-gray-500'}`}>
+                        {streamOnline ? '🔴 EN DIRECT' : '⚫ HORS LIGNE'}
+                      </span>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
