@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Navigation } from '@/components/Navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { Twitch, Search, Trophy } from 'lucide-react';
 
@@ -9,6 +10,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-background">
+      <Navigation />
       <div className="container mx-auto px-4 py-8">
         <div className="text-center mb-12">
           <h1 className="text-5xl font-bold gradient-text mb-4 neon-glow-strong">

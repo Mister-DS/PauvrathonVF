@@ -1,6 +1,8 @@
+import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import {
   NavigationMenu,
   NavigationMenuItem,
@@ -18,8 +20,29 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 export function Navigation() {
   const { user, profile, signOut } = useAuth();
   const location = useLocation();
+  const [hasStreamerProfile, setHasStreamerProfile] = useState(false);
 
   const isActive = (path: string) => location.pathname === path;
+
+  useEffect(() => {
+    const checkStreamerProfile = async () => {
+      if (!user) return;
+      
+      try {
+        const { data, error } = await supabase
+          .from('streamers')
+          .select('id')
+          .eq('user_id', user.id)
+          .single();
+
+        setHasStreamerProfile(!!data && !error);
+      } catch (error) {
+        setHasStreamerProfile(false);
+      }
+    };
+
+    checkStreamerProfile();
+  }, [user, profile]);
 
   return (
     <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -66,7 +89,7 @@ export function Navigation() {
                     </Link>
                   </NavigationMenuItem>
                   
-                  {profile?.role === 'streamer' && (
+                  {(profile?.role === 'streamer' || hasStreamerProfile || profile?.role === 'admin') && (
                     <NavigationMenuItem>
                       <Link to="/streamer">
                         <Button 
@@ -116,7 +139,7 @@ export function Navigation() {
                       Profil
                     </Link>
                   </DropdownMenuItem>
-                  {profile?.role === 'streamer' && (
+                  {(profile?.role === 'streamer' || hasStreamerProfile || profile?.role === 'admin') && (
                     <DropdownMenuItem asChild>
                       <Link to="/streamer" className="flex items-center">
                         <Settings className="mr-2 h-4 w-4" />

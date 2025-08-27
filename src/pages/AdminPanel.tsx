@@ -80,7 +80,7 @@ export default function AdminPanel() {
         .from('streamers')
         .select(`
           *,
-          profiles(twitch_display_name, avatar_url, twitch_username)
+          profiles!inner(twitch_display_name, avatar_url, twitch_username)
         `)
         .order('created_at', { ascending: false });
 
@@ -88,7 +88,7 @@ export default function AdminPanel() {
       
       const streamersWithProfile = (data || []).map(streamer => ({
         ...streamer,
-        profile: streamer.profiles?.[0] || null
+        profile: Array.isArray(streamer.profiles) ? streamer.profiles[0] : streamer.profiles
       }));
       
       setStreamers(streamersWithProfile as unknown as Streamer[]);
