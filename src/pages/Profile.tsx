@@ -5,10 +5,12 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Navigation } from '@/components/Navigation';
 import { useAuth } from '@/contexts/AuthContext';
+import { useStreamerStatus } from '@/hooks/useStreamerStatus';
 import { User, Trophy, Clock, Gamepad2, Calendar, LogOut } from 'lucide-react';
 
 export default function Profile() {
   const { user, profile, signOut, connectTwitch, twitchUser } = useAuth();
+  const { isLive } = useStreamerStatus(user?.id);
 
   // Redirect if not authenticated
   if (!user) {
@@ -25,16 +27,29 @@ export default function Profile() {
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-4">
-                  <Avatar className="h-20 w-20">
-                    <AvatarImage 
-                      src={profile?.avatar_url || twitchUser?.profile_image_url} 
-                      alt={profile?.twitch_display_name || 'User'} 
-                    />
-                    <AvatarFallback className="text-2xl">
-                      {profile?.twitch_display_name?.charAt(0) || 'U'}
-                    </AvatarFallback>
-                  </Avatar>
+                  <div className="flex items-center space-x-4">
+                    <div className="relative">
+                      <Avatar className="h-20 w-20">
+                        <AvatarImage 
+                          src={profile?.avatar_url || twitchUser?.profile_image_url} 
+                          alt={profile?.twitch_display_name || 'User'} 
+                        />
+                        <AvatarFallback className="text-2xl">
+                          {profile?.twitch_display_name?.charAt(0) || 'U'}
+                        </AvatarFallback>
+                      </Avatar>
+                      {/* Indicateur live pour les streamers */}
+                      {profile?.role === 'streamer' && isLive && (
+                        <div className="absolute -top-1 -right-1">
+                          <Badge 
+                            variant="default" 
+                            className="bg-red-500 text-white text-xs px-2 py-1 animate-pulse"
+                          >
+                            🔴 LIVE
+                          </Badge>
+                        </div>
+                      )}
+                    </div>
                   <div>
                     <CardTitle className="text-2xl">
                       {profile?.twitch_display_name || 'Utilisateur'}

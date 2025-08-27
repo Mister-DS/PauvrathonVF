@@ -51,6 +51,13 @@ export default function StreamerPanel() {
   useEffect(() => {
     fetchStreamerData();
     fetchStats();
+    
+    // Set up real-time updates for streamer data
+    const interval = setInterval(() => {
+      fetchStreamerData();
+    }, 30000); // Refresh every 30 seconds
+
+    return () => clearInterval(interval);
   }, [user]);
 
   const fetchStreamerData = async () => {
@@ -464,12 +471,43 @@ export default function StreamerPanel() {
                 <Button 
                   variant={settings.is_live ? "destructive" : "default"}
                   className="w-full"
-                  onClick={() => setSettings(prev => ({ ...prev, is_live: !prev.is_live }))}
+                  onClick={async () => {
+                    const newLiveStatus = !settings.is_live;
+                    setSettings(prev => ({ ...prev, is_live: newLiveStatus }));
+                    
+                    // Sauvegarder immédiatement le changement de statut
+                    try {
+                      const { error } = await supabase
+                        .from('streamers')
+                        .update({ is_live: newLiveStatus })
+                        .eq('id', streamer.id);
+
+                      if (error) throw error;
+
+                      setStreamer(prev => prev ? { ...prev, is_live: newLiveStatus } : null);
+                      
+                      toast({
+                        title: newLiveStatus ? "🔴 Stream démarré" : "⏸️ Stream en pause",
+                        description: newLiveStatus ? 
+                          "Votre subathon est maintenant en direct !" : 
+                          "Votre subathon est maintenant en pause.",
+                      });
+                    } catch (error) {
+                      console.error('Error updating live status:', error);
+                      // Revert local state on error
+                      setSettings(prev => ({ ...prev, is_live: !newLiveStatus }));
+                      toast({
+                        title: "Erreur",
+                        description: "Impossible de mettre à jour le statut.",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
                 >
                   {settings.is_live ? (
                     <>
                       <Pause className="mr-2 h-4 w-4" />
-                      Arrêter le stream
+                      Mettre en pause
                     </>
                   ) : (
                     <>

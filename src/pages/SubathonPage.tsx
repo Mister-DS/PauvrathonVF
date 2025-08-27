@@ -20,7 +20,8 @@ import {
   Gamepad2, 
   MousePointer,
   Timer,
-  Star
+  Star,
+  Power
 } from 'lucide-react';
 
 export default function SubathonPage() {
@@ -74,7 +75,7 @@ export default function SubathonPage() {
   };
 
   const handleClick = async () => {
-    if (!streamer || !user || clicking || cooldownActive) return;
+    if (!streamer || !user || clicking || cooldownActive || !streamer.is_live) return;
     
     setClicking(true);
     
@@ -407,6 +408,28 @@ export default function SubathonPage() {
                 </CardContent>
               </Card>
             </div>
+          ) : !streamer.is_live ? (
+            /* Streamer Offline */
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-center text-muted-foreground">
+                  <Power className="mr-2 h-5 w-5" />
+                  Streamer Hors Ligne
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="text-center py-8">
+                  <div className="mx-auto w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
+                    <Power className="h-8 w-8 text-muted-foreground" />
+                  </div>
+                  <h3 className="text-lg font-semibold mb-2">Stream terminé</h3>
+                  <p className="text-muted-foreground">
+                    {streamer.profile?.twitch_display_name} n'est plus en direct. 
+                    Revenez quand le stream reprendra !
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
           ) : (
             /* Click Area */
             <Card>
@@ -437,10 +460,11 @@ export default function SubathonPage() {
                   <Button
                     size="lg"
                     onClick={handleClick}
-                    disabled={!user || clicking || cooldownActive}
+                    disabled={!user || clicking || cooldownActive || !streamer.is_live}
                     className="text-lg px-8 py-6 h-auto"
                   >
-                    {clicking ? 'Clic en cours...' : 
+                    {!streamer.is_live ? 'Streamer hors ligne' :
+                     clicking ? 'Contribution...' : 
                      cooldownActive ? `Cooldown (${cooldownTime}s)` :
                      !user ? 'Connectez-vous pour participer' :
                      'CLIQUER'}

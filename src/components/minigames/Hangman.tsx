@@ -72,7 +72,10 @@ export function Hangman({ onWin, onLose, attempts, maxAttempts }: HangmanProps) 
     '  +---+\n  |   |\n  O   |\n /|   |\n      |\n      |\n=========',
     '  +---+\n  |   |\n  O   |\n /|\\  |\n      |\n      |\n=========',
     '  +---+\n  |   |\n  O   |\n /|\\  |\n /    |\n      |\n=========',
-    '  +---+\n  |   |\n  O   |\n /|\\  |\n / \\  |\n      |\n========='
+    '  +---+\n  |   |\n  O   |\n /|\\  |\n / \\  |\n      |\n=========',
+    '  +---+\n  |   |\n  O   |\n /|\\  |\n / \\  |\n  |   |\n=========',
+    '  +---+\n  |   |\n  O   |\n /|\\  |\n / \\  |\n  |   |\n=========\n Game Over!',
+    '  +---+\n  |   |\n  X   |\n /|\\  |\n / \\  |\n  |   |\n=========\n RIP'
   ];
 
   return (

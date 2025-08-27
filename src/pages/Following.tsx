@@ -113,9 +113,9 @@ export default function Following() {
       
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-4">Mes Suivis</h1>
+          <h1 className="text-3xl font-bold mb-4">Mes Suivis Twitch & Pauvrathon</h1>
           <p className="text-muted-foreground">
-            Vos streamers suivis et leur statut de subathon ({totalFollowed} streamers)
+            Vos streamers suivis sur Twitch et leur statut de subathon Pauvrathon ({totalFollowed} streamers)
           </p>
         </div>
 

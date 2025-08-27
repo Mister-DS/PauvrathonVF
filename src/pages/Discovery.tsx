@@ -30,9 +30,9 @@ export default function Discovery() {
       
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8 text-center">
-          <h1 className="text-4xl font-bold mb-4 gradient-text">Découverte des Streamers</h1>
+          <h1 className="text-4xl font-bold mb-4 gradient-text">Découverte des Streamers Twitch</h1>
           <p className="text-muted-foreground mb-6 max-w-2xl mx-auto">
-            Explorez les streamers en direct et participez à leurs subathons ! Jouez aux mini-jeux et aidez vos streamers préférés.
+            Explorez les streamers Twitch en direct et participez à leurs subathons ! Jouez aux mini-jeux et aidez vos streamers préférés.
           </p>
           
           <div className="relative max-w-md mx-auto">

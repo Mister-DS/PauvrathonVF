@@ -18,15 +18,15 @@ export function GuessNumber({ onWin, onLose, attempts, maxAttempts }: GuessNumbe
   const [currentAttempts, setCurrentAttempts] = useState(attempts);
 
   useEffect(() => {
-    setTargetNumber(Math.floor(Math.random() * 100) + 1);
+    setTargetNumber(Math.floor(Math.random() * 151));
   }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
     const guessNumber = parseInt(guess);
-    if (isNaN(guessNumber) || guessNumber < 1 || guessNumber > 100) {
-      setMessage('Veuillez entrer un nombre entre 1 et 100');
+    if (isNaN(guessNumber) || guessNumber < 0 || guessNumber > 150) {
+      setMessage('Veuillez entrer un nombre entre 0 et 150');
       return;
     }
 
@@ -57,7 +57,7 @@ export function GuessNumber({ onWin, onLose, attempts, maxAttempts }: GuessNumbe
       <CardHeader>
         <CardTitle>Devine le Chiffre</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Trouvez un nombre entre 1 et 100
+          Trouvez un nombre entre 0 et 150
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -70,8 +70,8 @@ export function GuessNumber({ onWin, onLose, attempts, maxAttempts }: GuessNumbe
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
             type="number"
-            min="1"
-            max="100"
+            min="0"
+            max="150"
             value={guess}
             onChange={(e) => setGuess(e.target.value)}
             placeholder="Votre nombre..."
