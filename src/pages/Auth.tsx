@@ -29,16 +29,11 @@ export default function Auth() {
       if (event.origin !== window.location.origin) return;
       
       if (event.data && event.data.type === 'TWITCH_AUTH_SUCCESS') {
-        console.log('🎉 Auth success received from popup!');
+        console.log('🎉 Auth success received from popup!', event.data);
         
-        // Refresh profile and redirect
-        refreshProfile().then(() => {
-          // Wait a moment for the session to be established
-          setTimeout(() => {
-            console.log('📍 Redirecting to discovery page');
-            navigate('/decouverte');
-          }, 1000);
-        });
+        // Force immediate redirect to production URL - no localhost!
+        console.log('🚀 Forcing redirect to production site');
+        window.location.replace('https://pauvrathon.lovable.app/decouverte');
       }
     };
     

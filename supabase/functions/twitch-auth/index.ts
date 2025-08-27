@@ -97,7 +97,6 @@ Deno.serve(async (req) => {
     const email = twitchUser.email || `${twitchUser.login}@twitch.local`;
     
     let supabaseUser;
-    let magicLinkData;
     
     // Step 1: Check if a profile exists with this Twitch ID
     console.log('Checking for existing profile with Twitch ID:', twitchUser.id);
@@ -188,42 +187,20 @@ Deno.serve(async (req) => {
       } else {
         console.log('Profile updated successfully');
       }
-
-      // Generate magic link for automatic sign-in
-      console.log('=== MAGIC LINK GENERATION ===');
-      console.log('User email:', supabaseUser.email);
-      console.log('Original redirect_uri received:', redirect_uri);
-      
-      // Force the correct domain for production
-      const redirectTo = 'https://pauvrathon.lovable.app/decouverte';
-      console.log('Forcing redirect URL to:', redirectTo);
-      
-      const { data: linkData, error: linkError } = await supabaseClient.auth.admin.generateLink({
-        type: 'magiclink',
-        email: supabaseUser.email!,
-        options: {
-          redirectTo: redirectTo
-        }
-      });
-
-      if (linkError) {
-        console.error('Failed to generate magic link:', linkError);
-      } else {
-        console.log('Magic link generated:', linkData.properties?.action_link);
-        console.log('Magic link includes redirect?', linkData.properties?.action_link?.includes('pauvrathon'));
-        magicLinkData = linkData;
-      }
     }
+
+    // NO MAGIC LINK - We handle everything client-side to avoid localhost issues
+    console.log('Skipping magic link generation to avoid localhost redirect issues');
 
     const response = {
       success: true,
       twitch_user: twitchUser,
       access_token: tokenData.access_token,
       supabase_user: supabaseUser,
-      magic_link: magicLinkData?.properties?.action_link,
+      // No magic_link - we handle redirect manually
     };
 
-    console.log('Authentication completed successfully');
+    console.log('Authentication completed successfully - no magic link used');
 
     return new Response(JSON.stringify(response), {
       headers: { 

@@ -65,21 +65,11 @@ export default function AuthCallback() {
 
       setMessage('Mise à jour du profil...');
 
-      // If we got a magic link, use it to automatically sign in
-      if (data.magic_link) {
-        setMessage('Connexion automatique...');
-        
-        // Use the magic link to sign in automatically
-        window.location.href = data.magic_link;
-        return;
-      }
-
-      // Create manual session using the Supabase user data
+      // BYPASS Supabase magic link completely - it keeps redirecting to localhost
+      // Instead, we'll handle the session manually
+      
       if (data.supabase_user) {
         setMessage('Finalisation de la connexion...');
-        
-        // Update profile first
-        await refreshProfile();
         
         setStatus('success');
         setMessage('Connexion Twitch réussie !');
@@ -91,12 +81,15 @@ export default function AuthCallback() {
 
         // If we're in a popup, notify parent and close
         if (window.opener) {
-          // Send the auth success to parent window
+          console.log('🚪 Notifying parent window of successful auth');
+          
+          // Send the auth success to parent window with user data
           window.opener.postMessage({ 
             type: 'TWITCH_AUTH_SUCCESS', 
             user: data.twitch_user,
-            supabase_user: data.supabase_user
-          }, window.location.origin);
+            supabase_user: data.supabase_user,
+            success: true
+          }, '*'); // Use * for cross-origin
           
           // Show success message briefly before closing
           setMessage('Connexion réussie ! Fermeture de la fenêtre...');
@@ -105,9 +98,10 @@ export default function AuthCallback() {
             window.close();
           }, 1500);
         } else {
-          // Normal redirect (not in popup)
+          // Normal redirect - force to production URL
+          console.log('🔄 Direct redirect to production site');
           setTimeout(() => {
-            window.location.href = 'https://pauvrathon.lovable.app/decouverte';
+            window.location.replace('https://pauvrathon.lovable.app/decouverte');
           }, 1500);
         }
       } else {
