@@ -190,7 +190,9 @@ Deno.serve(async (req) => {
       }
 
       // Generate magic link for automatic sign-in
-      console.log('Generating magic link for user:', supabaseUser.email);
+      console.log('=== MAGIC LINK GENERATION ===');
+      console.log('User email:', supabaseUser.email);
+      console.log('Original redirect_uri received:', redirect_uri);
       
       // Force the correct domain for production
       const redirectTo = 'https://pauvrathon.lovable.app/decouverte';
@@ -204,11 +206,12 @@ Deno.serve(async (req) => {
         }
       });
 
-      if (!linkError && linkData.properties?.action_link) {
-        magicLinkData = linkData;
-        console.log('Magic link generated successfully');
-      } else {
+      if (linkError) {
         console.error('Failed to generate magic link:', linkError);
+      } else {
+        console.log('Magic link generated:', linkData.properties?.action_link);
+        console.log('Magic link includes redirect?', linkData.properties?.action_link?.includes('pauvrathon'));
+        magicLinkData = linkData;
       }
     }
 
