@@ -13,7 +13,7 @@ import { TwitchPlayer } from '@/components/TwitchPlayer';
 import { Navigation } from '@/components/Navigation';
 import { toast } from '@/hooks/use-toast';
 import { Streamer } from '@/types';
-import { Maximize, Minimize } from 'lucide-react';
+import { Maximize, Minimize, Trophy, RotateCcw } from 'lucide-react';
 
 const SubathonPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -28,10 +28,27 @@ const SubathonPage = () => {
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [streamOnline, setStreamOnline] = useState(false);
+  const [showVictoryButton, setShowVictoryButton] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+  const [gameWon, setGameWon] = useState(false);
 
   useEffect(() => {
     fetchStreamerData();
   }, [id]);
+
+  // Countdown timer for game restart
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (countdown > 0) {
+      timer = setTimeout(() => {
+        setCountdown(countdown - 1);
+      }, 1000);
+    } else if (countdown === 0 && !showMinigame && failedAttempts > 0 && failedAttempts < 3) {
+      // Relancer automatiquement le jeu après le countdown
+      setShowMinigame(true);
+    }
+    return () => clearTimeout(timer);
+  }, [countdown, showMinigame, failedAttempts]);
 
   const fetchStreamerData = async () => {
     if (!id) return;
@@ -122,9 +139,24 @@ const SubathonPage = () => {
     setCurrentGame(randomGame);
     setShowMinigame(true);
     setFailedAttempts(0);
+    setShowVictoryButton(false);
+    setGameWon(false);
   };
 
   const handleGameWin = async () => {
+    if (!streamer) return;
+
+    setGameWon(true);
+    setShowVictoryButton(true);
+    setShowMinigame(false);
+
+    toast({
+      title: "🎉 Félicitations !",
+      description: `Vous avez réussi le mini-jeu ! Cliquez sur le bouton de victoire pour ajouter du temps.`,
+    });
+  };
+
+  const handleVictoryClick = async () => {
     if (!streamer) return;
 
     try {
@@ -139,11 +171,14 @@ const SubathonPage = () => {
       if (error) throw error;
 
       toast({
-        title: "🎉 Félicitations !",
-        description: `Vous avez ajouté ${timeToAdd} secondes au subathon de ${streamer.profile?.twitch_display_name} !`,
+        title: "⏰ Temps ajouté !",
+        description: `${timeToAdd} secondes ajoutées au subathon de ${streamer.profile?.twitch_display_name} !`,
       });
 
-      setShowMinigame(false);
+      // Redirection vers la page du streamer
+      setTimeout(() => {
+        navigate(`/streamer/${streamer.id}`);
+      }, 2000);
 
     } catch (error) {
       console.error('Error adding time:', error);
@@ -158,26 +193,22 @@ const SubathonPage = () => {
   const handleGameLose = () => {
     const newFailedAttempts = failedAttempts + 1;
     setFailedAttempts(newFailedAttempts);
+    setShowMinigame(false);
 
     if (newFailedAttempts >= 3) {
       toast({
-        title: "💥 Échec",
+        title: "💥 Échec total",
         description: "3 échecs ! Vous devez recommencer à cliquer.",
         variant: "destructive",
       });
-      setShowMinigame(false);
+      setFailedAttempts(0);
     } else {
       toast({
         title: `❌ Échec ${newFailedAttempts}/3`,
         description: "Nouvelle tentative dans 5 secondes...",
         variant: "destructive",
       });
-      setTimeout(() => {
-        setShowMinigame(false);
-        setTimeout(() => {
-          setShowMinigame(true);
-        }, 100);
-      }, 5000);
+      setCountdown(5);
     }
   };
 
@@ -196,6 +227,18 @@ const SubathonPage = () => {
 
   const handleStreamOffline = () => {
     setStreamOnline(false);
+  };
+
+  const resetClickingPhase = () => {
+    setFailedAttempts(0);
+    setShowMinigame(false);
+    setShowVictoryButton(false);
+    setGameWon(false);
+    setCountdown(0);
+    toast({
+      title: "🔄 Remise à zéro",
+      description: "Vous pouvez recommencer à cliquer !",
+    });
   };
 
   if (loading) {
@@ -266,31 +309,8 @@ const SubathonPage = () => {
           {/* Côté gauche: Stream et interactions */}
           <div className="space-y-6">
             {/* Lecteur de stream du STREAMER */}
-            <Card className="relative">
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <span>🔴 Diffusion en direct</span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={toggleFullscreen}
-                    className="flex items-center gap-2"
-                  >
-                    {isFullscreen ? (
-                      <>
-                        <Minimize className="w-4 h-4" />
-                        Réduire
-                      </>
-                    ) : (
-                      <>
-                        <Maximize className="w-4 h-4" />
-                        Plein écran
-                      </>
-                    )}
-                  </Button>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
+            <Card className="relative cursor-pointer" onClick={toggleFullscreen}>
+              <CardContent className="p-0">
                 <div className={`relative ${isFullscreen ? 'fixed inset-0 z-50 bg-black p-4' : 'aspect-video'}`}>
                   {twitchUsername ? (
                     <TwitchPlayer
@@ -313,6 +333,9 @@ const SubathonPage = () => {
                       </div>
                     </div>
                   )}
+                  <div className="absolute top-2 right-2 bg-black/50 text-white p-2 rounded opacity-0 hover:opacity-100 transition-opacity">
+                    {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -320,26 +343,53 @@ const SubathonPage = () => {
             {/* Bouton de participation */}
             {!isFullscreen && (
               <Card>
-                <CardHeader>
-                  <CardTitle>🎮 Participer au subathon</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-4 pt-6">
                   <Progress value={(currentClicks / clicksRequired) * 100} className="w-full h-3" />
                   <p className="text-center text-sm text-muted-foreground">
                     {currentClicks} / {clicksRequired} clics pour déclencher un mini-jeu
                   </p>
-                  <Button 
-                    onClick={handleClick} 
-                    className={`w-full py-6 text-xl font-bold ${
-                      !streamOnline ? 'bg-gray-600 hover:bg-gray-600' : ''
-                    }`}
-                    disabled={showMinigame || !streamOnline}
-                    size="lg"
-                  >
-                    {!streamOnline ? '🔴 Stream hors ligne' : 
-                     !user ? '🔒 Connectez-vous pour jouer' :
-                     '🎮 Cliquer pour jouer !'}
-                  </Button>
+                  
+                  {/* Bouton de victoire */}
+                  {showVictoryButton && gameWon && (
+                    <Button 
+                      onClick={handleVictoryClick}
+                      className="w-full py-6 text-xl font-bold bg-green-600 hover:bg-green-700 animate-pulse"
+                      size="lg"
+                    >
+                      <Trophy className="w-6 h-6 mr-2" />
+                      🎉 VICTOIRE ! Ajouter du temps 🎉
+                    </Button>
+                  )}
+
+                  {/* Bouton principal de clic */}
+                  {!showVictoryButton && (
+                    <Button 
+                      onClick={handleClick} 
+                      className={`w-full py-6 text-xl font-bold ${
+                        !streamOnline ? 'bg-gray-600 hover:bg-gray-600' : ''
+                      }`}
+                      disabled={showMinigame || !streamOnline || countdown > 0}
+                      size="lg"
+                    >
+                      {countdown > 0 ? `⏱️ Nouveau jeu dans ${countdown}s` :
+                       !streamOnline ? '🔴 Stream hors ligne' : 
+                       !user ? '🔒 Connectez-vous pour jouer' :
+                       '🎮 Cliquer pour jouer !'}
+                    </Button>
+                  )}
+
+                  {/* Bouton de remise à zéro après 3 échecs */}
+                  {failedAttempts >= 3 && !showMinigame && !showVictoryButton && (
+                    <Button 
+                      onClick={resetClickingPhase}
+                      className="w-full py-6 text-xl font-bold bg-orange-600 hover:bg-orange-700"
+                      size="lg"
+                    >
+                      <RotateCcw className="w-6 h-6 mr-2" />
+                      🔄 Recommencer à cliquer
+                    </Button>
+                  )}
+
                   {!user && (
                     <p className="text-center text-sm text-muted-foreground">
                       Vous devez vous connecter pour participer au subathon
