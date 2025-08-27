@@ -20,12 +20,12 @@ export function useStreamers() {
     try {
       setLoading(true);
       
-      // First get all live streamers
+      // Get all live streamers
       const { data, error } = await supabase
         .from('streamers')
         .select(`
           *,
-          profiles(*)
+          profiles!inner(*)
         `)
         .eq('is_live', true);
 
@@ -33,16 +33,10 @@ export function useStreamers() {
       
       const streamersWithProfile = (data || []).map(streamer => ({
         ...streamer,
-        profile: streamer.profiles?.[0] || null
+        profile: Array.isArray(streamer.profiles) ? streamer.profiles[0] : streamer.profiles
       }));
       
-      // Filter streamers with "Subathon" in stream title (case insensitive)
-      const subathonStreamers = streamersWithProfile.filter(streamer => 
-        streamer.stream_title && 
-        streamer.stream_title.toLowerCase().includes('subathon')
-      );
-      
-      setStreamers(subathonStreamers as unknown as Streamer[]);
+      setStreamers(streamersWithProfile as unknown as Streamer[]);
       setLastFetch(now);
       
     } catch (error) {

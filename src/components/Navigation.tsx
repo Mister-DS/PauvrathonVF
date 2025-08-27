@@ -78,16 +78,18 @@ export function Navigation() {
                     </Link>
                   </NavigationMenuItem>
                   
-                  <NavigationMenuItem>
-                    <Link to="/demande-streamer">
-                      <Button 
-                        variant={isActive('/demande-streamer') ? 'default' : 'ghost'}
-                        size="sm"
-                      >
-                        Devenir Streamer
-                      </Button>
-                    </Link>
-                  </NavigationMenuItem>
+                  {!hasStreamerProfile && profile?.role !== 'streamer' && profile?.role !== 'admin' && (
+                    <NavigationMenuItem>
+                      <Link to="/demande-streamer">
+                        <Button 
+                          variant={isActive('/demande-streamer') ? 'default' : 'ghost'}
+                          size="sm"
+                        >
+                          Devenir Streamer
+                        </Button>
+                      </Link>
+                    </NavigationMenuItem>
+                  )}
                   
                   {(profile?.role === 'streamer' || hasStreamerProfile || profile?.role === 'admin') && (
                     <NavigationMenuItem>
