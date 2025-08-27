@@ -192,15 +192,9 @@ Deno.serve(async (req) => {
       // Generate magic link for automatic sign-in
       console.log('Generating magic link for user:', supabaseUser.email);
       
-      // Construct proper redirect URL 
-      const baseUrl = redirect_uri.includes('pauvrathon.lovable.app') 
-        ? 'https://pauvrathon.lovable.app' 
-        : redirect_uri.startsWith('http://localhost') 
-          ? 'http://localhost:5173'
-          : redirect_uri.split('/auth/callback')[0];
-      
-      const redirectTo = `${baseUrl}/decouverte`;
-      console.log('Redirect URL will be:', redirectTo);
+      // Force the correct domain for production
+      const redirectTo = 'https://pauvrathon.lovable.app/decouverte';
+      console.log('Forcing redirect URL to:', redirectTo);
       
       const { data: linkData, error: linkError } = await supabaseClient.auth.admin.generateLink({
         type: 'magiclink',
