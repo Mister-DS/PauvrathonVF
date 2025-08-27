@@ -134,74 +134,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       console.log('🔗 Full Twitch auth URL:', twitchAuthUrl);
 
-      // Try different methods to escape the sandboxed iframe
-      try {
-        console.log('🚀 Trying window.top redirect...');
-        // Method 1: Try window.top (we know this fails)
-        if (window.top && window.top !== window) {
-          window.top.location.href = twitchAuthUrl;
-          console.log('✅ window.top redirect attempted');
-          return;
-        }
-      } catch (error) {
-        console.log('❌ window.top failed:', error);
+      // Force popup method since window.top doesn't work reliably
+      console.log('🆕 Using popup method directly...');
+      const popup = window.open(twitchAuthUrl, 'twitchAuth', 'width=600,height=700,scrollbars=yes,resizable=yes,location=yes');
+      
+      if (popup) {
+        console.log('✅ Popup opened successfully');
+        toast({
+          title: "Redirection Twitch",
+          description: "Une nouvelle fenêtre s'est ouverte pour l'authentification Twitch.",
+        });
         
-        // Method 2: Use window.open in a new tab
-        console.log('🆕 Using window.open fallback...');
-        const popup = window.open(twitchAuthUrl, '_blank', 'width=600,height=700,scrollbars=yes,resizable=yes');
-        
-        if (popup) {
-          console.log('✅ Popup opened successfully');
-          toast({
-            title: "Redirection Twitch",
-            description: "Une nouvelle fenêtre s'est ouverte pour l'authentification Twitch.",
-          });
-          
-          // Monitor when popup closes and refresh the page
-          const checkClosed = setInterval(() => {
-            if (popup.closed) {
-              console.log('🔄 Popup closed, checking auth status...');
-              clearInterval(checkClosed);
+        // Monitor when popup closes and refresh the page
+        const checkClosed = setInterval(() => {
+          if (popup.closed) {
+            console.log('🔄 Popup closed, checking auth status...');
+            clearInterval(checkClosed);
+            
+            // Wait a bit for auth to process, then check
+            setTimeout(async () => {
+              console.log('🔍 Refreshing profile and checking session...');
+              await refreshProfile();
               
-              // Wait a bit for auth to process, then check
-              setTimeout(async () => {
-                console.log('🔍 Refreshing profile and checking session...');
-                await refreshProfile();
-                
-                // Check if we have a session now
-                const { data: { session } } = await supabase.auth.getSession();
-                if (session) {
-                  console.log('✅ User authenticated, redirecting');
-                  window.location.href = '/decouverte';
-                } else {
-                  console.log('❌ No session found');
-                  toast({
-                    title: "Connexion échouée",
-                    description: "Veuillez réessayer la connexion Twitch.",
-                    variant: "destructive",
-                  });
-                }
-              }, 1000);
-            }
-          }, 1000);
-          
-        } else {
-          console.log('❌ Popup was blocked');
-          
-          // Method 3: Create a link and click it
-          console.log('🔗 Creating manual link fallback');
-          const link = document.createElement('a');
-          link.href = twitchAuthUrl;
-          link.target = '_blank';
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          
-          toast({
-            title: "Authentification Twitch",
-            description: "Cliquez sur le lien si une nouvelle fenêtre ne s'ouvre pas automatiquement.",
-          });
-        }
+              // Check if we have a session now
+              const { data: { session } } = await supabase.auth.getSession();
+              if (session) {
+                console.log('✅ User authenticated, redirecting');
+                window.location.href = '/decouverte';
+              } else {
+                console.log('❌ No session found');
+                toast({
+                  title: "Connexion échouée",
+                  description: "Veuillez réessayer la connexion Twitch.",
+                  variant: "destructive",
+                });
+              }
+            }, 1000);
+          }
+        }, 1000);
+        
+      } else {
+        console.log('❌ Popup was blocked');
+        
+        // Fallback: Create a link and click it
+        console.log('🔗 Creating manual link fallback');
+        const link = document.createElement('a');
+        link.href = twitchAuthUrl;
+        link.target = '_blank';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        toast({
+          title: "Authentification Twitch",
+          description: "Cliquez sur le lien si une nouvelle fenêtre ne s'ouvre pas automatiquement.",
+        });
       }
       
     } catch (error: any) {
