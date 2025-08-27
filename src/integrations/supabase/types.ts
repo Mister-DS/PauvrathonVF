@@ -303,16 +303,14 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: string
       }
-      get_live_streamers_safe: {
+      get_discovery_streamers: {
         Args: Record<PropertyKey, never>
         Returns: {
           active_minigames: string[]
           avatar_url: string
           clicks_required: number
-          created_at: string
           current_clicks: number
           id: string
-          is_live: boolean
           stream_title: string
           time_increment: number
           twitch_display_name: string

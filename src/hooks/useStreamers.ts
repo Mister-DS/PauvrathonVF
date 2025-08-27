@@ -20,14 +20,15 @@ export function useStreamers() {
     try {
       setLoading(true);
       
-      // Use secure function that only exposes safe public data
-      const { data, error } = await supabase.rpc('get_live_streamers_safe');
+      // Use secure function that requires authentication
+      const { data, error } = await supabase.rpc('get_discovery_streamers');
 
       if (error) throw error;
       
       // Transform data to match expected format
       const streamersWithProfile = (data || []).map(streamer => ({
         ...streamer,
+        is_live: true, // All results from this function are live
         profile: {
           twitch_display_name: streamer.twitch_display_name,
           twitch_username: streamer.twitch_username,
@@ -42,7 +43,7 @@ export function useStreamers() {
       console.error('Error fetching streamers:', error);
       toast({
         title: "Erreur",
-        description: "Impossible de charger les streamers.",
+        description: "Veuillez vous connecter pour voir les streamers.",
         variant: "destructive",
       });
     } finally {
