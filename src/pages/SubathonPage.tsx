@@ -9,6 +9,7 @@ import { Progress } from '@/components/ui/progress';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { GuessNumber } from '@/components/minigames/GuessNumber';
 import { Hangman } from '@/components/minigames/Hangman';
+import { TwitchPlayer } from '@/components/TwitchPlayer';
 import { toast } from '@/hooks/use-toast';
 import { Streamer } from '@/types';
 
@@ -24,6 +25,7 @@ const SubathonPage = () => {
   const [currentGame, setCurrentGame] = useState<string>('');
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [streamOnline, setStreamOnline] = useState(true);
 
   useEffect(() => {
     fetchStreamerData();
@@ -65,11 +67,9 @@ const SubathonPage = () => {
     if (!streamer || !user) return;
 
     try {
-      // Mettre à jour le compteur de clics immédiatement
       const newClicks = currentClicks + 1;
       setCurrentClicks(newClicks);
 
-      // Mettre à jour la base de données
       const { error } = await supabase
         .from('streamers')
         .update({ current_clicks: newClicks })
@@ -77,10 +77,8 @@ const SubathonPage = () => {
 
       if (error) throw error;
 
-      // Vérifier si on a atteint le nombre de clics requis
       if (newClicks >= clicksRequired) {
         launchRandomMinigame();
-        // Réinitialiser le compteur
         setCurrentClicks(0);
         await supabase
           .from('streamers')
@@ -110,7 +108,6 @@ const SubathonPage = () => {
     if (!streamer) return;
 
     try {
-      // Ajouter du temps au subathon
       const timeToAdd = streamer.time_increment || 30;
       const newTotalTime = (streamer.total_time_added || 0) + timeToAdd;
 
@@ -128,7 +125,6 @@ const SubathonPage = () => {
 
       setShowMinigame(false);
       
-      // Rediriger vers la page du streamer après un court délai
       setTimeout(() => {
         navigate(`/streamer/${streamer.id}`);
       }, 2000);
@@ -148,7 +144,6 @@ const SubathonPage = () => {
     setFailedAttempts(newFailedAttempts);
 
     if (newFailedAttempts >= 3) {
-      // Après 3 échecs, cacher le mini-jeu
       toast({
         title: "Échec",
         description: "3 échecs ! Vous devez recommencer à cliquer.",
@@ -156,7 +151,6 @@ const SubathonPage = () => {
       });
       setShowMinigame(false);
     } else {
-      // Relancer le même jeu après 5 secondes
       setTimeout(() => {
         setShowMinigame(false);
         setTimeout(() => {
@@ -166,10 +160,13 @@ const SubathonPage = () => {
     }
   };
 
-  console.log('Nouvelle page')
-
   const toggleFullscreen = () => {
     setIsFullscreen(!isFullscreen);
+  };
+
+  const handlePlayerReady = () => {
+    console.log('Twitch player is ready');
+    setStreamOnline(true);
   };
 
   if (loading) {
@@ -188,6 +185,9 @@ const SubathonPage = () => {
     );
   }
 
+  // Extraire le nom d'utilisateur Twitch du profil
+  const twitchUsername = streamer.profile?.twitch_username || streamer.profile?.twitch_display_name;
+
   return (
     <div className="container mx-auto p-4 max-w-4xl">
       {/* Header avec photo du streamer */}
@@ -203,6 +203,12 @@ const SubathonPage = () => {
             {streamer.profile?.twitch_display_name || 'Streamer'}
           </h1>
           <p className="text-muted-foreground">Subathon en cours</p>
+          {streamOnline && (
+            <div className="flex items-center gap-2 mt-1">
+              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
+              <span className="text-sm text-red-500 font-medium">EN DIRECT</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -212,29 +218,49 @@ const SubathonPage = () => {
           {/* Lecteur de stream */}
           <Card className="relative">
             <CardHeader>
-              <CardTitle>Diffusion en direct</CardTitle>
+              <CardTitle className="flex items-center justify-between">
+                Diffusion en direct
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={toggleFullscreen}
+                  className="ml-2"
+                >
+                  {isFullscreen ? "Réduire" : "Plein écran"}
+                </Button>
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div 
-                className={`relative bg-black aspect-video rounded-lg overflow-hidden cursor-pointer ${
-                  isFullscreen ? 'fixed inset-0 z-50 w-screen h-screen' : ''
+                className={`relative rounded-lg overflow-hidden ${
+                  isFullscreen ? 'fixed inset-0 z-50 bg-black' : 'aspect-video'
                 }`}
-                onClick={toggleFullscreen}
               >
-                <div className="w-full h-full flex items-center justify-center bg-gray-900">
-                  <div className="text-center text-white">
-                    <p className="text-lg mb-2">Live de {streamer.profile?.twitch_display_name}</p>
-                    <p className="text-sm text-gray-400">Cliquez pour plein écran</p>
+                {twitchUsername ? (
+                  <TwitchPlayer
+                    channel={twitchUsername}
+                    width="100%"
+                    height="100%"
+                    muted={false}
+                    autoplay={true}
+                    onReady={handlePlayerReady}
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-gray-900 rounded-lg">
+                    <div className="text-center text-white">
+                      <p className="text-lg mb-2">Nom d'utilisateur Twitch manquant</p>
+                      <p className="text-sm text-gray-400">
+                        Le streamer doit configurer son nom d'utilisateur Twitch
+                      </p>
+                    </div>
                   </div>
-                </div>
+                )}
+                
                 {isFullscreen && (
                   <Button 
                     variant="secondary" 
                     className="absolute top-4 right-4 z-10"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setIsFullscreen(false);
-                    }}
+                    onClick={() => setIsFullscreen(false)}
                   >
                     Réduire
                   </Button>
@@ -256,10 +282,15 @@ const SubathonPage = () => {
               <Button 
                 onClick={handleClick} 
                 className="w-full py-6 text-lg"
-                disabled={showMinigame}
+                disabled={showMinigame || !user}
               >
                 🎮 Cliquer pour jouer !
               </Button>
+              {!user && (
+                <p className="text-center text-sm text-muted-foreground">
+                  Connectez-vous pour participer
+                </p>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -271,6 +302,9 @@ const SubathonPage = () => {
               <CardHeader>
                 <CardTitle>
                   {currentGame === 'guessNumber' ? 'Devine le chiffre' : 'Jeu du pendu'}
+                  <span className="text-sm font-normal text-muted-foreground ml-2">
+                    ({failedAttempts}/3 échecs)
+                  </span>
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -313,6 +347,12 @@ const SubathonPage = () => {
               <div className="flex justify-between">
                 <span>Mode de temps:</span>
                 <span className="font-bold capitalize">{streamer.time_mode || 'fixe'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Statut du stream:</span>
+                <span className={`font-bold ${streamOnline ? 'text-red-500' : 'text-gray-500'}`}>
+                  {streamOnline ? 'EN DIRECT' : 'HORS LIGNE'}
+                </span>
               </div>
             </CardContent>
           </Card>
