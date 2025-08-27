@@ -10,6 +10,7 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { GuessNumber } from '@/components/minigames/GuessNumber';
 import { Hangman } from '@/components/minigames/Hangman';
 import { TwitchPlayer } from '@/components/TwitchPlayer';
+import { Navigation } from '@/components/Navigation';
 import { toast } from '@/hooks/use-toast';
 import { Streamer } from '@/types';
 import { Maximize, Minimize } from 'lucide-react';
@@ -65,7 +66,16 @@ const SubathonPage = () => {
   };
 
   const handleClick = async () => {
-    if (!streamer || !user) return;
+    if (!streamer || !user || !streamOnline) {
+      if (!streamOnline) {
+        toast({
+          title: "Stream hors ligne",
+          description: "Vous ne pouvez cliquer que quand le stream est en direct !",
+          variant: "destructive",
+        });
+      }
+      return;
+    }
 
     try {
       const newClicks = currentClicks + 1;
@@ -213,28 +223,32 @@ const SubathonPage = () => {
   const twitchUsername = streamer.profile?.twitch_username || streamer.profile?.twitch_display_name?.replace(/\s/g, '');
 
   return (
-    <div className="container mx-auto p-4 max-w-6xl">
-      {/* Header avec photo du streamer */}
-      <div className="flex items-center gap-4 mb-6">
-        <Avatar className="h-20 w-20">
-          <AvatarImage src={streamer.profile?.avatar_url} />
-          <AvatarFallback className="text-xl">
-            {streamer.profile?.twitch_display_name?.charAt(0) || 'S'}
-          </AvatarFallback>
-        </Avatar>
-        <div>
-          <h1 className="text-3xl font-bold">
-            {streamer.profile?.twitch_display_name || 'Streamer'}
-          </h1>
-          <p className="text-muted-foreground text-lg">Subathon en cours</p>
-          <div className="flex items-center gap-2 mt-2">
-            <div className={`w-3 h-3 rounded-full ${streamOnline ? 'bg-red-500 animate-pulse' : 'bg-gray-500'}`}></div>
-            <span className={`text-sm font-medium ${streamOnline ? 'text-red-500' : 'text-gray-500'}`}>
-              {streamOnline ? 'EN DIRECT' : 'HORS LIGNE'}
-            </span>
+    <div className="min-h-screen bg-background">
+      {/* Navigation Header */}
+      <Navigation />
+      
+      <div className="container mx-auto p-4 max-w-6xl">
+        {/* Header avec photo du streamer connecté */}
+        <div className="flex items-center gap-4 mb-6">
+          <Avatar className="h-20 w-20">
+            <AvatarImage src={user?.user_metadata?.avatar_url} />
+            <AvatarFallback className="text-xl">
+              {user?.user_metadata?.full_name?.charAt(0) || user?.email?.charAt(0) || 'U'}
+            </AvatarFallback>
+          </Avatar>
+          <div>
+            <h1 className="text-3xl font-bold">
+              {user?.user_metadata?.full_name || user?.email || 'Mon Subathon'}
+            </h1>
+            <p className="text-muted-foreground text-lg">Votre subathon en cours</p>
+            <div className="flex items-center gap-2 mt-2">
+              <div className={`w-3 h-3 rounded-full ${streamOnline ? 'bg-red-500 animate-pulse' : 'bg-gray-500'}`}></div>
+              <span className={`text-sm font-medium ${streamOnline ? 'text-red-500' : 'text-gray-500'}`}>
+                {streamOnline ? 'EN DIRECT' : 'HORS LIGNE'}
+              </span>
+            </div>
           </div>
         </div>
-      </div>
 
       <div className={`grid gap-6 ${isFullscreen ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}`}>
         {/* Côté gauche: Stream et interactions */}
@@ -305,14 +319,19 @@ const SubathonPage = () => {
                 <Button 
                   onClick={handleClick} 
                   className="w-full py-6 text-xl font-bold"
-                  disabled={showMinigame || !user}
+                  disabled={showMinigame || !user || !streamOnline}
                   size="lg"
                 >
-                  🎮 Cliquer pour jouer !
+                  {!streamOnline ? '🔴 Stream hors ligne' : '🎮 Cliquer pour jouer !'}
                 </Button>
                 {!user && (
                   <p className="text-center text-sm text-muted-foreground">
                     Connectez-vous pour participer au subathon
+                  </p>
+                )}
+                {user && !streamOnline && (
+                  <p className="text-center text-sm text-muted-foreground text-red-500">
+                    Le stream doit être en ligne pour pouvoir cliquer
                   </p>
                 )}
               </CardContent>
