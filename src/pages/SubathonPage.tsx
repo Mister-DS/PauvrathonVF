@@ -19,7 +19,6 @@ import {
   Trophy, 
   Gamepad2, 
   MousePointer,
-  Timer,
   Star,
   Power
 } from 'lucide-react';
@@ -32,8 +31,8 @@ export default function SubathonPage() {
   const [clicking, setClicking] = useState(false);
   const [currentGame, setCurrentGame] = useState<GameSession | null>(null);
   const [gameAttempts, setGameAttempts] = useState(0);
-  const [cooldownActive, setCooldownActive] = useState(false);
-  const [cooldownTime, setCooldownTime] = useState(0);
+  const [gameWon, setGameWon] = useState(false);
+  const [pendingTimeToAdd, setPendingTimeToAdd] = useState(0);
 
   useEffect(() => {
     if (id) {
@@ -75,7 +74,7 @@ export default function SubathonPage() {
   };
 
   const handleClick = async () => {
-    if (!streamer || !user || clicking || cooldownActive || !streamer.is_live) return;
+    if (!streamer || !user || clicking || !streamer.is_live) return;
     
     setClicking(true);
     
@@ -137,7 +136,7 @@ export default function SubathonPage() {
         minigame_name: randomGame,
         status: 'active',
         attempts: 0,
-        max_attempts: 3,
+        max_attempts: randomGame === 'guess_number' ? 10 : 3,
       })
       .select()
       .single();
@@ -172,21 +171,14 @@ export default function SubathonPage() {
         timeToAdd = streamer.time_increment;
       }
 
-      // Add time to subathon
-      await addTimeToSubathon(timeToAdd);
-
-      // Update user stats
-      await updateUserStats(0, 1, 1, timeToAdd);
+      // Show validation button
+      setGameWon(true);
+      setPendingTimeToAdd(timeToAdd);
 
       toast({
         title: "🎉 Victoire !",
-        description: `Vous avez ajouté ${timeToAdd} seconde${timeToAdd > 1 ? 's' : ''} au subathon !`,
+        description: `Cliquez sur "Valider" pour ajouter ${timeToAdd} seconde${timeToAdd > 1 ? 's' : ''} au subathon !`,
       });
-
-      // Start cooldown and cleanup
-      startCooldown();
-      setCurrentGame(null);
-      setGameAttempts(0);
       
     } catch (error) {
       console.error('Error handling game win:', error);
@@ -200,9 +192,10 @@ export default function SubathonPage() {
 
     const newAttempts = gameAttempts + 1;
     setGameAttempts(newAttempts);
+    const maxAttempts = currentGame.minigame_name === 'guess_number' ? 10 : 3;
 
-    if (newAttempts >= 3) {
-      // Game over
+    if (newAttempts >= maxAttempts) {
+      // Game over - need to click again to restart
       await supabase
         .from('game_sessions')
         .update({ 
@@ -215,12 +208,20 @@ export default function SubathonPage() {
 
       toast({
         title: "Défaite",
-        description: "Vous avez épuisé vos tentatives. Les clics ont été remis à zéro.",
+        description: "Vous avez épuisé vos tentatives. Cliquez à nouveau pour recommencer !",
         variant: "destructive",
       });
 
-      startCooldown();
       setCurrentGame(null);
+      setGameAttempts(0);
+    } else if (newAttempts === 1) {
+      // First failure - restart the game
+      toast({
+        title: "Essayez encore !",
+        description: "Le jeu recommence automatiquement.",
+      });
+      
+      // Reset the game but keep the session
       setGameAttempts(0);
     }
   };
@@ -264,22 +265,35 @@ export default function SubathonPage() {
     }
   };
 
-  const startCooldown = () => {
-    if (!streamer) return;
-    
-    setCooldownActive(true);
-    setCooldownTime(streamer.cooldown_seconds);
-    
-    const interval = setInterval(() => {
-      setCooldownTime(prev => {
-        if (prev <= 1) {
-          setCooldownActive(false);
-          clearInterval(interval);
-          return 0;
-        }
-        return prev - 1;
+  const confirmTimeAdd = async () => {
+    if (!pendingTimeToAdd) return;
+
+    try {
+      // Add time to subathon
+      await addTimeToSubathon(pendingTimeToAdd);
+
+      // Update user stats
+      await updateUserStats(0, 1, 1, pendingTimeToAdd);
+
+      toast({
+        title: "✅ Temps ajouté !",
+        description: `${pendingTimeToAdd} seconde${pendingTimeToAdd > 1 ? 's' : ''} ajoutée${pendingTimeToAdd > 1 ? 's' : ''} au subathon !`,
       });
-    }, 1000);
+
+      // Reset game state
+      setCurrentGame(null);
+      setGameAttempts(0);
+      setGameWon(false);
+      setPendingTimeToAdd(0);
+      
+    } catch (error) {
+      console.error('Error confirming time add:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible d'ajouter le temps au subathon.",
+        variant: "destructive",
+      });
+    }
   };
 
   const addTimeToSubathon = async (timeToAdd: number) => {
@@ -297,13 +311,9 @@ export default function SubathonPage() {
         total_time_added: newTotalTime 
       } : null);
 
-      // Update user stats with actual time added
-      await updateUserStats(0, 0, 0, timeToAdd);
-
       // Cleanup
       setCurrentGame(null);
       setGameAttempts(0);
-      startCooldown();
 
     } catch (error) {
       console.error('Error adding time to subathon:', error);
@@ -374,6 +384,30 @@ export default function SubathonPage() {
                     <FollowButton streamerId={streamer.id} showCount />
                   </div>
                 </div>
+                {/* Twitch Stream Embed */}
+                {streamer.is_live && streamer.profile?.twitch_username && (
+                  <div className="ml-4">
+                    <div className="w-48 h-32 bg-gray-900 rounded-lg overflow-hidden">
+                      <iframe
+                        src={`https://player.twitch.tv/?channel=${streamer.profile.twitch_username}&parent=${window.location.hostname}&muted=true`}
+                        height="100%"
+                        width="100%"
+                        allowFullScreen
+                        className="border-0"
+                      />
+                    </div>
+                    <div className="text-center mt-2">
+                      <a 
+                        href={`https://twitch.tv/${streamer.profile.twitch_username}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-primary hover:underline"
+                      >
+                        Voir sur Twitch
+                      </a>
+                    </div>
+                  </div>
+                )}
               </div>
             </CardHeader>
           </Card>
@@ -389,21 +423,43 @@ export default function SubathonPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {currentGame.minigame_name === 'guess_number' && (
-                    <GuessNumber
-                      onWin={handleGameWin}
-                      onLose={handleGameLose}
-                      attempts={gameAttempts}
-                      maxAttempts={3}
-                    />
-                  )}
-                  {currentGame.minigame_name === 'hangman' && (
-                    <Hangman
-                      onWin={handleGameWin}
-                      onLose={handleGameLose}
-                      attempts={gameAttempts}
-                      maxAttempts={3}
-                    />
+                  {gameWon ? (
+                    <div className="text-center space-y-4">
+                      <div className="p-6 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800">
+                        <Trophy className="mx-auto h-12 w-12 text-green-600 mb-4" />
+                        <h3 className="text-xl font-bold text-green-800 dark:text-green-200 mb-2">
+                          🎉 Victoire !
+                        </h3>
+                        <p className="text-green-700 dark:text-green-300 mb-4">
+                          Vous pouvez ajouter {pendingTimeToAdd} seconde{pendingTimeToAdd > 1 ? 's' : ''} au subathon !
+                        </p>
+                        <Button 
+                          onClick={confirmTimeAdd}
+                          className="bg-green-600 hover:bg-green-700 text-white"
+                        >
+                          Valider et ajouter le temps
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {currentGame.minigame_name === 'guess_number' && (
+                        <GuessNumber
+                          onWin={handleGameWin}
+                          onLose={handleGameLose}
+                          attempts={gameAttempts}
+                          maxAttempts={10}
+                        />
+                      )}
+                      {currentGame.minigame_name === 'hangman' && (
+                        <Hangman
+                          onWin={handleGameWin}
+                          onLose={handleGameLose}
+                          attempts={gameAttempts}
+                          maxAttempts={3}
+                        />
+                      )}
+                    </>
                   )}
                 </CardContent>
               </Card>
@@ -439,12 +495,6 @@ export default function SubathonPage() {
                     <MousePointer className="mr-2 h-5 w-5" />
                     Zone de Clics
                   </span>
-                  {cooldownActive && (
-                    <Badge variant="secondary" className="flex items-center">
-                      <Timer className="mr-1 h-3 w-3" />
-                      Cooldown: {cooldownTime}s
-                    </Badge>
-                  )}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -460,12 +510,11 @@ export default function SubathonPage() {
                   <Button
                     size="lg"
                     onClick={handleClick}
-                    disabled={!user || clicking || cooldownActive || !streamer.is_live}
+                    disabled={!user || clicking || !streamer.is_live}
                     className="text-lg px-8 py-6 h-auto"
                   >
                     {!streamer.is_live ? 'Streamer hors ligne' :
                      clicking ? 'Contribution...' : 
-                     cooldownActive ? `Cooldown (${cooldownTime}s)` :
                      !user ? 'Connectez-vous pour participer' :
                      'CLIQUER'}
                   </Button>

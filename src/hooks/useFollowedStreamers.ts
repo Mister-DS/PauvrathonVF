@@ -27,39 +27,48 @@ export function useFollowedStreamers() {
     try {
       setLoading(true);
       
-      // First get all follows for this user
-      const { data: followsData, error: followsError } = await supabase
-        .from('user_follows')
-        .select('streamer_id')
-        .eq('follower_user_id', user.id);
-
-      if (followsError) throw followsError;
+      // Call our edge function to get Twitch follows
+      const { data: twitchFollowsResponse, error: twitchError } = await supabase.functions.invoke('get-twitch-follows')
       
-      if (!followsData || followsData.length === 0) {
-        setFollowedStreamers([]);
-        setLastFetch(now);
-        return;
+      if (twitchError) {
+        console.error('Twitch follows error:', twitchError);
+        // Fallback to local follows if Twitch API fails
+        const { data: followsData, error: followsError } = await supabase
+          .from('user_follows')
+          .select('streamer_id')
+          .eq('follower_user_id', user.id);
+
+        if (followsError) throw followsError;
+        
+        if (!followsData || followsData.length === 0) {
+          setFollowedStreamers([]);
+          setLastFetch(now);
+          return;
+        }
+
+        const streamerIds = followsData.map(follow => follow.streamer_id);
+        
+        const { data: streamersData, error: streamersError } = await supabase
+          .from('streamers')
+          .select(`
+            *,
+            profiles(*)
+          `)
+          .in('id', streamerIds);
+
+        if (streamersError) throw streamersError;
+        
+        const streamersWithProfile = (streamersData || []).map(streamer => ({
+          ...streamer,
+          profile: Array.isArray(streamer.profiles) ? streamer.profiles[0] : null
+        }));
+        
+        setFollowedStreamers(streamersWithProfile as unknown as Streamer[]);
+      } else {
+        // Use Twitch follows data
+        setFollowedStreamers(twitchFollowsResponse.streamers as unknown as Streamer[]);
       }
-
-      // Then get all streamers that are followed
-      const streamerIds = followsData.map(follow => follow.streamer_id);
       
-      const { data: streamersData, error: streamersError } = await supabase
-        .from('streamers')
-        .select(`
-          *,
-          profiles(*)
-        `)
-        .in('id', streamerIds);
-
-      if (streamersError) throw streamersError;
-      
-      const streamersWithProfile = (streamersData || []).map(streamer => ({
-        ...streamer,
-        profile: Array.isArray(streamer.profiles) ? streamer.profiles[0] : null
-      }));
-      
-      setFollowedStreamers(streamersWithProfile as unknown as Streamer[]);
       setLastFetch(now);
       
     } catch (error) {
