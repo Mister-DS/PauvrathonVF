@@ -12,6 +12,7 @@ import { Hangman } from '@/components/minigames/Hangman';
 import { TwitchPlayer } from '@/components/TwitchPlayer';
 import { toast } from '@/hooks/use-toast';
 import { Streamer } from '@/types';
+import { Maximize, Minimize } from 'lucide-react';
 
 const SubathonPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -25,7 +26,7 @@ const SubathonPage = () => {
   const [currentGame, setCurrentGame] = useState<string>('');
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [streamOnline, setStreamOnline] = useState(true);
+  const [streamOnline, setStreamOnline] = useState(false);
 
   useEffect(() => {
     fetchStreamerData();
@@ -151,6 +152,11 @@ const SubathonPage = () => {
       });
       setShowMinigame(false);
     } else {
+      toast({
+        title: `Échec ${newFailedAttempts}/3`,
+        description: "Nouvelle tentative dans 5 secondes...",
+        variant: "destructive",
+      });
       setTimeout(() => {
         setShowMinigame(false);
         setTimeout(() => {
@@ -169,10 +175,23 @@ const SubathonPage = () => {
     setStreamOnline(true);
   };
 
+  const handleStreamOnline = () => {
+    setStreamOnline(true);
+  };
+
+  const handleStreamOffline = () => {
+    setStreamOnline(false);
+  };
+
   if (loading) {
     return (
       <div className="container mx-auto p-4">
-        <div className="text-center">Chargement...</div>
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+            <p>Chargement du subathon...</p>
+          </div>
+        </div>
       </div>
     );
   }
@@ -180,183 +199,196 @@ const SubathonPage = () => {
   if (!streamer) {
     return (
       <div className="container mx-auto p-4">
-        <div className="text-center">Streamer non trouvé</div>
+        <div className="text-center py-16">
+          <h1 className="text-2xl font-bold mb-4">Streamer non trouvé</h1>
+          <Button onClick={() => navigate('/')}>
+            Retour à l'accueil
+          </Button>
+        </div>
       </div>
     );
   }
 
-  // Extraire le nom d'utilisateur Twitch du profil
-  const twitchUsername = streamer.profile?.twitch_username || streamer.profile?.twitch_display_name;
+  // Extraire le nom d'utilisateur Twitch
+  const twitchUsername = streamer.profile?.twitch_username || streamer.profile?.twitch_display_name?.replace(/\s/g, '');
 
   return (
-    <div className="container mx-auto p-4 max-w-4xl">
+    <div className="container mx-auto p-4 max-w-6xl">
       {/* Header avec photo du streamer */}
       <div className="flex items-center gap-4 mb-6">
-        <Avatar className="h-16 w-16">
+        <Avatar className="h-20 w-20">
           <AvatarImage src={streamer.profile?.avatar_url} />
-          <AvatarFallback>
+          <AvatarFallback className="text-xl">
             {streamer.profile?.twitch_display_name?.charAt(0) || 'S'}
           </AvatarFallback>
         </Avatar>
         <div>
-          <h1 className="text-2xl font-bold">
+          <h1 className="text-3xl font-bold">
             {streamer.profile?.twitch_display_name || 'Streamer'}
           </h1>
-          <p className="text-muted-foreground">Subathon en cours</p>
-          {streamOnline && (
-            <div className="flex items-center gap-2 mt-1">
-              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-              <span className="text-sm text-red-500 font-medium">EN DIRECT</span>
-            </div>
-          )}
+          <p className="text-muted-foreground text-lg">Subathon en cours</p>
+          <div className="flex items-center gap-2 mt-2">
+            <div className={`w-3 h-3 rounded-full ${streamOnline ? 'bg-red-500 animate-pulse' : 'bg-gray-500'}`}></div>
+            <span className={`text-sm font-medium ${streamOnline ? 'text-red-500' : 'text-gray-500'}`}>
+              {streamOnline ? 'EN DIRECT' : 'HORS LIGNE'}
+            </span>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className={`grid gap-6 ${isFullscreen ? 'grid-cols-1' : 'grid-cols-1 lg:grid-cols-2'}`}>
         {/* Côté gauche: Stream et interactions */}
-        <div className="space-y-4">
+        <div className="space-y-6">
           {/* Lecteur de stream */}
           <Card className="relative">
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
-                Diffusion en direct
+                <span>Diffusion en direct</span>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={toggleFullscreen}
-                  className="ml-2"
+                  className="flex items-center gap-2"
                 >
-                  {isFullscreen ? "Réduire" : "Plein écran"}
+                  {isFullscreen ? (
+                    <>
+                      <Minimize className="w-4 h-4" />
+                      Réduire
+                    </>
+                  ) : (
+                    <>
+                      <Maximize className="w-4 h-4" />
+                      Plein écran
+                    </>
+                  )}
                 </Button>
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div 
-                className={`relative rounded-lg overflow-hidden ${
-                  isFullscreen ? 'fixed inset-0 z-50 bg-black' : 'aspect-video'
-                }`}
-              >
+              <div className={`relative ${isFullscreen ? 'fixed inset-0 z-50 bg-black p-4' : 'aspect-video'}`}>
                 {twitchUsername ? (
                   <TwitchPlayer
                     channel={twitchUsername}
                     width="100%"
-                    height="100%"
+                    height={isFullscreen ? "calc(100vh - 2rem)" : "100%"}
                     muted={false}
                     autoplay={true}
                     onReady={handlePlayerReady}
+                    onOnline={handleStreamOnline}
+                    onOffline={handleStreamOffline}
                   />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-gray-900 rounded-lg">
+                  <div className="w-full h-full flex items-center justify-center bg-gray-900 rounded-lg aspect-video">
                     <div className="text-center text-white">
-                      <p className="text-lg mb-2">Nom d'utilisateur Twitch manquant</p>
+                      <p className="text-lg mb-2">Configuration manquante</p>
                       <p className="text-sm text-gray-400">
-                        Le streamer doit configurer son nom d'utilisateur Twitch
+                        Le nom d'utilisateur Twitch n'est pas configuré
                       </p>
                     </div>
                   </div>
-                )}
-                
-                {isFullscreen && (
-                  <Button 
-                    variant="secondary" 
-                    className="absolute top-4 right-4 z-10"
-                    onClick={() => setIsFullscreen(false)}
-                  >
-                    Réduire
-                  </Button>
                 )}
               </div>
             </CardContent>
           </Card>
 
           {/* Bouton de clic */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Contribuer au subathon</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Progress value={(currentClicks / clicksRequired) * 100} className="w-full" />
-              <p className="text-center text-sm text-muted-foreground">
-                {currentClicks} / {clicksRequired} clics
-              </p>
-              <Button 
-                onClick={handleClick} 
-                className="w-full py-6 text-lg"
-                disabled={showMinigame || !user}
-              >
-                🎮 Cliquer pour jouer !
-              </Button>
-              {!user && (
-                <p className="text-center text-sm text-muted-foreground">
-                  Connectez-vous pour participer
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Côté droit: Mini-jeux */}
-        <div className="space-y-4">
-          {showMinigame && (
+          {!isFullscreen && (
             <Card>
               <CardHeader>
-                <CardTitle>
-                  {currentGame === 'guessNumber' ? 'Devine le chiffre' : 'Jeu du pendu'}
-                  <span className="text-sm font-normal text-muted-foreground ml-2">
-                    ({failedAttempts}/3 échecs)
-                  </span>
-                </CardTitle>
+                <CardTitle>Contribuer au subathon</CardTitle>
               </CardHeader>
-              <CardContent>
-                {currentGame === 'guessNumber' && (
-                  <GuessNumber
-                    onWin={handleGameWin}
-                    onLose={handleGameLose}
-                    attempts={failedAttempts}
-                    maxAttempts={3}
-                  />
-                )}
-                {currentGame === 'hangman' && (
-                  <Hangman
-                    onWin={handleGameWin}
-                    onLose={handleGameLose}
-                    attempts={failedAttempts}
-                    maxAttempts={3}
-                  />
+              <CardContent className="space-y-4">
+                <Progress value={(currentClicks / clicksRequired) * 100} className="w-full h-3" />
+                <p className="text-center text-sm text-muted-foreground">
+                  {currentClicks} / {clicksRequired} clics pour déclencher un mini-jeu
+                </p>
+                <Button 
+                  onClick={handleClick} 
+                  className="w-full py-6 text-xl font-bold"
+                  disabled={showMinigame || !user}
+                  size="lg"
+                >
+                  🎮 Cliquer pour jouer !
+                </Button>
+                {!user && (
+                  <p className="text-center text-sm text-muted-foreground">
+                    Connectez-vous pour participer au subathon
+                  </p>
                 )}
               </CardContent>
             </Card>
           )}
-
-          {/* Statistiques du subathon */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Statistiques du subathon</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <div className="flex justify-between">
-                <span>Temps ajouté total:</span>
-                <span className="font-bold">
-                  {Math.floor((streamer.total_time_added || 0) / 60)}min {(streamer.total_time_added || 0) % 60}s
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span>Incrément de temps:</span>
-                <span className="font-bold">{streamer.time_increment || 30}s</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Mode de temps:</span>
-                <span className="font-bold capitalize">{streamer.time_mode || 'fixe'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span>Statut du stream:</span>
-                <span className={`font-bold ${streamOnline ? 'text-red-500' : 'text-gray-500'}`}>
-                  {streamOnline ? 'EN DIRECT' : 'HORS LIGNE'}
-                </span>
-              </div>
-            </CardContent>
-          </Card>
         </div>
+
+        {/* Côté droit: Mini-jeux et statistiques */}
+        {!isFullscreen && (
+          <div className="space-y-6">
+            {/* Mini-jeu */}
+            {showMinigame && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center justify-between">
+                    {currentGame === 'guessNumber' ? 'Devine le chiffre' : 'Jeu du pendu'}
+                    <span className="text-sm font-normal text-muted-foreground">
+                      Échecs: {failedAttempts}/3
+                    </span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {currentGame === 'guessNumber' && (
+                    <GuessNumber
+                      onWin={handleGameWin}
+                      onLose={handleGameLose}
+                      attempts={failedAttempts}
+                      maxAttempts={3}
+                    />
+                  )}
+                  {currentGame === 'hangman' && (
+                    <Hangman
+                      onWin={handleGameWin}
+                      onLose={handleGameLose}
+                      attempts={failedAttempts}
+                      maxAttempts={3}
+                    />
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Statistiques du subathon */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Statistiques du subathon</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span>Temps ajouté total:</span>
+                  <span className="font-bold text-lg text-green-600">
+                    {Math.floor((streamer.total_time_added || 0) / 3600)}h {Math.floor(((streamer.total_time_added || 0) % 3600) / 60)}m {(streamer.total_time_added || 0) % 60}s
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span>Incrément par victoire:</span>
+                  <span className="font-bold text-blue-600">{streamer.time_increment || 30}s</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span>Mode de temps:</span>
+                  <span className="font-bold capitalize text-purple-600">{streamer.time_mode || 'fixe'}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span>Statut du stream:</span>
+                  <span className={`font-bold ${streamOnline ? 'text-red-500' : 'text-gray-500'}`}>
+                    {streamOnline ? 'EN DIRECT' : 'HORS LIGNE'}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span>Clics requis:</span>
+                  <span className="font-bold text-orange-600">{clicksRequired}</span>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </div>
     </div>
   );
