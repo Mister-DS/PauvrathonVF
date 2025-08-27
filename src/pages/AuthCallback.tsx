@@ -21,11 +21,8 @@ export default function AuthCallback() {
       if (event.origin !== window.location.origin) return;
       
       if (event.data.type === 'TWITCH_AUTH_SUCCESS') {
-        console.log('🎉 Received auth success message from popup:', event.data);
-        
         // Update profile immediately
         refreshProfile().then(() => {
-          console.log('📍 Profile refreshed, navigating to discovery');
           navigate('/decouverte');
         });
       }
@@ -97,8 +94,6 @@ export default function AuthCallback() {
       
       // If we're in a popup, notify parent and close
       if (window.opener) {
-        console.log('🚪 We are in a popup, notifying parent window');
-        
         // Send the auth data to parent
         window.opener.postMessage({ 
           type: 'TWITCH_AUTH_SUCCESS', 

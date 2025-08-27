@@ -14,7 +14,6 @@ export function useStreamers() {
     
     // Only fetch if forced or more than 10 minutes have passed
     if (!force && timeSinceLastFetch < 10 * 60 * 1000 && streamers.length > 0) {
-      console.log('Skipping fetch, too recent:', timeSinceLastFetch / 1000, 'seconds ago');
       return;
     }
 
@@ -45,8 +44,6 @@ export function useStreamers() {
       
       setStreamers(subathonStreamers as unknown as Streamer[]);
       setLastFetch(now);
-      
-      console.log(`Found ${subathonStreamers.length} Subathon streamers out of ${streamersWithProfile.length} live streamers`);
       
     } catch (error) {
       console.error('Error fetching streamers:', error);

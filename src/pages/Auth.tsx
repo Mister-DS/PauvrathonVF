@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { TwitchDebug } from '@/components/TwitchDebug';
+
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
@@ -28,11 +28,8 @@ export default function Auth() {
       if (event.origin !== window.location.origin) return;
       
       if (event.data.type === 'TWITCH_AUTH_SUCCESS') {
-        console.log('🎉 Auth success received on Auth page, redirecting...');
-        
         // Refresh profile and redirect
         refreshProfile().then(() => {
-          console.log('📍 Redirecting to discovery from Auth page');
           window.location.href = '/decouverte';
         });
       }
@@ -115,10 +112,7 @@ export default function Auth() {
         <CardContent>
           <div className="space-y-4">
             <Button 
-              onClick={() => {
-                console.log('🖱️ Main Twitch button clicked');
-                connectTwitch();
-              }}
+              onClick={connectTwitch}
               className="w-full neon-glow pulse-neon"
               size="lg"
               disabled={loading}
@@ -206,7 +200,7 @@ export default function Auth() {
           </div>
         </CardContent>
         
-        <TwitchDebug />
+        
       </Card>
     </div>
   );

@@ -17,9 +17,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const TWITCH_CLIENT_ID = 'your_twitch_client_id'; // Sera remplacé par la vraie clé
-const REDIRECT_URI = `${window.location.origin}/auth/callback`;
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -36,22 +33,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .single();
       
       if (error && error.code !== 'PGRST116') {
-        console.error('Error fetching profile:', error);
         return;
       }
       
       setProfile(data);
     } catch (error) {
-      console.error('Error fetching profile:', error);
+      // Error handled silently
     }
   };
 
   const fetchTwitchUserData = async (accessToken: string) => {
     try {
+      const clientId = await fetchTwitchClientId();
+      if (!clientId) return null;
+      
       const response = await fetch('https://api.twitch.tv/helix/users', {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
-          'Client-Id': TWITCH_CLIENT_ID,
+          'Client-Id': clientId,
         },
       });
       
@@ -70,7 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return twitchUserData;
       }
     } catch (error) {
-      console.error('Error fetching Twitch user data:', error);
+      // Error handled silently
     }
     return null;
   };
@@ -90,26 +89,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .upsert(profileData);
 
       if (error) {
-        console.error('Error creating/updating profile:', error);
         return;
       }
 
       await fetchProfile(user.id);
     } catch (error) {
-      console.error('Error creating/updating profile:', error);
+      // Error handled silently
     }
   };
 
   const connectTwitch = async () => {
-    console.log('🚀 Starting Twitch connection...');
-    
     try {
-      console.log('📞 Fetching Twitch Client ID...');
       const clientId = await fetchTwitchClientId();
-      console.log('🔑 Client ID received:', clientId ? 'SUCCESS' : 'FAILED');
       
       if (!clientId) {
-        console.error('❌ No client ID - aborting');
         toast({
           title: "Erreur",
           description: "Impossible de récupérer le Client ID Twitch.",
@@ -124,9 +117,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ? 'http://localhost:8080/auth/callback'
         : `${window.location.origin}/auth/callback`;
       
-      console.log('🌍 Current hostname:', window.location.hostname);
-      console.log('🔄 Redirect URI:', redirectUri);
-      
       const twitchAuthUrl = `https://id.twitch.tv/oauth2/authorize?` +
         `client_id=${clientId}&` +
         `redirect_uri=${encodeURIComponent(redirectUri)}&` +
@@ -134,28 +124,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         `scope=user:read:email&` +
         `force_verify=true`;
 
-      console.log('🔗 Full Twitch auth URL:', twitchAuthUrl);
-      console.log('🏃‍♂️ Attempting redirect...');
-      
-      // Test if we can access window.location
-      console.log('🪟 Current window.location.href:', window.location.href);
-      
       // Try different methods to escape the sandboxed iframe
       try {
         // Method 1: Try window.top (we know this fails)
         if (window.top && window.top !== window) {
-          console.log('🚀 Trying window.top.location.href');
           window.top.location.href = twitchAuthUrl;
         }
       } catch (error) {
-        console.log('❌ window.top failed:', error.message);
-        
         // Method 2: Use window.open in a new tab
-        console.log('🆕 Using window.open as fallback');
         const popup = window.open(twitchAuthUrl, '_blank', 'width=600,height=700,scrollbars=yes,resizable=yes');
         
         if (popup) {
-          console.log('✅ Popup opened successfully');
           toast({
             title: "Redirection Twitch",
             description: "Une nouvelle fenêtre s'est ouverte pour l'authentification Twitch.",
@@ -164,21 +143,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Monitor when popup closes and refresh the page
           const checkClosed = setInterval(() => {
             if (popup.closed) {
-              console.log('🔄 Popup closed, checking auth status...');
               clearInterval(checkClosed);
               
               // Wait a bit for auth to process, then check
               setTimeout(async () => {
-                console.log('🔍 Checking if user is now authenticated...');
                 await refreshProfile();
                 
                 // Check if we have a session now
                 const { data: { session } } = await supabase.auth.getSession();
                 if (session) {
-                  console.log('✅ User is authenticated, redirecting to discovery');
                   window.location.href = '/decouverte';
                 } else {
-                  console.log('❌ User not authenticated, staying on auth page');
                   toast({
                     title: "Connexion échouée",
                     description: "Veuillez réessayer la connexion Twitch.",
@@ -190,10 +165,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }, 1000);
           
         } else {
-          console.log('❌ Popup blocked');
-          
           // Method 3: Create a link and click it
-          console.log('🔗 Creating link as final fallback');
           const link = document.createElement('a');
           link.href = twitchAuthUrl;
           link.target = '_blank';
@@ -208,11 +180,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       }
       
-      // This should not execute if redirect works
-      console.log('⚠️ Still here after redirect attempt');
-      
-    } catch (error) {
-      console.error('💥 Error in connectTwitch:', error);
+    } catch (error: any) {
       toast({
         title: "Erreur de connexion",
         description: `Erreur: ${error.message}`,
@@ -222,28 +190,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const fetchTwitchClientId = async () => {
-    console.log('🔍 fetchTwitchClientId called...');
     try {
-      console.log('📡 Calling supabase function...');
       const response = await supabase.functions.invoke('twitch-client-id');
       
-      console.log('📨 Supabase response:', response);
-      
       if (response.error) {
-        console.error('❌ Supabase function error:', response.error);
         throw response.error;
       }
       
       if (!response.data || !response.data.client_id) {
-        console.error('❌ No client_id in response data:', response.data);
         throw new Error('No client_id in response');
       }
       
-      console.log('✅ Client ID retrieved successfully:', response.data.client_id);
       return response.data.client_id;
       
     } catch (error) {
-      console.error('💥 Error fetching Twitch Client ID:', error);
       toast({
         title: "Erreur",
         description: "Impossible de récupérer la configuration Twitch.",
@@ -268,7 +228,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         description: "Vous avez été déconnecté avec succès.",
       });
     } catch (error) {
-      console.error('Error signing out:', error);
       toast({
         title: "Erreur",
         description: "Erreur lors de la déconnexion.",
@@ -302,7 +261,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setLoading(false);
         }
       } catch (error) {
-        console.error('Error initializing auth:', error);
         if (mounted) {
           setLoading(false);
         }
@@ -312,8 +270,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Set up auth state listener  
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log('Auth state change:', event, session?.user?.id);
-        
         if (!mounted) return;
         
         setSession(session);

@@ -8,25 +8,16 @@ export function useStreamUpdates() {
 
   const updateStreamInfo = async () => {
     if (isUpdatingRef.current) {
-      console.log('Stream update already in progress, skipping...');
       return;
     }
 
     isUpdatingRef.current = true;
-    console.log('🔄 Starting stream info update...');
 
     try {
       const response = await supabase.functions.invoke('update-stream-info');
       
       if (response.error) {
         throw response.error;
-      }
-
-      const result = response.data;
-      console.log('✅ Stream info updated:', result);
-
-      if (result.updated > 0) {
-        console.log(`📺 Updated ${result.updated} streamers, ${result.liveStreams} live streams found`);
       }
       
     } catch (error) {
