@@ -64,12 +64,33 @@ export default function AuthCallback() {
       }
 
       setMessage('Mise à jour du profil...');
-
-      // BYPASS Supabase magic link completely - it keeps redirecting to localhost
-      // Instead, we'll handle the session manually
       
       if (data.supabase_user) {
-        setMessage('Finalisation de la connexion...');
+        setMessage('Création de la session...');
+        
+        // Use the session token if available to establish the session
+        if (data.session_token) {
+          console.log('🔑 Using session token to establish session');
+          
+          try {
+            // Set the session using the token from the server
+            const { error: sessionError } = await supabase.auth.setSession({
+              access_token: data.session_token,
+              refresh_token: '' // We might not have a refresh token
+            });
+
+            if (sessionError) {
+              console.warn('Session token failed:', sessionError);
+            } else {
+              console.log('✅ Session established successfully');
+            }
+          } catch (error) {
+            console.warn('Session establishment failed:', error);
+          }
+        }
+        
+        // Update the profile
+        await refreshProfile();
         
         setStatus('success');
         setMessage('Connexion Twitch réussie !');
@@ -83,13 +104,14 @@ export default function AuthCallback() {
         if (window.opener) {
           console.log('🚪 Notifying parent window of successful auth');
           
-          // Send the auth success to parent window with user data
+          // Send the auth success to parent window with session info
           window.opener.postMessage({ 
             type: 'TWITCH_AUTH_SUCCESS', 
             user: data.twitch_user,
             supabase_user: data.supabase_user,
+            session_token: data.session_token,
             success: true
-          }, '*'); // Use * for cross-origin
+          }, '*');
           
           // Show success message briefly before closing
           setMessage('Connexion réussie ! Fermeture de la fenêtre...');

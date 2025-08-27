@@ -25,15 +25,41 @@ export default function Auth() {
 
   // Also listen for auth success messages
   useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
+    const handleMessage = async (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return;
       
       if (event.data && event.data.type === 'TWITCH_AUTH_SUCCESS') {
         console.log('🎉 Auth success received from popup!', event.data);
         
-        // Force immediate redirect to production URL - no localhost!
-        console.log('🚀 Forcing redirect to production site');
-        window.location.replace('https://pauvrathon.lovable.app/decouverte');
+        // Establish session using the token if available
+        if (event.data.session_token) {
+          console.log('🔑 Setting session from token...');
+          
+          try {
+            await supabase.auth.setSession({
+              access_token: event.data.session_token,
+              refresh_token: ''
+            });
+            console.log('✅ Session set successfully from popup');
+          } catch (error) {
+            console.warn('Failed to set session from token:', error);
+          }
+        }
+        
+        // Force refresh of auth context to establish session
+        console.log('🔄 Refreshing auth context...');
+        await refreshProfile();
+        
+        // Wait a moment for session to be established
+        setTimeout(async () => {
+          console.log('🔍 Checking final session status...');
+          const { data: { session } } = await supabase.auth.getSession();
+          console.log('📊 Final session after refresh:', session ? 'FOUND' : 'NOT FOUND');
+          
+          // Force immediate redirect to production URL
+          console.log('🚀 Forcing redirect to production site');
+          window.location.replace('https://pauvrathon.lovable.app/decouverte');
+        }, 1500);
       }
     };
     

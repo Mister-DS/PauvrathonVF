@@ -97,6 +97,7 @@ Deno.serve(async (req) => {
     const email = twitchUser.email || `${twitchUser.login}@twitch.local`;
     
     let supabaseUser;
+    let sessionToken;
     
     // Step 1: Check if a profile exists with this Twitch ID
     console.log('Checking for existing profile with Twitch ID:', twitchUser.id);
@@ -114,6 +115,17 @@ Deno.serve(async (req) => {
       if (!userError && userData.user) {
         supabaseUser = userData.user;
         console.log('Using existing user:', supabaseUser.id);
+        
+        // Generate a session token for existing user
+        const { data: sessionData, error: sessionError } = await supabaseClient.auth.admin.generateLink({
+          type: 'signup',
+          email: supabaseUser.email!,
+        });
+        
+        if (!sessionError && sessionData.properties?.access_token) {
+          sessionToken = sessionData.properties.access_token;
+          console.log('Generated session token for existing user');
+        }
       }
     } else {
       // Step 2: Check if user exists by email (without Twitch connection)
@@ -145,6 +157,17 @@ Deno.serve(async (req) => {
         if (updateError) {
           console.error('Failed to update user metadata:', updateError);
         }
+
+        // Generate session token
+        const { data: sessionData, error: sessionError } = await supabaseClient.auth.admin.generateLink({
+          type: 'signup',
+          email: existingUserByEmail.email!,
+        });
+        
+        if (!sessionError && sessionData.properties?.access_token) {
+          sessionToken = sessionData.properties.access_token;
+          console.log('Generated session token for updated user');
+        }
       } else {
         // Step 3: Create completely new user
         console.log('Creating new user');
@@ -166,6 +189,17 @@ Deno.serve(async (req) => {
 
         supabaseUser = authData.user;
         console.log('New user created successfully:', supabaseUser.id);
+
+        // Generate session token for new user
+        const { data: sessionData, error: sessionError } = await supabaseClient.auth.admin.generateLink({
+          type: 'signup',
+          email: email,
+        });
+        
+        if (!sessionError && sessionData.properties?.access_token) {
+          sessionToken = sessionData.properties.access_token;
+          console.log('Generated session token for new user');
+        }
       }
     }
 
@@ -189,18 +223,15 @@ Deno.serve(async (req) => {
       }
     }
 
-    // NO MAGIC LINK - We handle everything client-side to avoid localhost issues
-    console.log('Skipping magic link generation to avoid localhost redirect issues');
-
     const response = {
       success: true,
       twitch_user: twitchUser,
       access_token: tokenData.access_token,
       supabase_user: supabaseUser,
-      // No magic_link - we handle redirect manually
+      session_token: sessionToken, // This will be used to establish the session
     };
 
-    console.log('Authentication completed successfully - no magic link used');
+    console.log('Authentication completed successfully with session token');
 
     return new Response(JSON.stringify(response), {
       headers: { 
