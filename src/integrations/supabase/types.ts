@@ -295,6 +295,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_admin_streamer_profile: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
       get_current_user_role: {
         Args: Record<PropertyKey, never>
         Returns: string

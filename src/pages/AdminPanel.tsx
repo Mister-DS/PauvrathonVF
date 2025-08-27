@@ -239,6 +239,28 @@ export default function AdminPanel() {
     }
   };
 
+  const handleCreateAdminStreamerProfile = async () => {
+    try {
+      const { error } = await supabase.rpc('create_admin_streamer_profile');
+
+      if (error) throw error;
+
+      toast({
+        title: "Profil streamer créé",
+        description: "Vous avez maintenant accès aux fonctionnalités streamer.",
+      });
+
+      fetchStreamers();
+    } catch (error: any) {
+      console.error('Error creating admin streamer profile:', error);
+      toast({
+        title: "Erreur",
+        description: error.message || "Impossible de créer le profil streamer.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleToggleMinigame = async (minigameId: string, isActive: boolean) => {
     try {
       const { error } = await supabase
@@ -296,9 +318,20 @@ export default function AdminPanel() {
             <Shield className="mr-3 h-8 w-8" />
             Panneau d'Administration
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground mb-4">
             Gérez les utilisateurs, streamers et mini-jeux de la plateforme
           </p>
+          
+          {/* Admin Quick Actions */}
+          <div className="flex gap-4">
+            <Button
+              onClick={handleCreateAdminStreamerProfile}
+              className="neon-glow"
+            >
+              <Crown className="mr-2 h-4 w-4" />
+              Me donner l'accès Streamer
+            </Button>
+          </div>
         </div>
 
         {/* Stats Overview */}
@@ -510,12 +543,26 @@ export default function AdminPanel() {
                 </div>
                 
                 <div>
-                  <Label htmlFor="game-code">Code du jeu</Label>
-                  <Input
+                  <Label htmlFor="game-code">Code JavaScript du Mini-jeu *</Label>
+                  <div className="text-sm text-muted-foreground mb-2">
+                    Entrez le code React/JavaScript qui sera utilisé pour afficher et exécuter le mini-jeu.
+                    Ce code sera intégré dynamiquement dans l'interface du streamer.
+                  </div>
+                  <Textarea
                     id="game-code"
                     value={newMinigame.code}
                     onChange={(e) => setNewMinigame(prev => ({ ...prev, code: e.target.value }))}
-                    placeholder="Ex: number_guessing"
+                    placeholder={`// Exemple de mini-jeu simple
+export const MonMinijeu = ({ onWin, onLose }) => {
+  return (
+    <div>
+      <h3>Mon Mini-jeu</h3>
+      <button onClick={onWin}>Gagner</button>
+      <button onClick={onLose}>Perdre</button>
+    </div>
+  );
+};`}
+                    className="min-h-[200px] font-mono text-sm"
                   />
                 </div>
                 
