@@ -166,6 +166,8 @@ const SubathonPage = () => {
     }
   };
 
+  console.log('Nouvelle page')
+
   const toggleFullscreen = () => {
     setIsFullscreen(!isFullscreen);
   };
