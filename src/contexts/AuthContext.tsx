@@ -111,10 +111,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       
-      // Utilise localhost en développement
+      // Utilise localhost en développement  
       const isLocalhost = window.location.hostname === 'localhost';
       const redirectUri = isLocalhost 
-        ? 'http://localhost:8080/auth/callback'
+        ? 'http://localhost:5173/auth/callback'
         : `${window.location.origin}/auth/callback`;
       
       const twitchAuthUrl = `https://id.twitch.tv/oauth2/authorize?` +

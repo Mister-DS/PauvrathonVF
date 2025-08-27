@@ -65,53 +65,51 @@ export default function AuthCallback() {
 
       setMessage('Mise à jour du profil...');
 
-      // Update or create the user profile with Twitch data
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .upsert({
-          user_id: data.supabase_user?.id,
-          twitch_id: data.twitch_user.id,
-          twitch_username: data.twitch_user.login,
-          twitch_display_name: data.twitch_user.display_name,
-          avatar_url: data.twitch_user.profile_image_url,
-        });
-
-      if (profileError) {
-        console.error('Profile update error:', profileError);
-        // Don't fail completely if profile update fails
+      // If we got a magic link, use it to automatically sign in
+      if (data.magic_link) {
+        setMessage('Connexion automatique...');
+        
+        // Use the magic link to sign in automatically
+        window.location.href = data.magic_link;
+        return;
       }
 
-      setStatus('success');
-      setMessage('Connexion Twitch réussie !');
-      
-      toast({
-        title: "Connexion réussie !",
-        description: `Bienvenue ${data.twitch_user.display_name} !`,
-      });
+      // Fallback: manual session management
+      if (data.supabase_user) {
+        setStatus('success');
+        setMessage('Connexion Twitch réussie !');
+        
+        toast({
+          title: "Connexion réussie !",
+          description: `Bienvenue ${data.twitch_user.display_name} !`,
+        });
 
-      // Refresh profile and redirect
-      await refreshProfile();
-      
-      // If we're in a popup, notify parent and close
-      if (window.opener) {
-        // Send the auth data to parent
-        window.opener.postMessage({ 
-          type: 'TWITCH_AUTH_SUCCESS', 
-          user: data.twitch_user,
-          access_token: data.access_token
-        }, window.location.origin);
+        // Refresh profile and redirect
+        await refreshProfile();
         
-        // Show success message briefly before closing
-        setMessage('Connexion réussie ! Fermeture de la fenêtre...');
-        
-        setTimeout(() => {
-          window.close();
-        }, 1500);
+        // If we're in a popup, notify parent and close
+        if (window.opener) {
+          // Send the auth data to parent
+          window.opener.postMessage({ 
+            type: 'TWITCH_AUTH_SUCCESS', 
+            user: data.twitch_user,
+            access_token: data.access_token
+          }, window.location.origin);
+          
+          // Show success message briefly before closing
+          setMessage('Connexion réussie ! Fermeture de la fenêtre...');
+          
+          setTimeout(() => {
+            window.close();
+          }, 1500);
+        } else {
+          // Normal redirect (not in popup)
+          setTimeout(() => {
+            navigate('/decouverte');
+          }, 2000);
+        }
       } else {
-        // Normal redirect (not in popup)
-        setTimeout(() => {
-          navigate('/decouverte');
-        }, 2000);
+        throw new Error('User authentication failed');
       }
 
     } catch (error: any) {
