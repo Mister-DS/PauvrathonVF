@@ -59,6 +59,13 @@ export type Database = {
             referencedRelation: "streamers"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "game_sessions_streamer_id_fkey"
+            columns: ["streamer_id"]
+            isOneToOne: false
+            referencedRelation: "streamers_public"
+            referencedColumns: ["id"]
+          },
         ]
       }
       minigames: {
@@ -267,6 +274,13 @@ export type Database = {
             referencedRelation: "streamers"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "subathon_stats_streamer_id_fkey"
+            columns: ["streamer_id"]
+            isOneToOne: false
+            referencedRelation: "streamers_public"
+            referencedColumns: ["id"]
+          },
         ]
       }
       user_follows: {
@@ -292,7 +306,22 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      streamers_public: {
+        Row: {
+          active_minigames: string[] | null
+          avatar_url: string | null
+          clicks_required: number | null
+          created_at: string | null
+          current_clicks: number | null
+          id: string | null
+          is_live: boolean | null
+          stream_title: string | null
+          time_increment: number | null
+          twitch_display_name: string | null
+          twitch_username: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       create_admin_streamer_profile: {
@@ -302,6 +331,22 @@ export type Database = {
       get_current_user_role: {
         Args: Record<PropertyKey, never>
         Returns: string
+      }
+      get_public_streamers: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          active_minigames: string[]
+          avatar_url: string
+          clicks_required: number
+          created_at: string
+          current_clicks: number
+          id: string
+          is_live: boolean
+          stream_title: string
+          time_increment: number
+          twitch_display_name: string
+          twitch_username: string
+        }[]
       }
       get_safe_minigames: {
         Args: Record<PropertyKey, never>
