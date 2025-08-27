@@ -118,9 +118,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       
-      // Utilise l'URL actuelle pour la redirection
-      const currentOrigin = window.location.origin;
-      const redirectUri = `${currentOrigin}/auth/callback`;
+      // Utilise localhost en développement
+      const isLocalhost = window.location.hostname === 'localhost';
+      const redirectUri = isLocalhost 
+        ? 'http://localhost:8080/auth/callback'
+        : `${window.location.origin}/auth/callback`;
       
       console.log('🌍 Current origin:', currentOrigin);
       console.log('🔄 Redirect URI:', redirectUri);

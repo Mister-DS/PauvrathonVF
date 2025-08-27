@@ -51,7 +51,9 @@ export default function Auth() {
         email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/`
+          emailRedirectTo: window.location.hostname === 'localhost' 
+            ? 'http://localhost:8080/' 
+            : `${window.location.origin}/`
         }
       });
       
