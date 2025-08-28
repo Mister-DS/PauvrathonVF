@@ -33,6 +33,8 @@ const SubathonPage = () => {
   const [gameWon, setGameWon] = useState(false);
   const [streamData, setStreamData] = useState<any>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [pauvrathonEndTime, setPauvrathonEndTime] = useState<Date | null>(null);
+  const [timeRemaining, setTimeRemaining] = useState<string>('');
 
   useEffect(() => {
     fetchStreamerData();
@@ -41,13 +43,27 @@ const SubathonPage = () => {
     return () => clearInterval(interval);
   }, [id]);
 
-  // Horloge en temps réel
+  // Horloge en temps réel et calcul du temps restant
   useEffect(() => {
     const timer = setInterval(() => {
-      setCurrentTime(new Date());
+      const now = new Date();
+      setCurrentTime(now);
+      
+      // Calculer le temps restant du pauvrathon
+      if (pauvrathonEndTime) {
+        const remaining = pauvrathonEndTime.getTime() - now.getTime();
+        if (remaining > 0) {
+          const hours = Math.floor(remaining / (1000 * 60 * 60));
+          const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+          const seconds = Math.floor((remaining % (1000 * 60)) / 1000);
+          setTimeRemaining(`${hours}h ${minutes}m ${seconds}s`);
+        } else {
+          setTimeRemaining("Terminé");
+        }
+      }
     }, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [pauvrathonEndTime]);
 
   // Countdown timer for game restart
   useEffect(() => {
@@ -82,6 +98,13 @@ const SubathonPage = () => {
         setStreamer(data as unknown as Streamer);
         setCurrentClicks(data.current_clicks || 0);
         setClicksRequired(data.clicks_required || 10);
+        
+        // Calculer la fin du pauvrathon (exemple: heure de début + temps ajouté)
+        if (data.start_time && data.initial_duration) {
+          const startTime = new Date(data.start_time);
+          const totalDuration = (data.initial_duration + (data.total_time_added || 0)) * 1000;
+          setPauvrathonEndTime(new Date(startTime.getTime() + totalDuration));
+        }
       }
     } catch (error) {
       console.error('Error fetching streamer:', error);
@@ -305,9 +328,21 @@ const SubathonPage = () => {
     );
   }
 
-  // Extraire le nom d'utilisateur Twitch du streamer
-  const twitchUsername = streamer.profile?.twitch_username || 
-                         streamer.profile?.twitch_display_name?.replace(/\s/g, '').toLowerCase();
+  // Extraire le nom d'utilisateur Twitch du streamer de manière plus robuste
+  const twitchUsername = streamer?.profile?.twitch_username || 
+                         streamer?.profile?.twitch_display_name?.replace(/\s+/g, '').toLowerCase() ||
+                         null;
+
+  // Déterminer le nom d'affichage
+  const displayName = streamer?.profile?.twitch_display_name || 
+                     streamer?.profile?.display_name || 
+                     streamer?.profile?.twitch_username ||
+                     'Streamer';
+
+  // URL de l'avatar
+  const avatarUrl = streamer?.profile?.avatar_url || 
+                   streamer?.profile?.twitch_avatar_url ||
+                   null;
 
   return (
     <div className="min-h-screen bg-background">
@@ -319,17 +354,17 @@ const SubathonPage = () => {
         <div className="flex items-center gap-6 mb-6 p-6 bg-card rounded-lg border">
           <Avatar className="h-24 w-24 border-4 border-primary">
             <AvatarImage 
-              src={streamer.profile?.avatar_url} 
-              alt={streamer.profile?.twitch_display_name || 'Streamer'}
+              src={avatarUrl} 
+              alt={displayName}
             />
             <AvatarFallback className="text-2xl bg-primary text-primary-foreground">
-              {streamer.profile?.twitch_display_name?.charAt(0) || 'S'}
+              {displayName.charAt(0).toUpperCase()}
             </AvatarFallback>
           </Avatar>
           <div className="flex-1">
             <div className="flex items-center gap-4 mb-2">
               <h1 className="text-4xl font-bold">
-                {streamer.profile?.twitch_display_name || 'Streamer'}
+                {displayName}
               </h1>
               <div className="flex items-center gap-2">
                 <div className={`w-4 h-4 rounded-full ${streamOnline ? 'bg-red-500 animate-pulse' : 'bg-gray-500'}`}></div>
@@ -339,13 +374,14 @@ const SubathonPage = () => {
               </div>
             </div>
             <p className="text-muted-foreground text-xl mb-2">Pauvrathon en cours</p>
-            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-              <span>🕐 {currentTime.toLocaleTimeString('fr-FR')}</span>
-              {streamData?.started_at && (
-                <span>📺 Stream depuis {new Date(streamData.started_at).toLocaleTimeString('fr-FR')}</span>
+            <div className="flex items-center gap-4 text-lg font-bold">
+              {timeRemaining ? (
+                <span className="text-orange-500">⏰ Temps restant: {timeRemaining}</span>
+              ) : (
+                <span className="text-blue-500">🕐 {currentTime.toLocaleTimeString('fr-FR')}</span>
               )}
               {streamData?.viewer_count && (
-                <span>👥 {streamData.viewer_count} spectateurs</span>
+                <span className="text-purple-500">👥 {streamData.viewer_count} spectateurs</span>
               )}
             </div>
           </div>
@@ -374,7 +410,13 @@ const SubathonPage = () => {
                       <div className="text-center text-white">
                         <p className="text-lg mb-2">⚠️ Configuration manquante</p>
                         <p className="text-sm text-gray-400">
-                          Le nom d'utilisateur Twitch du streamer n'est pas configuré
+                          Le nom d'utilisateur Twitch n'est pas configuré
+                        </p>
+                        <p className="text-xs text-gray-500 mt-2">
+                          Nom trouvé: {displayName}
+                        </p>
+                        <p className="text-xs text-red-400">
+                          Username manquant: {twitchUsername || 'null'}
                         </p>
                       </div>
                     </div>
@@ -496,16 +538,25 @@ const SubathonPage = () => {
                     <span>👤 Streamer:</span>
                     <div className="flex items-center gap-2">
                       <Avatar className="h-6 w-6">
-                        <AvatarImage src={streamer.profile?.avatar_url} />
+                        <AvatarImage src={avatarUrl} />
                         <AvatarFallback className="text-xs">
-                          {streamer.profile?.twitch_display_name?.charAt(0) || 'S'}
+                          {displayName.charAt(0).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
                       <span className="font-bold text-purple-600">
-                        {streamer.profile?.twitch_display_name || 'Non configuré'}
+                        {displayName}
                       </span>
                     </div>
                   </div>
+                  
+                  {timeRemaining && (
+                    <div className="flex justify-between items-center p-3 bg-orange-50 dark:bg-orange-950 rounded-lg border-l-4 border-orange-500">
+                      <span className="font-bold">⏰ Temps restant:</span>
+                      <span className="font-bold text-xl text-orange-600">
+                        {timeRemaining}
+                      </span>
+                    </div>
+                  )}
                   
                   <div className="flex justify-between items-center">
                     <span>🕐 Heure actuelle:</span>
