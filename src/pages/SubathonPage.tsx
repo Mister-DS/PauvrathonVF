@@ -95,9 +95,13 @@ const SubathonPage = () => {
       if (error) throw error;
 
       if (data) {
+        console.log('Streamer data loaded:', data); // Debug log
         setStreamer(data as unknown as Streamer);
         setCurrentClicks(data.current_clicks || 0);
         setClicksRequired(data.clicks_required || 10);
+        
+        // Set stream status based on is_live
+        setStreamOnline(data.is_live || false);
         
         // Calculer la fin du pauvrathon (exemple: 2 heures depuis maintenant + temps ajouté)
         const now = new Date();
@@ -335,10 +339,12 @@ const SubathonPage = () => {
   // Déterminer le nom d'affichage
   const displayName = streamer?.profile?.twitch_display_name || 
                      streamer?.profile?.twitch_username ||
-                     'Streamer';
+                     'Streamer inconnu';
 
-  // URL de l'avatar
+  // URL de l'avatar  
   const avatarUrl = streamer?.profile?.avatar_url || null;
+
+  console.log('Display name:', displayName, 'Avatar URL:', avatarUrl, 'Profile data:', streamer?.profile); // Debug log
 
   return (
     <div className="min-h-screen bg-background">
