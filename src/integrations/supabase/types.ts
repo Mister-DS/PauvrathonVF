@@ -173,6 +173,7 @@ export type Database = {
           id: string
           is_live: boolean | null
           max_random_time: number | null
+          status: string | null
           stream_title: string | null
           time_increment: number | null
           time_mode: string | null
@@ -190,6 +191,7 @@ export type Database = {
           id?: string
           is_live?: boolean | null
           max_random_time?: number | null
+          status?: string | null
           stream_title?: string | null
           time_increment?: number | null
           time_mode?: string | null
@@ -207,6 +209,7 @@ export type Database = {
           id?: string
           is_live?: boolean | null
           max_random_time?: number | null
+          status?: string | null
           stream_title?: string | null
           time_increment?: number | null
           time_mode?: string | null

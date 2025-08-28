@@ -38,7 +38,7 @@ export default function StreamerPanel() {
     time_increment: 30,
     clicks_required: 100,
     cooldown_seconds: 300,
-    is_live: false,
+    status: 'offline' as 'live' | 'paused' | 'offline' | 'ended',
     time_mode: 'fixed' as 'fixed' | 'random',
     max_random_time: 60,
   });
@@ -78,7 +78,7 @@ export default function StreamerPanel() {
           time_increment: data.time_increment,
           clicks_required: data.clicks_required,
           cooldown_seconds: data.cooldown_seconds,
-          is_live: data.is_live,
+          status: (data.status as 'live' | 'paused' | 'offline' | 'ended') || 'offline',
           time_mode: (data.time_mode as 'fixed' | 'random') || 'fixed',
           max_random_time: data.max_random_time || 60,
         });
@@ -346,14 +346,14 @@ export default function StreamerPanel() {
 
                 <div className="flex items-center space-x-2">
                   <Switch
-                    id="is_live"
-                    checked={settings.is_live}
+                    id="status_live"
+                    checked={settings.status === 'live'}
                     onCheckedChange={(checked) => setSettings(prev => ({ 
                       ...prev, 
-                      is_live: checked 
+                      status: checked ? 'live' : 'offline'
                     }))}
                   />
-                  <Label htmlFor="is_live">Subathon en direct</Label>
+                  <Label htmlFor="status_live">Pauvrathon en direct</Label>
                 </div>
 
                 <div className="flex space-x-4">
@@ -410,8 +410,14 @@ export default function StreamerPanel() {
                   </div>
                   
                   <div className="text-center">
-                    <Badge variant={streamer.is_live ? 'default' : 'secondary'} className="pulse-neon">
-                      {streamer.is_live ? 'En direct' : 'Hors ligne'}
+                    <Badge variant={
+                      streamer.status === 'live' ? 'default' : 
+                      streamer.status === 'paused' ? 'secondary' : 
+                      streamer.status === 'ended' ? 'destructive' : 'outline'
+                    } className="pulse-neon">
+                      {streamer.status === 'live' ? '🔴 En direct' : 
+                       streamer.status === 'paused' ? '⏸️ En pause' :
+                       streamer.status === 'ended' ? '🏁 Terminé' : '⚫ Hors ligne'}
                     </Badge>
                   </div>
                 </div>
@@ -468,102 +474,158 @@ export default function StreamerPanel() {
                   </a>
                 </Button>
                 
-                <Button 
-                  variant={settings.is_live ? "secondary" : "default"}
-                  className="w-full"
-                  onClick={async () => {
-                    const newLiveStatus = !settings.is_live;
-                    setSettings(prev => ({ ...prev, is_live: newLiveStatus }));
-                    
-                    // Sauvegarder immédiatement le changement de statut
-                    try {
-                      const { error } = await supabase
-                        .from('streamers')
-                        .update({ is_live: newLiveStatus })
-                        .eq('id', streamer.id);
-
-                      if (error) throw error;
-
-                      setStreamer(prev => prev ? { ...prev, is_live: newLiveStatus } : null);
+                {/* Boutons de contrôle du stream */}
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <Button 
+                    variant={settings.status === 'live' ? "default" : "outline"}
+                    className="w-full"
+                    disabled={settings.status === 'ended'}
+                    onClick={async () => {
+                      const newStatus = settings.status === 'live' ? 'paused' : 'live';
+                      setSettings(prev => ({ ...prev, status: newStatus }));
                       
-                      toast({
-                        title: newLiveStatus ? "🔴 Stream repris" : "⏸️ Stream en pause",
-                        description: newLiveStatus ? 
-                          "Votre subathon est maintenant en direct !" : 
-                          "Votre subathon est maintenant en pause.",
-                      });
-                    } catch (error) {
-                      console.error('Error updating live status:', error);
-                      // Revert local state on error
-                      setSettings(prev => ({ ...prev, is_live: !newLiveStatus }));
-                      toast({
-                        title: "Erreur",
-                        description: "Impossible de mettre à jour le statut.",
-                        variant: "destructive",
-                      });
-                    }
-                  }}
-                >
-                  {settings.is_live ? (
-                    <>
-                      <Pause className="mr-2 h-4 w-4" />
-                      Mettre en pause
-                    </>
-                  ) : (
-                    <>
-                      <Play className="mr-2 h-4 w-4" />
-                      Reprendre le stream
-                    </>
-                  )}
-                </Button>
+                      try {
+                        const { error } = await supabase
+                          .from('streamers')
+                          .update({ 
+                            status: newStatus,
+                            is_live: newStatus === 'live'
+                          })
+                          .eq('id', streamer.id);
 
-                {/* Bouton Arrêter */}
-                <Button 
-                  variant="destructive"
-                  className="w-full"
-                  onClick={async () => {
-                    // Confirmer l'arrêt
-                    if (!confirm("Êtes-vous sûr de vouloir arrêter complètement le subathon ? Cela remettra les clics à zéro.")) {
-                      return;
-                    }
+                        if (error) throw error;
 
-                    setSettings(prev => ({ ...prev, is_live: false }));
-                    
-                    try {
-                      // Arrêter le stream et remettre les clics à zéro
-                      const { error } = await supabase
-                        .from('streamers')
-                        .update({ 
+                        setStreamer(prev => prev ? { ...prev, status: newStatus, is_live: newStatus === 'live' } : null);
+                        
+                        toast({
+                          title: newStatus === 'live' ? "🔴 Stream en direct" : "⏸️ Stream en pause",
+                          description: newStatus === 'live' ? 
+                            "Votre pauvrathon est maintenant en direct !" : 
+                            "Votre pauvrathon est maintenant en pause.",
+                        });
+                      } catch (error) {
+                        console.error('Error updating status:', error);
+                        setSettings(prev => ({ ...prev, status: settings.status }));
+                        toast({
+                          title: "Erreur",
+                          description: "Impossible de mettre à jour le statut.",
+                          variant: "destructive",
+                        });
+                      }
+                    }}
+                  >
+                    {settings.status === 'live' ? (
+                      <>
+                        <Pause className="mr-2 h-4 w-4" />
+                        Pause
+                      </>
+                    ) : (
+                      <>
+                        <Play className="mr-2 h-4 w-4" />
+                        Live
+                      </>
+                    )}
+                  </Button>
+
+                  <Button 
+                    variant="destructive"
+                    className="w-full"
+                    onClick={async () => {
+                      if (!confirm("Êtes-vous sûr de vouloir terminer le pauvrathon ? Cela remettra les clics à zéro.")) {
+                        return;
+                      }
+
+                      setSettings(prev => ({ ...prev, status: 'ended' }));
+                      
+                      try {
+                        const { error } = await supabase
+                          .from('streamers')
+                          .update({ 
+                            status: 'ended',
+                            is_live: false,
+                            current_clicks: 0
+                          })
+                          .eq('id', streamer.id);
+
+                        if (error) throw error;
+
+                        setStreamer(prev => prev ? { 
+                          ...prev, 
+                          status: 'ended',
                           is_live: false,
                           current_clicks: 0
-                        })
-                        .eq('id', streamer.id);
+                        } : null);
+                        
+                        toast({
+                          title: "🏁 Pauvrathon terminé",
+                          description: "Votre pauvrathon a été terminé et les clics remis à zéro.",
+                        });
+                      } catch (error) {
+                        console.error('Error ending stream:', error);
+                        toast({
+                          title: "Erreur",
+                          description: "Impossible de terminer le pauvrathon.",
+                          variant: "destructive",
+                        });
+                      }
+                    }}
+                  >
+                    <Settings className="mr-2 h-4 w-4" />
+                    Terminer
+                  </Button>
+                </div>
 
-                      if (error) throw error;
+                {/* Bouton Reset - seulement si terminé */}
+                {settings.status === 'ended' && (
+                  <Button 
+                    variant="outline"
+                    className="w-full"
+                    onClick={async () => {
+                      if (!confirm("Êtes-vous sûr de vouloir redémarrer un nouveau pauvrathon ?")) {
+                        return;
+                      }
 
-                      setStreamer(prev => prev ? { 
-                        ...prev, 
-                        is_live: false,
-                        current_clicks: 0
-                      } : null);
+                      setSettings(prev => ({ ...prev, status: 'offline' }));
                       
-                      toast({
-                        title: "⏹️ Stream arrêté",
-                        description: "Votre subathon a été arrêté et les clics remis à zéro.",
-                      });
-                    } catch (error) {
-                      console.error('Error stopping stream:', error);
-                      toast({
-                        title: "Erreur",
-                        description: "Impossible d'arrêter le stream.",
-                        variant: "destructive",
-                      });
-                    }
-                  }}
-                >
-                  <Settings className="mr-2 h-4 w-4" />
-                  Arrêter le stream
-                </Button>
+                      try {
+                        const { error } = await supabase
+                          .from('streamers')
+                          .update({ 
+                            status: 'offline',
+                            is_live: false,
+                            current_clicks: 0,
+                            total_time_added: 0
+                          })
+                          .eq('id', streamer.id);
+
+                        if (error) throw error;
+
+                        setStreamer(prev => prev ? { 
+                          ...prev, 
+                          status: 'offline',
+                          is_live: false,
+                          current_clicks: 0,
+                          total_time_added: 0
+                        } : null);
+                        
+                        toast({
+                          title: "🔄 Nouveau pauvrathon",
+                          description: "Un nouveau pauvrathon a été initialisé !",
+                        });
+                      } catch (error) {
+                        console.error('Error resetting stream:', error);
+                        toast({
+                          title: "Erreur",
+                          description: "Impossible de redémarrer le pauvrathon.",
+                          variant: "destructive",
+                        });
+                      }
+                    }}
+                  >
+                    <RotateCcw className="mr-2 h-4 w-4" />
+                    Nouveau pauvrathon
+                  </Button>
+                )}
               </CardContent>
             </Card>
 

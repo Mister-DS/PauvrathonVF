@@ -100,14 +100,19 @@ const SubathonPage = () => {
         setCurrentClicks(data.current_clicks || 0);
         setClicksRequired(data.clicks_required || 10);
         
-        // Set stream status based on is_live
-        setStreamOnline(data.is_live || false);
+        // Set stream status based on status field
+        const isOnline = data.status === 'live';
+        setStreamOnline(isOnline);
         
-        // Calculer la fin du pauvrathon (exemple: 2 heures depuis maintenant + temps ajouté)
-        const now = new Date();
-        const baseDuration = 2 * 60 * 60; // 2 heures en secondes
-        const totalDuration = (baseDuration + (data.total_time_added || 0)) * 1000;
-        setPauvrathonEndTime(new Date(now.getTime() + totalDuration));
+        // Calculer la fin du pauvrathon seulement si en live
+        if (isOnline) {
+          const now = new Date();
+          const baseDuration = 2 * 60 * 60; // 2 heures en secondes
+          const totalDuration = (baseDuration + (data.total_time_added || 0)) * 1000;
+          setPauvrathonEndTime(new Date(now.getTime() + totalDuration));
+        } else {
+          setPauvrathonEndTime(null);
+        }
       }
     } catch (error) {
       console.error('Error fetching streamer:', error);
@@ -369,16 +374,26 @@ const SubathonPage = () => {
                 {displayName}
               </h1>
               <div className="flex items-center gap-2">
-                <div className={`w-4 h-4 rounded-full ${streamOnline ? 'bg-red-500 animate-pulse' : 'bg-gray-500'}`}></div>
-                <span className={`text-lg font-bold ${streamOnline ? 'text-red-500' : 'text-gray-500'}`}>
-                  {streamOnline ? 'EN DIRECT' : 'HORS LIGNE'}
+                <div className={`w-4 h-4 rounded-full ${
+                  streamer?.status === 'live' ? 'bg-red-500 animate-pulse' : 
+                  streamer?.status === 'paused' ? 'bg-yellow-500' :
+                  streamer?.status === 'ended' ? 'bg-gray-400' : 'bg-gray-500'
+                }`}></div>
+                <span className={`text-lg font-bold ${
+                  streamer?.status === 'live' ? 'text-red-500' : 
+                  streamer?.status === 'paused' ? 'text-yellow-500' :
+                  streamer?.status === 'ended' ? 'text-gray-400' : 'text-gray-500'
+                }`}>
+                  {streamer?.status === 'live' ? 'EN DIRECT' : 
+                   streamer?.status === 'paused' ? 'EN PAUSE' :
+                   streamer?.status === 'ended' ? 'TERMINÉ' : 'HORS LIGNE'}
                 </span>
               </div>
             </div>
             <p className="text-muted-foreground text-xl mb-2">Pauvrathon en cours</p>
-            {streamOnline && (
+            {(streamer?.status === 'live' || streamer?.status === 'paused') && timeRemaining && (
               <div className="flex items-center gap-4 text-lg font-bold">
-                <span className="text-orange-500">⏰ Temps restant: {timeRemaining || 'Calcul en cours...'}</span>
+                <span className="text-orange-500">⏰ Temps restant: {timeRemaining}</span>
                 {streamData?.viewer_count && (
                   <span className="text-purple-500">👥 {streamData.viewer_count} spectateurs</span>
                 )}
@@ -593,12 +608,22 @@ const SubathonPage = () => {
                   
                   <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
                     <span>📺 Statut du stream:</span>
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${streamOnline ? 'bg-red-500 animate-pulse' : 'bg-gray-500'}`}></div>
-                      <span className={`font-bold ${streamOnline ? 'text-red-500' : 'text-gray-500'}`}>
-                        {streamOnline ? '🔴 EN DIRECT' : '⚫ HORS LIGNE'}
-                      </span>
-                    </div>
+                     <div className="flex items-center gap-2">
+                       <div className={`w-2 h-2 rounded-full ${
+                         streamer?.status === 'live' ? 'bg-red-500 animate-pulse' : 
+                         streamer?.status === 'paused' ? 'bg-yellow-500' :
+                         streamer?.status === 'ended' ? 'bg-gray-400' : 'bg-gray-500'
+                       }`}></div>
+                       <span className={`font-bold ${
+                         streamer?.status === 'live' ? 'text-red-500' : 
+                         streamer?.status === 'paused' ? 'text-yellow-500' :
+                         streamer?.status === 'ended' ? 'text-gray-400' : 'text-gray-500'
+                       }`}>
+                         {streamer?.status === 'live' ? '🔴 EN DIRECT' : 
+                          streamer?.status === 'paused' ? '⏸️ EN PAUSE' :
+                          streamer?.status === 'ended' ? '🏁 TERMINÉ' : '⚫ HORS LIGNE'}
+                       </span>
+                     </div>
                   </div>
                 </CardContent>
               </Card>
