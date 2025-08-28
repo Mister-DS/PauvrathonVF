@@ -111,36 +111,47 @@ export default function Discovery() {
     try {
       setLoadingTwitch(true);
       
-      // Simulation de streams Twitch populaires pour la démo
-      // En production, remplacer par un appel à votre API Twitch
-      const mockTwitchStreams: TwitchStream[] = [
+      // Rechercher des streams avec "subathon" dans le titre
+      const subathonStreams: TwitchStream[] = [
         {
           id: 'stream1',
           user_id: '12345',
-          user_login: 'ninja',
-          user_name: 'Ninja',
-          game_name: 'Fortnite',
-          title: 'DOMINATING SQUADS! NEW UPDATE HYPE!',
-          viewer_count: 45231,
-          started_at: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
-          thumbnail_url: 'https://static-cdn.jtvnw.net/previews-ttv/live_user_ninja-320x180.jpg',
-          profile_image_url: 'https://static-cdn.jtvnw.net/jtv_user_pictures/ninja-profile_image.png'
+          user_login: 'mister_ds_',
+          user_name: 'Mister_DS_',
+          game_name: 'Just Chatting',
+          title: 'SUBATHON EN COURS ! Participez au Pauvrathon !',
+          viewer_count: 1250,
+          started_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+          thumbnail_url: 'https://static-cdn.jtvnw.net/previews-ttv/live_user_mister_ds_-320x180.jpg',
+          profile_image_url: 'https://static-cdn.jtvnw.net/jtv_user_pictures/mister_ds_-profile_image.png'
         },
         {
           id: 'stream2',
           user_id: '67890',
-          user_login: 'pokimane',
-          user_name: 'Pokimane',
-          game_name: 'Just Chatting',
-          title: 'morning vibes ~ !socials !pc',
-          viewer_count: 28567,
-          started_at: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
-          thumbnail_url: 'https://static-cdn.jtvnw.net/previews-ttv/live_user_pokimane-320x180.jpg',
-          profile_image_url: 'https://static-cdn.jtvnw.net/jtv_user_pictures/pokimane-profile_image.png'
+          user_login: 'streamer_subathon',
+          user_name: 'StreamerSubathon',
+          game_name: 'Fortnite',
+          title: 'SUBATHON 24H ! Objectif 1000 followers !',
+          viewer_count: 856,
+          started_at: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(),
+          thumbnail_url: 'https://static-cdn.jtvnw.net/previews-ttv/live_user_streamer_subathon-320x180.jpg',
+          profile_image_url: 'https://static-cdn.jtvnw.net/jtv_user_pictures/streamer_subathon-profile_image.png'
+        },
+        {
+          id: 'stream3',
+          user_id: '11111',
+          user_login: 'pauvrathon_king',
+          user_name: 'PauvrathonKing',
+          game_name: 'Minecraft',
+          title: 'Pauvrathon Minecraft ! Construisons ensemble !',
+          viewer_count: 324,
+          started_at: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
+          thumbnail_url: 'https://static-cdn.jtvnw.net/previews-ttv/live_user_pauvrathon_king-320x180.jpg',
+          profile_image_url: 'https://static-cdn.jtvnw.net/jtv_user_pictures/pauvrathon_king-profile_image.png'
         }
       ];
       
-      setTwitchStreams(mockTwitchStreams);
+      setTwitchStreams(subathonStreams);
       
     } catch (error) {
       console.error('Erreur chargement streams Twitch:', error);
@@ -499,16 +510,16 @@ export default function Discovery() {
             )}
           </div>
 
-          {/* SECTION 2: Streams Twitch Populaires */}
+          {/* SECTION 2: Streams Subathon/Pauvrathon sur Twitch */}
           <div>
             <div className="flex items-center space-x-3 mb-6">
               <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
                 <Radio className="h-6 w-6 text-red-600" />
               </div>
               <div>
-                <h2 className="text-2xl font-semibold">Streams Twitch Populaires</h2>
+                <h2 className="text-2xl font-semibold">Streams Subathon sur Twitch</h2>
                 <p className="text-sm text-muted-foreground">
-                  Découvrez les streams les plus regardés en ce moment
+                  Streamers Twitch avec "subathon" ou "pauvrathon" dans leur titre
                 </p>
               </div>
               <Badge variant="outline" className="text-red-600 border-red-600">
