@@ -1,4 +1,4 @@
-// Follow proper deployment by creating supabase/functions/get-twitch-follows/index.ts
+// supabase/functions/get-twitch-live-streams/index.ts
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.56.0'
 
 const corsHeaders = {
@@ -42,8 +42,11 @@ Deno.serve(async (req) => {
 
     if (profileError || !profile?.twitch_id) {
       return new Response(
-        JSON.stringify({ error: 'Twitch account not connected' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ 
+          streams: [],
+          message: 'Twitch account not connected' 
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
@@ -90,37 +93,102 @@ Deno.serve(async (req) => {
     )
 
     if (!followsResponse.ok) {
-      throw new Error(`Twitch API error: ${followsResponse.status}`)
+      throw new Error(`Twitch API follows error: ${followsResponse.status}`)
     }
 
     const followsData = await followsResponse.json()
     const follows = followsData.data || []
 
-    // Get streamers from our database that match the followed channels
-    const followedBroadcasterIds = follows.map((follow: any) => follow.broadcaster_id)
-    
-    const { data: streamers, error: streamersError } = await supabaseClient
-      .from('streamers')
-      .select(`
-        *,
-        profiles(*)
-      `)
-      .in('twitch_id', followedBroadcasterIds)
-
-    if (streamersError) {
-      throw streamersError
+    if (follows.length === 0) {
+      return new Response(
+        JSON.stringify({ 
+          streams: [],
+          message: 'No followed channels found' 
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
     }
 
-    // Transform data to match expected format
-    const transformedStreamers = (streamers || []).map(streamer => ({
-      ...streamer,
-      profile: Array.isArray(streamer.profiles) ? streamer.profiles[0] : null
-    }))
+    // Get broadcaster IDs from follows
+    const broadcasterIds = follows.map((follow: any) => follow.broadcaster_id)
+    
+    // Split into chunks of 100 (Twitch API limit)
+    const chunkedIds = []
+    for (let i = 0; i < broadcasterIds.length; i += 100) {
+      chunkedIds.push(broadcasterIds.slice(i, i + 100))
+    }
+
+    // Get live streams for followed channels
+    const allLiveStreams = []
+    
+    for (const chunk of chunkedIds) {
+      const streamsResponse = await fetch(
+        `https://api.twitch.tv/helix/streams?${chunk.map(id => `user_id=${id}`).join('&')}&first=100`,
+        {
+          headers: {
+            'Client-ID': twitchClientId,
+            'Authorization': `Bearer ${accessToken}`,
+          },
+        }
+      )
+
+      if (streamsResponse.ok) {
+        const streamsData = await streamsResponse.json()
+        allLiveStreams.push(...(streamsData.data || []))
+      }
+    }
+
+    // If we have live streams, get user info for profile images
+    let enrichedStreams = []
+    
+    if (allLiveStreams.length > 0) {
+      const userIds = allLiveStreams.map((stream: any) => stream.user_id)
+      const chunkedUserIds = []
+      
+      for (let i = 0; i < userIds.length; i += 100) {
+        chunkedUserIds.push(userIds.slice(i, i + 100))
+      }
+
+      const allUsers = []
+      
+      for (const chunk of chunkedUserIds) {
+        const usersResponse = await fetch(
+          `https://api.twitch.tv/helix/users?${chunk.map(id => `id=${id}`).join('&')}`,
+          {
+            headers: {
+              'Client-ID': twitchClientId,
+              'Authorization': `Bearer ${accessToken}`,
+            },
+          }
+        )
+
+        if (usersResponse.ok) {
+          const usersData = await usersResponse.json()
+          allUsers.push(...(usersData.data || []))
+        }
+      }
+
+      // Create a map of user info
+      const userMap = new Map()
+      allUsers.forEach((user: any) => {
+        userMap.set(user.id, user)
+      })
+
+      // Enrich streams with user info
+      enrichedStreams = allLiveStreams.map((stream: any) => {
+        const userInfo = userMap.get(stream.user_id)
+        return {
+          ...stream,
+          profile_image_url: userInfo?.profile_image_url || '',
+        }
+      })
+    }
 
     return new Response(
       JSON.stringify({ 
-        streamers: transformedStreamers,
-        total_follows: follows.length 
+        streams: enrichedStreams,
+        total_live: enrichedStreams.length,
+        total_follows: follows.length
       }),
       { 
         headers: { 
@@ -131,9 +199,12 @@ Deno.serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('Error fetching Twitch follows:', error)
+    console.error('Error fetching Twitch live streams:', error)
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        streams: [],
+        error: error.message 
+      }),
       { 
         status: 500, 
         headers: { 

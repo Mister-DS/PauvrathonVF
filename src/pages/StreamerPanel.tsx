@@ -344,18 +344,6 @@ export default function StreamerPanel() {
                   </div>
                 </div>
 
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="status_live"
-                    checked={settings.status === 'live'}
-                    onCheckedChange={(checked) => setSettings(prev => ({ 
-                      ...prev, 
-                      status: checked ? 'live' : 'offline'
-                    }))}
-                  />
-                  <Label htmlFor="status_live">Pauvrathon en direct</Label>
-                </div>
-
                 <div className="flex space-x-4">
                   <Button 
                     onClick={handleSaveSettings} 

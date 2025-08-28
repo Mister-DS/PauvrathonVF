@@ -83,37 +83,110 @@ const SubathonPage = () => {
     if (!id) return;
 
     try {
-      const { data, error } = await supabase
+      // Première tentative avec jointure inner
+      let { data, error } = await supabase
         .from('streamers')
         .select(`
           *,
-          profiles(*)
+          profiles!inner(
+            id,
+            user_id,
+            twitch_id,
+            twitch_username,
+            twitch_display_name,
+            avatar_url,
+            role
+          )
         `)
         .eq('id', id)
         .single();
 
-      if (error) throw error;
+      // Si la jointure inner échoue, essayer avec jointure left
+      if (error || !data) {
+        console.log('Tentative avec jointure left join...');
+        const response = await supabase
+          .from('streamers')
+          .select(`
+            *,
+            profiles(
+              id,
+              user_id,
+              twitch_id,
+              twitch_username,
+              twitch_display_name,
+              avatar_url,
+              role
+            )
+          `)
+          .eq('id', id)
+          .single();
+        
+        data = response.data;
+        error = response.error;
+      }
 
-      if (data) {
-        console.log('Streamer data loaded:', data); // Debug log
-        setStreamer(data as unknown as Streamer);
-        setCurrentClicks(data.current_clicks || 0);
-        setClicksRequired(data.clicks_required || 10);
-        
-        // Set stream status based on status field
-        const isOnline = data.status === 'live';
-        setStreamOnline(isOnline);
-        
-        // Calculer la fin du pauvrathon seulement si en live
-        if (isOnline) {
-          const now = new Date();
-          const baseDuration = 2 * 60 * 60; // 2 heures en secondes
-          const totalDuration = (baseDuration + (data.total_time_added || 0)) * 1000;
-          setPauvrathonEndTime(new Date(now.getTime() + totalDuration));
-        } else {
-          setPauvrathonEndTime(null);
+      // Si toujours pas de données, essayer de récupérer séparément
+      if (error || !data) {
+        console.log('Tentative de récupération séparée...');
+        const streamerResponse = await supabase
+          .from('streamers')
+          .select('*')
+          .eq('id', id)
+          .single();
+
+        if (streamerResponse.error) throw streamerResponse.error;
+
+        if (streamerResponse.data) {
+          const profileResponse = await supabase
+            .from('profiles')
+            .select(`
+              id,
+              user_id,
+              twitch_id,
+              twitch_username,
+              twitch_display_name,
+              avatar_url,
+              role
+            `)
+            .eq('user_id', streamerResponse.data.user_id)
+            .single();
+
+          data = {
+            ...streamerResponse.data,
+            profiles: profileResponse.data || null,
+            profile: profileResponse.data || null
+          };
         }
       }
+
+      if (!data) {
+        throw new Error('Aucune donnée trouvée pour ce streamer');
+      }
+
+      console.log('=== DEBUG STREAMER DATA ===');
+      console.log('Raw data:', data);
+      console.log('Profiles:', data.profiles);
+      console.log('Profile:', data.profile);
+      console.log('============================');
+
+      setStreamer(data as unknown as Streamer);
+      setCurrentClicks(data.current_clicks || 0);
+      setClicksRequired(data.clicks_required || 10);
+      
+      // Set stream status based on status field
+      const isOnline = data.status === 'live';
+      setStreamOnline(isOnline);
+      
+      // Calculer la fin du pauvrathon seulement si en live
+      if (isOnline) {
+        const now = new Date();
+        const baseDuration = 2 * 60 * 60; // 2 heures en secondes
+        const totalDuration = (baseDuration + (data.total_time_added || 0)) * 1000;
+        setPauvrathonEndTime(new Date(now.getTime() + totalDuration));
+      } else {
+        setPauvrathonEndTime(null);
+      }
+
     } catch (error) {
       console.error('Error fetching streamer:', error);
       toast({
@@ -127,11 +200,13 @@ const SubathonPage = () => {
   };
 
   const checkStreamStatus = async () => {
-    if (!streamer?.profile?.twitch_username) return;
+    if (!streamer?.profiles?.twitch_username && !streamer?.profile?.twitch_username) return;
+
+    const twitchUsername = streamer?.profiles?.twitch_username || streamer?.profile?.twitch_username;
 
     try {
       // Appel à l'API Twitch pour vérifier si le stream est en ligne
-      const response = await fetch(`/api/twitch/stream-status/${streamer.profile.twitch_username}`);
+      const response = await fetch(`/api/twitch/stream-status/${twitchUsername}`);
       if (response.ok) {
         const data = await response.json();
         setStreamOnline(data.isLive);
@@ -212,6 +287,8 @@ const SubathonPage = () => {
     setShowVictoryButton(true);
     setShowMinigame(false);
 
+    const displayName = getDisplayName();
+
     toast({
       title: "🎉 Félicitations !",
       description: `Vous avez réussi le mini-jeu ! Cliquez sur le bouton de victoire pour ajouter du temps.`,
@@ -232,9 +309,11 @@ const SubathonPage = () => {
 
       if (error) throw error;
 
+      const displayName = getDisplayName();
+
       toast({
         title: "⏰ Temps ajouté !",
-        description: `${timeToAdd} secondes ajoutées au subathon de ${streamer.profile?.twitch_display_name} !`,
+        description: `${timeToAdd} secondes ajoutées au subathon de ${displayName} !`,
       });
 
       // Redirection vers la page du streamer
@@ -304,6 +383,35 @@ const SubathonPage = () => {
     });
   };
 
+  // Fonctions utilitaires pour l'extraction des données du streamer
+  const getTwitchUsername = () => {
+    if (!streamer) return null;
+    
+    return streamer?.profiles?.twitch_username || 
+           streamer?.profile?.twitch_username || 
+           streamer?.profiles?.twitch_display_name?.replace(/\s+/g, '').toLowerCase() ||
+           streamer?.profile?.twitch_display_name?.replace(/\s+/g, '').toLowerCase() ||
+           null;
+  };
+
+  const getDisplayName = () => {
+    if (!streamer) return 'Streamer inconnu';
+    
+    return streamer?.profiles?.twitch_display_name || 
+           streamer?.profile?.twitch_display_name ||
+           streamer?.profiles?.twitch_username ||
+           streamer?.profile?.twitch_username ||
+           'Streamer inconnu';
+  };
+
+  const getAvatarUrl = () => {
+    if (!streamer) return null;
+    
+    return streamer?.profiles?.avatar_url || 
+           streamer?.profile?.avatar_url || 
+           null;
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
@@ -336,20 +444,19 @@ const SubathonPage = () => {
     );
   }
 
-  // Extraire le nom d'utilisateur Twitch du streamer de manière plus robuste
-  const twitchUsername = streamer?.profile?.twitch_username || 
-                         streamer?.profile?.twitch_display_name?.replace(/\s+/g, '').toLowerCase() ||
-                         null;
+  // Utilisation des fonctions utilitaires
+  const twitchUsername = getTwitchUsername();
+  const displayName = getDisplayName();
+  const avatarUrl = getAvatarUrl();
 
-  // Déterminer le nom d'affichage
-  const displayName = streamer?.profile?.twitch_display_name || 
-                     streamer?.profile?.twitch_username ||
-                     'Streamer inconnu';
-
-  // URL de l'avatar  
-  const avatarUrl = streamer?.profile?.avatar_url || null;
-
-  console.log('Display name:', displayName, 'Avatar URL:', avatarUrl, 'Profile data:', streamer?.profile); // Debug log
+  console.log('=== FINAL DEBUG INFO ===');
+  console.log('Display name:', displayName);
+  console.log('Avatar URL:', avatarUrl);
+  console.log('Twitch username:', twitchUsername);
+  console.log('Streamer object structure:');
+  console.log('- profiles:', streamer?.profiles);
+  console.log('- profile:', streamer?.profile);
+  console.log('========================');
 
   return (
     <div className="min-h-screen bg-background">
@@ -361,7 +468,7 @@ const SubathonPage = () => {
         <div className="flex items-center gap-6 mb-6 p-6 bg-card rounded-lg border">
           <Avatar className="h-24 w-24 border-4 border-primary">
             <AvatarImage 
-              src={avatarUrl} 
+              src={avatarUrl || ''} 
               alt={displayName}
             />
             <AvatarFallback className="text-2xl bg-primary text-primary-foreground">
@@ -553,7 +660,7 @@ const SubathonPage = () => {
                     <span>👤 Streamer:</span>
                     <div className="flex items-center gap-2">
                       <Avatar className="h-6 w-6">
-                        <AvatarImage src={avatarUrl} />
+                        <AvatarImage src={avatarUrl || ''} />
                         <AvatarFallback className="text-xs">
                           {displayName.charAt(0).toUpperCase()}
                         </AvatarFallback>
