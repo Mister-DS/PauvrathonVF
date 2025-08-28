@@ -50,6 +50,9 @@ const SubathonPage = () => {
   const [initialHours, setInitialHours] = useState(2);
   const [initialMinutes, setInitialMinutes] = useState(0);
   const [isStreamerOwner, setIsStreamerOwner] = useState(false);
+  
+  // Mode simulation pour les tests
+  const [simulationMode, setSimulationMode] = useState(false);
 
   useEffect(() => {
     fetchStreamerData();
@@ -385,13 +388,13 @@ const SubathonPage = () => {
       return;
     }
 
-    // Logique plus permissive : si le statut DB est 'live', on peut cliquer
-    const canClick = streamer.status === 'live';
+    // Mode simulation OU statut live en base
+    const canClick = simulationMode || streamer.status === 'live';
     
     if (!canClick) {
       toast({
         title: "Pauvrathon non actif",
-        description: `Le pauvrathon n'est pas démarré (statut: ${streamer.status}).`,
+        description: `Le pauvrathon n'est pas démarré (statut: ${streamer.status}). Activez le mode simulation pour tester.`,
         variant: "destructive",
       });
       return;
@@ -592,8 +595,8 @@ const SubathonPage = () => {
   const displayName = getDisplayName();
   const avatarUrl = getAvatarUrl();
   
-  // État effectif pour l'interaction - priorité au statut DB
-  const canInteract = user && streamer.status === 'live';
+  // État effectif pour l'interaction - mode simulation OU statut live
+  const canInteract = user && (simulationMode || streamer.status === 'live');
 
   return (
     <div className="min-h-screen bg-background">
@@ -712,6 +715,17 @@ const SubathonPage = () => {
                 )}
               </div>
               
+              {/* Bouton simulation pour les tests */}
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => setSimulationMode(!simulationMode)}
+                className={simulationMode ? "bg-purple-100 border-purple-500" : ""}
+              >
+                <Trophy className="w-4 h-4 mr-2" />
+                {simulationMode ? "Mode Test ON" : "Mode Test"}
+              </Button>
+              
               <Button variant="outline" size="sm" onClick={forceStreamOnlineToggle}
                 className={forceStreamOnline ? "bg-green-100 border-green-500" : ""}>
                 <Wifi className="w-4 h-4 mr-2" />
@@ -776,13 +790,15 @@ const SubathonPage = () => {
                     <Button 
                       onClick={handleClick} 
                       className={`w-full py-6 text-xl font-bold ${
-                        !canInteract ? 'bg-gray-600 hover:bg-gray-600' : ''
+                        !canInteract ? 'bg-gray-600 hover:bg-gray-600' : 
+                        simulationMode ? 'bg-purple-600 hover:bg-purple-700' : ''
                       }`}
                       disabled={showMinigame || !canInteract || countdown > 0}
                       size="lg"
                     >
                       {countdown > 0 ? `Nouveau jeu dans ${countdown}s` :
                        !user ? 'Connectez-vous pour jouer' :
+                       simulationMode ? '🧪 Mode Test - Cliquer pour jouer !' :
                        !canInteract ? 'Pauvrathon non actif' : 
                        'Cliquer pour jouer !'}
                     </Button>

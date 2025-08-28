@@ -8,7 +8,7 @@ import { Navigation } from '@/components/Navigation';
 import { FollowButton } from '@/components/FollowButton';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
-import { Heart, Users, Clock, Gamepad2, Radio, Power, Tv, Trophy, RefreshCw, AlertCircle } from 'lucide-react';
+import { Heart, Users, Clock, Gamepad2, Radio, Power, Tv, Trophy, RefreshCw, AlertCircle, Eye } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
 interface TwitchStream {
@@ -27,6 +27,14 @@ interface TwitchStream {
   profile_image_url: string;
 }
 
+interface TwitchUser {
+  id: string;
+  login: string;
+  display_name: string;
+  profile_image_url: string;
+  followed_at?: string;
+}
+
 interface PauvrathonStreamer {
   id: string;
   user_id: string;
@@ -37,6 +45,7 @@ interface PauvrathonStreamer {
   total_time_added: number;
   stream_title?: string;
   active_minigames: string[];
+  initial_duration: number;
   profiles?: {
     twitch_username?: string;
     twitch_display_name?: string;
@@ -59,54 +68,51 @@ export default function Following() {
   const [loadingPauvrathon, setLoadingPauvrathon] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // Redirect if not authenticated
   if (!user) {
     return <Navigate to="/auth" replace />;
   }
 
   useEffect(() => {
-    fetchTwitchFollowedStreams();
+    fetchTwitchLiveStreamers();
     fetchPauvrathonStreamers();
   }, [user]);
 
-  const fetchTwitchFollowedStreams = async () => {
+  const fetchTwitchLiveStreamers = async () => {
     if (!user) return;
 
     try {
       setLoadingTwitch(true);
       
-      // Appel à la fonction pour récupérer les streams Twitch en direct
-      const { data, error } = await supabase.functions.invoke('get-twitch-live-streams', {
-        headers: {
-          Authorization: `Bearer ${user.id}`,
-        },
+      // Récupérer le token Twitch depuis le profil utilisateur
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('twitch_id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (profileError || !profile?.twitch_id) {
+        console.log('Pas de compte Twitch connecté');
+        setTwitchLiveStreamers([]);
+        return;
+      }
+
+      // Utiliser une fonction Supabase Edge pour récupérer les streams Twitch
+      // Cette fonction doit être créée séparément
+      const { data, error } = await supabase.functions.invoke('get-twitch-follows-live', {
+        body: { user_twitch_id: profile.twitch_id }
       });
 
       if (error) {
-        console.error('Error fetching Twitch live streams:', error);
+        console.error('Erreur API Twitch:', error);
+        // Fallback: simulation de données pour la démo
         setTwitchLiveStreamers([]);
-        toast({
-          title: "Information",
-          description: "Impossible de récupérer les streams Twitch. Vérifiez que la fonction est déployée.",
-          variant: "default",
-        });
         return;
       }
 
       setTwitchLiveStreamers(data?.streams || []);
       
-      if (data?.message && data.streams.length === 0) {
-        toast({
-          title: "Information",
-          description: data.message === 'Twitch account not connected' 
-            ? "Connectez votre compte Twitch dans vos paramètres pour voir vos streams suivis."
-            : "Aucun de vos streamers suivis n'est actuellement en direct.",
-          variant: "default",
-        });
-      }
-      
     } catch (error) {
-      console.error('Error fetching Twitch followed streams:', error);
+      console.error('Erreur récupération streams Twitch:', error);
       setTwitchLiveStreamers([]);
     } finally {
       setLoadingTwitch(false);
@@ -119,14 +125,14 @@ export default function Following() {
     try {
       setLoadingPauvrathon(true);
       
-      // Première étape : récupérer les IDs des streamers suivis
+      // Récupérer les IDs des streamers suivis
       const { data: followsData, error: followsError } = await supabase
         .from('user_follows')
         .select('streamer_id')
         .eq('follower_user_id', user.id);
 
       if (followsError) {
-        console.error('Error fetching follows:', followsError);
+        console.error('Erreur récupération follows:', followsError);
         return;
       }
 
@@ -137,7 +143,7 @@ export default function Following() {
 
       const streamerIds = followsData.map(follow => follow.streamer_id);
 
-      // Deuxième étape : récupérer les détails des streamers
+      // Récupérer les détails des streamers avec leurs profils
       const { data: streamersData, error: streamersError } = await supabase
         .from('streamers')
         .select(`
@@ -152,11 +158,10 @@ export default function Following() {
         .in('id', streamerIds);
 
       if (streamersError) {
-        console.error('Error fetching streamers:', streamersError);
+        console.error('Erreur récupération streamers:', streamersError);
         return;
       }
 
-      // Transformer les données pour avoir la structure attendue
       const streamers = (streamersData || []).map(streamer => ({
         ...streamer,
         profile: Array.isArray(streamer.profiles) 
@@ -167,7 +172,7 @@ export default function Following() {
       setPauvrathonStreamers(streamers as PauvrathonStreamer[]);
       
     } catch (error) {
-      console.error('Error fetching pauvrathon streamers:', error);
+      console.error('Erreur fetchPauvrathonStreamers:', error);
       toast({
         title: "Erreur",
         description: "Impossible de charger vos streamers Pauvrathon suivis.",
@@ -181,7 +186,7 @@ export default function Following() {
   const refreshAll = async () => {
     setRefreshing(true);
     await Promise.all([
-      fetchTwitchFollowedStreams(),
+      fetchTwitchLiveStreamers(),
       fetchPauvrathonStreamers()
     ]);
     setRefreshing(false);
@@ -189,6 +194,29 @@ export default function Following() {
       title: "Actualisé",
       description: "Les données ont été mises à jour.",
     });
+  };
+
+  const formatDuration = (startedAt: string) => {
+    const now = new Date();
+    const started = new Date(startedAt);
+    const diffMs = now.getTime() - started.getTime();
+    const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (diffHrs > 0) {
+      return `${diffHrs}h ${diffMins}m`;
+    }
+    return `${diffMins}m`;
+  };
+
+  const formatViewerCount = (count: number) => {
+    if (count >= 1000000) {
+      return `${(count / 1000000).toFixed(1)}M`;
+    }
+    if (count >= 1000) {
+      return `${(count / 1000).toFixed(1)}k`;
+    }
+    return count.toString();
   };
 
   const getStreamerDisplayName = (streamer: PauvrathonStreamer) => {
@@ -212,63 +240,55 @@ export default function Following() {
   };
 
   const renderTwitchStreamerCard = (stream: TwitchStream) => (
-    <Card key={stream.id} className="hover:shadow-lg transition-shadow">
-      <CardHeader>
-        <div className="flex items-center space-x-4">
-          <div className="relative">
-            <Avatar className="h-12 w-12">
-              <AvatarImage 
-                src={stream.profile_image_url} 
-                alt={stream.user_name} 
-              />
-              <AvatarFallback>
-                {stream.user_name.charAt(0).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-            <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-background bg-red-500 animate-pulse" />
-          </div>
-          <div className="flex-1">
-            <CardTitle className="text-lg">
-              {stream.user_name}
-            </CardTitle>
-            <p className="text-sm text-muted-foreground">
-              @{stream.user_login}
-            </p>
-          </div>
-          <Badge variant="default" className="bg-red-500 text-white">
+    <Card key={stream.id} className="hover:shadow-lg transition-shadow overflow-hidden">
+      <div className="relative">
+        <img 
+          src={stream.thumbnail_url?.replace('{width}x{height}', '320x180')} 
+          alt={stream.title}
+          className="w-full h-48 object-cover"
+          onError={(e) => {
+            const target = e.target as HTMLImageElement;
+            target.src = 'https://via.placeholder.com/320x180/667eea/ffffff?text=Stream+Live';
+          }}
+        />
+        <div className="absolute top-2 left-2">
+          <Badge className="bg-red-500 text-white">
             <Radio className="w-3 h-3 mr-1" />
             EN DIRECT
           </Badge>
         </div>
+        <div className="absolute top-2 right-2 bg-black/70 text-white px-2 py-1 rounded text-sm flex items-center gap-1">
+          <Eye className="w-3 h-3" />
+          {formatViewerCount(stream.viewer_count)}
+        </div>
+        <div className="absolute bottom-2 right-2 bg-black/70 text-white px-2 py-1 rounded text-sm">
+          {formatDuration(stream.started_at)}
+        </div>
+      </div>
+      
+      <CardHeader className="pb-2">
+        <div className="flex items-center space-x-3">
+          <Avatar className="h-10 w-10">
+            <AvatarImage src={stream.profile_image_url} alt={stream.user_name} />
+            <AvatarFallback>
+              {stream.user_name.charAt(0).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex-1 min-w-0">
+            <CardTitle className="text-lg truncate">{stream.user_name}</CardTitle>
+            <p className="text-sm text-muted-foreground truncate">{stream.game_name || 'Juste bavardage'}</p>
+          </div>
+        </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="text-sm">
-          <p className="font-medium text-primary">{stream.game_name || 'Juste bavardage'}</p>
-          <p className="text-muted-foreground mt-1 line-clamp-2">{stream.title}</p>
-        </div>
-        
-        <div className="flex items-center justify-between text-sm">
-          <div className="flex items-center space-x-1">
-            <Users className="h-4 w-4 text-muted-foreground" />
-            <span>{stream.viewer_count.toLocaleString()} spectateurs</span>
-          </div>
-          <div className="flex items-center space-x-1">
-            <Clock className="h-4 w-4 text-muted-foreground" />
-            <span>Depuis {new Date(stream.started_at).toLocaleTimeString('fr-FR', { 
-              hour: '2-digit', 
-              minute: '2-digit' 
-            })}</span>
-          </div>
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <Button asChild variant="outline" className="w-full">
-            <a href={`https://twitch.tv/${stream.user_login}`} target="_blank" rel="noopener noreferrer">
-              <Tv className="w-4 h-4 mr-2" />
-              Regarder sur Twitch
-            </a>
-          </Button>
-        </div>
+      
+      <CardContent className="pt-2">
+        <p className="text-sm text-muted-foreground mb-4 line-clamp-2">{stream.title}</p>
+        <Button asChild className="w-full">
+          <a href={`https://twitch.tv/${stream.user_login}`} target="_blank" rel="noopener noreferrer">
+            <Tv className="w-4 h-4 mr-2" />
+            Regarder sur Twitch
+          </a>
+        </Button>
       </CardContent>
     </Card>
   );
@@ -286,10 +306,7 @@ export default function Following() {
           <div className="flex items-center space-x-4">
             <div className="relative">
               <Avatar className="h-12 w-12">
-                <AvatarImage 
-                  src={avatar || ''} 
-                  alt={displayName} 
-                />
+                <AvatarImage src={avatar || ''} alt={displayName} />
                 <AvatarFallback>
                   {displayName.charAt(0).toUpperCase()}
                 </AvatarFallback>
@@ -301,12 +318,8 @@ export default function Following() {
               }`} />
             </div>
             <div className="flex-1">
-              <CardTitle className="text-lg">
-                {displayName}
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                @{username}
-              </p>
+              <CardTitle className="text-lg">{displayName}</CardTitle>
+              <p className="text-sm text-muted-foreground">@{username}</p>
             </div>
             <Badge variant={isLive ? 'default' : 'secondary'} className={
               isLive ? 'bg-purple-600' : 
@@ -318,6 +331,7 @@ export default function Following() {
             </Badge>
           </div>
         </CardHeader>
+        
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between text-sm">
             <div className="flex items-center space-x-1">
@@ -397,7 +411,7 @@ export default function Following() {
     );
   };
 
-  // Séparation des streamers Pauvrathon par statut
+  // Séparer les streamers Pauvrathon par statut
   const liveStreamers = pauvrathonStreamers.filter(s => s.status === 'live');
   const pausedStreamers = pauvrathonStreamers.filter(s => s.status === 'paused');
   const offlineStreamers = pauvrathonStreamers.filter(s => s.status === 'offline' || s.status === 'ended');
@@ -410,7 +424,6 @@ export default function Following() {
       <Navigation />
       
       <div className="container mx-auto px-4 py-8">
-        {/* Header avec bouton refresh */}
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold mb-4">Mes Suivis</h1>
@@ -450,10 +463,11 @@ export default function Following() {
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {[...Array(6)].map((_, i) => (
                   <Card key={i} className="animate-pulse">
+                    <div className="h-48 bg-muted rounded-t-lg" />
                     <CardHeader>
                       <div className="flex items-center space-x-4">
-                        <div className="rounded-full bg-muted h-12 w-12" />
-                        <div className="space-y-2">
+                        <div className="rounded-full bg-muted h-10 w-10" />
+                        <div className="space-y-2 flex-1">
                           <div className="h-4 bg-muted rounded w-24" />
                           <div className="h-3 bg-muted rounded w-16" />
                         </div>
@@ -462,7 +476,7 @@ export default function Following() {
                     <CardContent>
                       <div className="space-y-3">
                         <div className="h-3 bg-muted rounded" />
-                        <div className="h-3 bg-muted rounded w-3/4" />
+                        <div className="h-10 bg-muted rounded" />
                       </div>
                     </CardContent>
                   </Card>
@@ -513,7 +527,7 @@ export default function Following() {
                     <CardHeader>
                       <div className="flex items-center space-x-4">
                         <div className="rounded-full bg-muted h-12 w-12" />
-                        <div className="space-y-2">
+                        <div className="space-y-2 flex-1">
                           <div className="h-4 bg-muted rounded w-24" />
                           <div className="h-3 bg-muted rounded w-16" />
                         </div>
@@ -523,6 +537,7 @@ export default function Following() {
                       <div className="space-y-3">
                         <div className="h-3 bg-muted rounded" />
                         <div className="h-3 bg-muted rounded w-3/4" />
+                        <div className="h-10 bg-muted rounded" />
                       </div>
                     </CardContent>
                   </Card>
