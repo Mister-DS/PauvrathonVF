@@ -385,12 +385,13 @@ const SubathonPage = () => {
       return;
     }
 
-    const canClick = streamer.status === 'live' || forceStreamOnline;
+    // Logique plus permissive : si le statut DB est 'live', on peut cliquer
+    const canClick = streamer.status === 'live';
     
     if (!canClick) {
       toast({
-        title: "Stream non disponible",
-        description: "Vous ne pouvez participer que quand le Pauvrathon est actif !",
+        title: "Pauvrathon non actif",
+        description: `Le pauvrathon n'est pas démarré (statut: ${streamer.status}).`,
         variant: "destructive",
       });
       return;
@@ -590,8 +591,9 @@ const SubathonPage = () => {
   const twitchUsername = getTwitchUsername();
   const displayName = getDisplayName();
   const avatarUrl = getAvatarUrl();
-  const effectiveStatus = forceStreamOnline || streamOnline || streamer.status === 'live';
-  const canInteract = effectiveStatus && user;
+  
+  // État effectif pour l'interaction - priorité au statut DB
+  const canInteract = user && streamer.status === 'live';
 
   return (
     <div className="min-h-screen bg-background">
@@ -754,20 +756,6 @@ const SubathonPage = () => {
             {!isFullscreen && (
               <Card>
                 <CardContent className="space-y-4 pt-6">
-                  {streamer.status === 'live' && !streamOnline && !forceStreamOnline && (
-                    <div className="flex items-center gap-2 p-3 bg-yellow-50 dark:bg-yellow-950 rounded-lg border border-yellow-200">
-                      <AlertTriangle className="h-5 w-5 text-yellow-600" />
-                      <div className="flex-1 text-sm">
-                        <p className="font-medium text-yellow-800 dark:text-yellow-200">
-                          Détection du stream en cours...
-                        </p>
-                        <p className="text-yellow-600 dark:text-yellow-400">
-                          Le player Twitch charge encore. Vous pouvez forcer l'activation avec le bouton "Auto" en haut.
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
                   <Progress value={(currentClicks / clicksRequired) * 100} className="w-full h-3" />
                   <p className="text-center text-sm text-muted-foreground">
                     {currentClicks} / {clicksRequired} clics pour déclencher un mini-jeu

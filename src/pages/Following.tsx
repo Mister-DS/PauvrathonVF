@@ -75,12 +75,7 @@ export default function Following() {
     try {
       setLoadingTwitch(true);
       
-      // Temporairement désactivé jusqu'à ce que la fonction soit déployée
-      // TODO: Activer une fois que get-twitch-live-streams est déployée
-      console.log('Twitch function temporarily disabled');
-      setTwitchLiveStreamers([]);
-      
-      /* Uncomment when function is deployed:
+      // Appel à la fonction pour récupérer les streams Twitch en direct
       const { data, error } = await supabase.functions.invoke('get-twitch-live-streams', {
         headers: {
           Authorization: `Bearer ${user.id}`,
@@ -90,6 +85,11 @@ export default function Following() {
       if (error) {
         console.error('Error fetching Twitch live streams:', error);
         setTwitchLiveStreamers([]);
+        toast({
+          title: "Information",
+          description: "Impossible de récupérer les streams Twitch. Vérifiez que la fonction est déployée.",
+          variant: "default",
+        });
         return;
       }
 
@@ -104,7 +104,6 @@ export default function Following() {
           variant: "default",
         });
       }
-      */
       
     } catch (error) {
       console.error('Error fetching Twitch followed streams:', error);
