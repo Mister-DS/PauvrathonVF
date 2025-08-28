@@ -50,7 +50,7 @@ export default function Following() {
       // Appel à votre API backend qui utilise l'API Twitch
       const response = await fetch('/api/twitch/followed-streams', {
         headers: {
-          'Authorization': `Bearer ${user?.access_token}`,
+          'Authorization': `Bearer ${user?.id}`,
         },
       });
       

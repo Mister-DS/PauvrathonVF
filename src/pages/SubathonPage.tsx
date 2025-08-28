@@ -99,12 +99,11 @@ const SubathonPage = () => {
         setCurrentClicks(data.current_clicks || 0);
         setClicksRequired(data.clicks_required || 10);
         
-        // Calculer la fin du pauvrathon (exemple: heure de début + temps ajouté)
-        if (data.start_time && data.initial_duration) {
-          const startTime = new Date(data.start_time);
-          const totalDuration = (data.initial_duration + (data.total_time_added || 0)) * 1000;
-          setPauvrathonEndTime(new Date(startTime.getTime() + totalDuration));
-        }
+        // Calculer la fin du pauvrathon (exemple: 2 heures depuis maintenant + temps ajouté)
+        const now = new Date();
+        const baseDuration = 2 * 60 * 60; // 2 heures en secondes
+        const totalDuration = (baseDuration + (data.total_time_added || 0)) * 1000;
+        setPauvrathonEndTime(new Date(now.getTime() + totalDuration));
       }
     } catch (error) {
       console.error('Error fetching streamer:', error);
@@ -335,14 +334,11 @@ const SubathonPage = () => {
 
   // Déterminer le nom d'affichage
   const displayName = streamer?.profile?.twitch_display_name || 
-                     streamer?.profile?.display_name || 
                      streamer?.profile?.twitch_username ||
                      'Streamer';
 
   // URL de l'avatar
-  const avatarUrl = streamer?.profile?.avatar_url || 
-                   streamer?.profile?.twitch_avatar_url ||
-                   null;
+  const avatarUrl = streamer?.profile?.avatar_url || null;
 
   return (
     <div className="min-h-screen bg-background">
@@ -375,11 +371,7 @@ const SubathonPage = () => {
             </div>
             <p className="text-muted-foreground text-xl mb-2">Pauvrathon en cours</p>
             <div className="flex items-center gap-4 text-lg font-bold">
-              {timeRemaining ? (
-                <span className="text-orange-500">⏰ Temps restant: {timeRemaining}</span>
-              ) : (
-                <span className="text-blue-500">🕐 {currentTime.toLocaleTimeString('fr-FR')}</span>
-              )}
+              <span className="text-orange-500">⏰ Temps restant: {timeRemaining || 'Calcul en cours...'}</span>
               {streamData?.viewer_count && (
                 <span className="text-purple-500">👥 {streamData.viewer_count} spectateurs</span>
               )}
@@ -549,21 +541,12 @@ const SubathonPage = () => {
                     </div>
                   </div>
                   
-                  {timeRemaining && (
-                    <div className="flex justify-between items-center p-3 bg-orange-50 dark:bg-orange-950 rounded-lg border-l-4 border-orange-500">
-                      <span className="font-bold">⏰ Temps restant:</span>
-                      <span className="font-bold text-xl text-orange-600">
-                        {timeRemaining}
-                      </span>
-                    </div>
-                  )}
-                  
-                  <div className="flex justify-between items-center">
-                    <span>🕐 Heure actuelle:</span>
-                    <span className="font-bold text-blue-600 font-mono">
-                      {currentTime.toLocaleTimeString('fr-FR')}
-                    </span>
-                  </div>
+                   <div className="flex justify-between items-center p-3 bg-orange-50 dark:bg-orange-950 rounded-lg border-l-4 border-orange-500">
+                     <span className="font-bold">⏰ Temps restant:</span>
+                     <span className="font-bold text-xl text-orange-600">
+                       {timeRemaining || 'Calcul en cours...'}
+                     </span>
+                   </div>
                   
                   {streamOnline && streamData?.started_at && (
                     <div className="flex justify-between items-center">
