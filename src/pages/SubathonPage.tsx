@@ -370,12 +370,14 @@ const SubathonPage = () => {
               </div>
             </div>
             <p className="text-muted-foreground text-xl mb-2">Pauvrathon en cours</p>
-            <div className="flex items-center gap-4 text-lg font-bold">
-              <span className="text-orange-500">⏰ Temps restant: {timeRemaining || 'Calcul en cours...'}</span>
-              {streamData?.viewer_count && (
-                <span className="text-purple-500">👥 {streamData.viewer_count} spectateurs</span>
-              )}
-            </div>
+            {streamOnline && (
+              <div className="flex items-center gap-4 text-lg font-bold">
+                <span className="text-orange-500">⏰ Temps restant: {timeRemaining || 'Calcul en cours...'}</span>
+                {streamData?.viewer_count && (
+                  <span className="text-purple-500">👥 {streamData.viewer_count} spectateurs</span>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -541,12 +543,14 @@ const SubathonPage = () => {
                     </div>
                   </div>
                   
-                   <div className="flex justify-between items-center p-3 bg-orange-50 dark:bg-orange-950 rounded-lg border-l-4 border-orange-500">
-                     <span className="font-bold">⏰ Temps restant:</span>
-                     <span className="font-bold text-xl text-orange-600">
-                       {timeRemaining || 'Calcul en cours...'}
-                     </span>
-                   </div>
+                   {streamOnline && (
+                     <div className="flex justify-between items-center p-3 bg-orange-50 dark:bg-orange-950 rounded-lg border-l-4 border-orange-500">
+                       <span className="font-bold">⏰ Temps restant:</span>
+                       <span className="font-bold text-xl text-orange-600">
+                         {timeRemaining || 'Calcul en cours...'}
+                       </span>
+                     </div>
+                   )}
                   
                   {streamOnline && streamData?.started_at && (
                     <div className="flex justify-between items-center">
