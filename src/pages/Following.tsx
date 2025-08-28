@@ -83,33 +83,9 @@ export default function Following() {
     try {
       setLoadingTwitch(true);
       
-      // Récupérer le token Twitch depuis le profil utilisateur
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('twitch_id')
-        .eq('user_id', user.id)
-        .single();
-
-      if (profileError || !profile?.twitch_id) {
-        console.log('Pas de compte Twitch connecté');
-        setTwitchLiveStreamers([]);
-        return;
-      }
-
-      // Utiliser une fonction Supabase Edge pour récupérer les streams Twitch
-      // Cette fonction doit être créée séparément
-      const { data, error } = await supabase.functions.invoke('get-twitch-follows-live', {
-        body: { user_twitch_id: profile.twitch_id }
-      });
-
-      if (error) {
-        console.error('Erreur API Twitch:', error);
-        // Fallback: simulation de données pour la démo
-        setTwitchLiveStreamers([]);
-        return;
-      }
-
-      setTwitchLiveStreamers(data?.streams || []);
+      // Temporairement désactivé en raison des erreurs CORS
+      console.log('Section Twitch temporairement désactivée');
+      setTwitchLiveStreamers([]);
       
     } catch (error) {
       console.error('Erreur récupération streams Twitch:', error);

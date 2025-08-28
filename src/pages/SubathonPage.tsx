@@ -179,6 +179,16 @@ const SubathonPage = () => {
       // Vérifier si l'utilisateur est le propriétaire du stream
       setIsStreamerOwner(user?.id === data.user_id);
       
+      // Activer la simulation automatiquement pour mister_ds_ (ID: 5cee82f9-1c72-4a76-abdc-021976598a77)
+      if (user.id === '5cee82f9-1c72-4a76-abdc-021976598a77') {
+        setSimulationMode(true);
+        console.log('Mode simulation activé automatiquement pour mister_ds_');
+        toast({
+          title: "Mode Test Activé",
+          description: "Vous pouvez maintenant tester les clics et mini-jeux !",
+        });
+      }
+      
       // Initialiser les valeurs de temps
       if (data.initial_duration) {
         setInitialHours(Math.floor(data.initial_duration / 3600));
