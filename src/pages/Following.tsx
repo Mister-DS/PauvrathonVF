@@ -75,7 +75,12 @@ export default function Following() {
     try {
       setLoadingTwitch(true);
       
-      // Appel à la nouvelle fonction pour récupérer les streams Twitch en direct
+      // Temporairement désactivé jusqu'à ce que la fonction soit déployée
+      // TODO: Activer une fois que get-twitch-live-streams est déployée
+      console.log('Twitch function temporarily disabled');
+      setTwitchLiveStreamers([]);
+      
+      /* Uncomment when function is deployed:
       const { data, error } = await supabase.functions.invoke('get-twitch-live-streams', {
         headers: {
           Authorization: `Bearer ${user.id}`,
@@ -88,10 +93,8 @@ export default function Following() {
         return;
       }
 
-      // Les streams retournés sont déjà filtrés pour être en direct
       setTwitchLiveStreamers(data?.streams || []);
       
-      // Afficher un message informatif si pas de compte Twitch connecté
       if (data?.message && data.streams.length === 0) {
         toast({
           title: "Information",
@@ -101,6 +104,7 @@ export default function Following() {
           variant: "default",
         });
       }
+      */
       
     } catch (error) {
       console.error('Error fetching Twitch followed streams:', error);
@@ -116,33 +120,49 @@ export default function Following() {
     try {
       setLoadingPauvrathon(true);
       
-      // Récupérer les streamers Pauvrathon que l'utilisateur suit
-      const { data, error } = await supabase
+      // Première étape : récupérer les IDs des streamers suivis
+      const { data: followsData, error: followsError } = await supabase
         .from('user_follows')
-        .select(`
-          streamers!inner(
-            *,
-            profiles!inner(
-              twitch_username,
-              twitch_display_name,
-              avatar_url,
-              twitch_id
-            )
-          )
-        `)
+        .select('streamer_id')
         .eq('follower_user_id', user.id);
 
-      if (error) {
-        console.error('Error fetching pauvrathon streamers:', error);
+      if (followsError) {
+        console.error('Error fetching follows:', followsError);
+        return;
+      }
+
+      if (!followsData || followsData.length === 0) {
+        setPauvrathonStreamers([]);
+        return;
+      }
+
+      const streamerIds = followsData.map(follow => follow.streamer_id);
+
+      // Deuxième étape : récupérer les détails des streamers
+      const { data: streamersData, error: streamersError } = await supabase
+        .from('streamers')
+        .select(`
+          *,
+          profiles!inner(
+            twitch_username,
+            twitch_display_name,
+            avatar_url,
+            twitch_id
+          )
+        `)
+        .in('id', streamerIds);
+
+      if (streamersError) {
+        console.error('Error fetching streamers:', streamersError);
         return;
       }
 
       // Transformer les données pour avoir la structure attendue
-      const streamers = (data || []).map(follow => ({
-        ...follow.streamers,
-        profile: Array.isArray(follow.streamers.profiles) 
-          ? follow.streamers.profiles[0] 
-          : follow.streamers.profiles
+      const streamers = (streamersData || []).map(streamer => ({
+        ...streamer,
+        profile: Array.isArray(streamer.profiles) 
+          ? streamer.profiles[0] 
+          : streamer.profiles
       }));
 
       setPauvrathonStreamers(streamers as PauvrathonStreamer[]);
