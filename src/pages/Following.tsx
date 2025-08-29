@@ -668,7 +668,6 @@ export default function Following() {
                           <CardTitle className="text-lg truncate">{stream.user_name}</CardTitle>
                           <p className="text-sm text-muted-foreground truncate">{stream.game_name || 'Juste bavardage'}</p>
                         </div>
-                        </div>
                       </div>
                     </CardHeader>
                     <CardContent className="pt-2">
