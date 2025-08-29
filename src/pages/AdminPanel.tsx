@@ -203,41 +203,50 @@ export default function AdminPanel() {
   };
 
   const handleAddMinigame = async () => {
-    if (!newMinigame.name || !newMinigame.code) {
-      toast({
-        title: "Erreur",
-        description: "Le nom et le code sont requis.",
-        variant: "destructive",
-      });
-      return;
+  if (!newMinigame.name || !newMinigame.code) {
+    toast({
+      title: "Erreur",
+      description: "Le nom et le code sont requis.",
+      variant: "destructive",
+    });
+    return;
+  }
+
+  try {
+    // Vérification basique que le code contient un composant React valide
+    const cleanCode = newMinigame.code.trim();
+    if (!cleanCode.includes('export') || !cleanCode.includes('return')) {
+      throw new Error("Le code ne semble pas être un composant React valide");
     }
 
-    try {
-      const { error } = await supabase
-        .from('minigames')
-        .insert({
-          ...newMinigame,
-          created_by: user.id
-        });
-
-      if (error) throw error;
-
-      toast({
-        title: "Mini-jeu ajouté",
-        description: "Le nouveau mini-jeu a été ajouté avec succès.",
+    // Ajout du mini-jeu avec is_active = true par défaut
+    const { error } = await supabase
+      .from('minigames')
+      .insert({
+        ...newMinigame,
+        is_active: true,  // Jeu actif par défaut
+        created_by: user.id
       });
 
-      setNewMinigame({ name: '', code: '', description: '' });
-      fetchMinigames();
-    } catch (error: any) {
-      console.error('Error adding minigame:', error);
-      toast({
-        title: "Erreur",
-        description: "Impossible d'ajouter le mini-jeu.",
-        variant: "destructive",
-      });
-    }
-  };
+    if (error) throw error;
+
+    toast({
+      title: "Mini-jeu ajouté",
+      description: "Le nouveau mini-jeu a été ajouté avec succès et est maintenant disponible pour les streamers.",
+    });
+
+    // Réinitialiser le formulaire
+    setNewMinigame({ name: '', code: '', description: '' });
+    fetchMinigames();
+  } catch (error: any) {
+    console.error('Error adding minigame:', error);
+    toast({
+      title: "Erreur",
+      description: error.message || "Impossible d'ajouter le mini-jeu.",
+      variant: "destructive",
+    });
+  }
+};
 
   const handleCreateAdminStreamerProfile = async () => {
     try {
