@@ -4,9 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Navigation } from '@/components/Navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -15,7 +15,6 @@ import { Streamer, SubathonStats } from '@/types';
 import { 
   Settings, 
   Clock, 
-  MousePointer, 
   Timer, 
   Gamepad2, 
   Trophy,
@@ -25,13 +24,23 @@ import {
   Play,
   Pause,
   RotateCcw,
-  Dice1
+  Dice1,
+  Square
 } from 'lucide-react';
+
+interface Minigame {
+  id: string;
+  name: string;
+  code: string;
+  description: string;
+  is_active: boolean;
+}
 
 export default function StreamerPanel() {
   const { user, profile } = useAuth();
   const [streamer, setStreamer] = useState<Streamer | null>(null);
   const [stats, setStats] = useState<SubathonStats[]>([]);
+  const [availableMinigames, setAvailableMinigames] = useState<Minigame[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState({
@@ -41,7 +50,13 @@ export default function StreamerPanel() {
     status: 'offline' as 'live' | 'paused' | 'offline' | 'ended',
     time_mode: 'fixed' as 'fixed' | 'random',
     max_random_time: 60,
+    initial_duration: 7200, // 2 heures par défaut
+    active_minigames: [] as string[],
   });
+  
+  // Configuration du temps initial
+  const [initialHours, setInitialHours] = useState(2);
+  const [initialMinutes, setInitialMinutes] = useState(0);
 
   // Redirect if not authenticated or not a streamer
   if (!user || (profile?.role !== 'streamer' && profile?.role !== 'admin')) {
@@ -51,6 +66,7 @@ export default function StreamerPanel() {
   useEffect(() => {
     fetchStreamerData();
     fetchStats();
+    fetchAvailableMinigames();
     
     // Set up real-time updates for streamer data
     const interval = setInterval(() => {
@@ -74,6 +90,12 @@ export default function StreamerPanel() {
       
       if (data) {
         setStreamer(data as Streamer);
+        
+        // Calculer les heures et minutes depuis initial_duration
+        const duration = data.initial_duration || 7200;
+        setInitialHours(Math.floor(duration / 3600));
+        setInitialMinutes(Math.floor((duration % 3600) / 60));
+        
         setSettings({
           time_increment: data.time_increment,
           clicks_required: data.clicks_required,
@@ -81,6 +103,8 @@ export default function StreamerPanel() {
           status: (data.status as 'live' | 'paused' | 'offline' | 'ended') || 'offline',
           time_mode: (data.time_mode as 'fixed' | 'random') || 'fixed',
           max_random_time: data.max_random_time || 60,
+          initial_duration: duration,
+          active_minigames: data.active_minigames || [],
         });
       }
     } catch (error) {
@@ -92,6 +116,22 @@ export default function StreamerPanel() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchAvailableMinigames = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('minigames')
+        .select('*')
+        .eq('is_active', true)
+        .order('name');
+
+      if (error) throw error;
+      
+      setAvailableMinigames(data || []);
+    } catch (error) {
+      console.error('Error fetching minigames:', error);
     }
   };
 
@@ -119,14 +159,22 @@ export default function StreamerPanel() {
 
     setSaving(true);
     try {
+      // Calculer initial_duration à partir des heures/minutes
+      const calculatedDuration = (initialHours * 3600) + (initialMinutes * 60);
+      
+      const updatedSettings = {
+        ...settings,
+        initial_duration: calculatedDuration
+      };
+
       const { error } = await supabase
         .from('streamers')
-        .update(settings)
+        .update(updatedSettings)
         .eq('id', streamer.id);
 
       if (error) throw error;
 
-      setStreamer(prev => prev ? { ...prev, ...settings } : null);
+      setStreamer(prev => prev ? { ...prev, ...updatedSettings } : null);
       
       toast({
         title: "Paramètres sauvegardés",
@@ -142,6 +190,15 @@ export default function StreamerPanel() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleMinigameToggle = (minigameCode: string, checked: boolean) => {
+    setSettings(prev => ({
+      ...prev,
+      active_minigames: checked 
+        ? [...prev.active_minigames, minigameCode]
+        : prev.active_minigames.filter(code => code !== minigameCode)
+    }));
   };
 
   const handleResetClicks = async () => {
@@ -166,6 +223,61 @@ export default function StreamerPanel() {
       toast({
         title: "Erreur",
         description: "Impossible de remettre à zéro les clics.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleStatusChange = async (newStatus: 'live' | 'paused' | 'offline' | 'ended') => {
+    if (!streamer) return;
+
+    try {
+      const updateData: any = { 
+        status: newStatus,
+        is_live: newStatus === 'live'
+      };
+
+      // Si on démarre, enregistrer le timestamp
+      if (newStatus === 'live' && settings.status !== 'live') {
+        updateData.stream_started_at = new Date().toISOString();
+      }
+
+      // Si on met en pause, enregistrer le timestamp
+      if (newStatus === 'paused') {
+        updateData.pause_started_at = new Date().toISOString();
+      }
+
+      // Si on termine, remettre à zéro
+      if (newStatus === 'ended') {
+        updateData.current_clicks = 0;
+      }
+
+      const { error } = await supabase
+        .from('streamers')
+        .update(updateData)
+        .eq('id', streamer.id);
+
+      if (error) throw error;
+
+      setStreamer(prev => prev ? { ...prev, ...updateData } : null);
+      setSettings(prev => ({ ...prev, status: newStatus }));
+      
+      const statusMessages = {
+        live: "Stream en direct",
+        paused: "Stream en pause", 
+        offline: "Stream hors ligne",
+        ended: "Pauvrathon terminé"
+      };
+
+      toast({
+        title: statusMessages[newStatus],
+        description: `Votre pauvrathon est maintenant ${newStatus === 'live' ? 'en direct' : newStatus === 'paused' ? 'en pause' : newStatus === 'ended' ? 'terminé' : 'hors ligne'}.`,
+      });
+    } catch (error) {
+      console.error('Error updating status:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de mettre à jour le statut.",
         variant: "destructive",
       });
     }
@@ -220,28 +332,66 @@ export default function StreamerPanel() {
       
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2 gradient-text">Panneau Streamer</h1>
+          <h1 className="text-3xl font-bold mb-2">Panneau Streamer</h1>
           <p className="text-muted-foreground">
-            Gérez votre subathon et personnalisez votre expérience
+            Gérez votre Pauvrathon et personnalisez votre expérience
           </p>
         </div>
 
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Settings */}
           <div className="lg:col-span-2 space-y-6">
-            <Card className="neon-border">
+            <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
                   <Settings className="mr-2 h-5 w-5" />
-                  Paramètres du Subathon
+                  Paramètres du Pauvrathon
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* Time Configuration Section */}
+                
+                {/* Configuration du temps initial */}
+                <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
+                  <h3 className="font-medium flex items-center">
+                    <Timer className="mr-2 h-4 w-4" />
+                    Temps Initial du Pauvrathon
+                  </h3>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="initial_hours">Heures</Label>
+                      <Input
+                        id="initial_hours"
+                        type="number"
+                        min="0"
+                        max="23"
+                        value={initialHours}
+                        onChange={(e) => setInitialHours(parseInt(e.target.value) || 0)}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="initial_minutes">Minutes</Label>
+                      <Input
+                        id="initial_minutes"
+                        type="number"
+                        min="0"
+                        max="59"
+                        value={initialMinutes}
+                        onChange={(e) => setInitialMinutes(parseInt(e.target.value) || 0)}
+                      />
+                    </div>
+                  </div>
+                  
+                  <p className="text-sm text-muted-foreground">
+                    Durée totale: <strong>{initialHours}h {initialMinutes}m</strong> ({(initialHours * 3600) + (initialMinutes * 60)} secondes)
+                  </p>
+                </div>
+
+                {/* Configuration du temps ajouté */}
                 <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
                   <h3 className="font-medium flex items-center">
                     <Clock className="mr-2 h-4 w-4" />
-                    Configuration du Temps
+                    Configuration du Temps Ajouté
                   </h3>
                   
                   <RadioGroup
@@ -311,7 +461,46 @@ export default function StreamerPanel() {
                   </div>
                 </div>
 
-                {/* Other Settings */}
+                {/* Mini-jeux disponibles */}
+                <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
+                  <h3 className="font-medium flex items-center">
+                    <Gamepad2 className="mr-2 h-4 w-4" />
+                    Mini-jeux Disponibles
+                  </h3>
+                  
+                  {availableMinigames.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Aucun mini-jeu disponible</p>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-3">
+                      {availableMinigames.map((minigame) => (
+                        <div key={minigame.id} className="flex items-center space-x-3 p-3 border rounded">
+                          <Checkbox
+                            id={`minigame-${minigame.id}`}
+                            checked={settings.active_minigames.includes(minigame.code)}
+                            onCheckedChange={(checked) => 
+                              handleMinigameToggle(minigame.code, checked as boolean)
+                            }
+                          />
+                          <div className="flex-1">
+                            <Label 
+                              htmlFor={`minigame-${minigame.id}`} 
+                              className="cursor-pointer font-medium"
+                            >
+                              {minigame.name}
+                            </Label>
+                            {minigame.description && (
+                              <p className="text-sm text-muted-foreground">
+                                {minigame.description}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Autres paramètres */}
                 <div className="grid md:grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="clicks_required">Clics requis pour mini-jeu</Label>
@@ -348,7 +537,6 @@ export default function StreamerPanel() {
                   <Button 
                     onClick={handleSaveSettings} 
                     disabled={saving}
-                    className="neon-glow"
                   >
                     <Save className="mr-2 h-4 w-4" />
                     {saving ? 'Sauvegarde...' : 'Sauvegarder'}
@@ -357,7 +545,6 @@ export default function StreamerPanel() {
                   <Button 
                     variant="outline" 
                     onClick={handleResetClicks}
-                    className="neon-border"
                   >
                     <RotateCcw className="mr-2 h-4 w-4" />
                     Reset Clics
@@ -366,8 +553,8 @@ export default function StreamerPanel() {
               </CardContent>
             </Card>
 
-            {/* Current Status */}
-            <Card className="glass-effect">
+            {/* Statut actuel */}
+            <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
                   <Trophy className="mr-2 h-5 w-5" />
@@ -392,9 +579,9 @@ export default function StreamerPanel() {
                   
                   <div className="text-center">
                     <div className="text-2xl font-bold">
-                      {Math.floor(streamer.total_time_added / 60)}:{(streamer.total_time_added % 60).toString().padStart(2, '0')}
+                      {Math.floor((streamer.initial_duration || 7200) / 3600)}h{Math.floor(((streamer.initial_duration || 7200) % 3600) / 60)}m
                     </div>
-                    <p className="text-sm text-muted-foreground">Format temps</p>
+                    <p className="text-sm text-muted-foreground">Temps initial</p>
                   </div>
                   
                   <div className="text-center">
@@ -402,10 +589,10 @@ export default function StreamerPanel() {
                       streamer.status === 'live' ? 'default' : 
                       streamer.status === 'paused' ? 'secondary' : 
                       streamer.status === 'ended' ? 'destructive' : 'outline'
-                    } className="pulse-neon">
-                      {streamer.status === 'live' ? '🔴 En direct' : 
-                       streamer.status === 'paused' ? '⏸️ En pause' :
-                       streamer.status === 'ended' ? '🏁 Terminé' : '⚫ Hors ligne'}
+                    }>
+                      {streamer.status === 'live' ? 'En direct' : 
+                       streamer.status === 'paused' ? 'En pause' :
+                       streamer.status === 'ended' ? 'Terminé' : 'Hors ligne'}
                     </Badge>
                   </div>
                 </div>
@@ -413,10 +600,68 @@ export default function StreamerPanel() {
             </Card>
           </div>
 
-          {/* Sidebar Stats */}
+          {/* Sidebar */}
           <div className="space-y-6">
-            {/* Top Contributor */}
-            <Card className="neon-border">
+            {/* Contrôles rapides */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Contrôles du Pauvrathon</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <Button 
+                    variant={settings.status === 'live' ? "default" : "outline"}
+                    onClick={() => handleStatusChange(settings.status === 'live' ? 'paused' : 'live')}
+                    disabled={settings.status === 'ended'}
+                  >
+                    {settings.status === 'live' ? (
+                      <>
+                        <Pause className="mr-2 h-4 w-4" />
+                        Pause
+                      </>
+                    ) : (
+                      <>
+                        <Play className="mr-2 h-4 w-4" />
+                        Live
+                      </>
+                    )}
+                  </Button>
+
+                  <Button 
+                    variant="destructive"
+                    onClick={() => handleStatusChange('ended')}
+                  >
+                    <Square className="mr-2 h-4 w-4" />
+                    Terminer
+                  </Button>
+                </div>
+
+                {settings.status === 'ended' && (
+                  <Button 
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => handleStatusChange('offline')}
+                  >
+                    <RotateCcw className="mr-2 h-4 w-4" />
+                    Nouveau Pauvrathon
+                  </Button>
+                )}
+
+                <Button 
+                  variant="outline" 
+                  className="w-full"
+                  asChild
+                >
+                  <a href={`/subathon/${streamer.id}`} target="_blank">
+                    <Play className="mr-2 h-4 w-4" />
+                    Voir ma page Pauvrathon
+                  </a>
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Meilleur contributeur */}
+            <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
                   <Star className="mr-2 h-5 w-5" />
@@ -445,180 +690,8 @@ export default function StreamerPanel() {
               </CardContent>
             </Card>
 
-            {/* Quick Actions */}
-            <Card className="glass-effect">
-              <CardHeader>
-                <CardTitle>Actions Rapides</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <Button 
-                  variant="outline" 
-                  className="w-full neon-border"
-                  asChild
-                >
-                  <a href={`/streamer/${streamer.id}`} target="_blank">
-                    <Play className="mr-2 h-4 w-4" />
-                    Voir ma page
-                  </a>
-                </Button>
-                
-                {/* Boutons de contrôle du stream */}
-                <div className="grid grid-cols-2 gap-2 mb-3">
-                  <Button 
-                    variant={settings.status === 'live' ? "default" : "outline"}
-                    className="w-full"
-                    disabled={settings.status === 'ended'}
-                    onClick={async () => {
-                      const newStatus = settings.status === 'live' ? 'paused' : 'live';
-                      setSettings(prev => ({ ...prev, status: newStatus }));
-                      
-                      try {
-                        const { error } = await supabase
-                          .from('streamers')
-                          .update({ 
-                            status: newStatus,
-                            is_live: newStatus === 'live'
-                          })
-                          .eq('id', streamer.id);
-
-                        if (error) throw error;
-
-                        setStreamer(prev => prev ? { ...prev, status: newStatus, is_live: newStatus === 'live' } : null);
-                        
-                        toast({
-                          title: newStatus === 'live' ? "🔴 Stream en direct" : "⏸️ Stream en pause",
-                          description: newStatus === 'live' ? 
-                            "Votre pauvrathon est maintenant en direct !" : 
-                            "Votre pauvrathon est maintenant en pause.",
-                        });
-                      } catch (error) {
-                        console.error('Error updating status:', error);
-                        setSettings(prev => ({ ...prev, status: settings.status }));
-                        toast({
-                          title: "Erreur",
-                          description: "Impossible de mettre à jour le statut.",
-                          variant: "destructive",
-                        });
-                      }
-                    }}
-                  >
-                    {settings.status === 'live' ? (
-                      <>
-                        <Pause className="mr-2 h-4 w-4" />
-                        Pause
-                      </>
-                    ) : (
-                      <>
-                        <Play className="mr-2 h-4 w-4" />
-                        Live
-                      </>
-                    )}
-                  </Button>
-
-                  <Button 
-                    variant="destructive"
-                    className="w-full"
-                    onClick={async () => {
-                      if (!confirm("Êtes-vous sûr de vouloir terminer le pauvrathon ? Cela remettra les clics à zéro.")) {
-                        return;
-                      }
-
-                      setSettings(prev => ({ ...prev, status: 'ended' }));
-                      
-                      try {
-                        const { error } = await supabase
-                          .from('streamers')
-                          .update({ 
-                            status: 'ended',
-                            is_live: false,
-                            current_clicks: 0
-                          })
-                          .eq('id', streamer.id);
-
-                        if (error) throw error;
-
-                        setStreamer(prev => prev ? { 
-                          ...prev, 
-                          status: 'ended',
-                          is_live: false,
-                          current_clicks: 0
-                        } : null);
-                        
-                        toast({
-                          title: "🏁 Pauvrathon terminé",
-                          description: "Votre pauvrathon a été terminé et les clics remis à zéro.",
-                        });
-                      } catch (error) {
-                        console.error('Error ending stream:', error);
-                        toast({
-                          title: "Erreur",
-                          description: "Impossible de terminer le pauvrathon.",
-                          variant: "destructive",
-                        });
-                      }
-                    }}
-                  >
-                    <Settings className="mr-2 h-4 w-4" />
-                    Terminer
-                  </Button>
-                </div>
-
-                {/* Bouton Reset - seulement si terminé */}
-                {settings.status === 'ended' && (
-                  <Button 
-                    variant="outline"
-                    className="w-full"
-                    onClick={async () => {
-                      if (!confirm("Êtes-vous sûr de vouloir redémarrer un nouveau pauvrathon ?")) {
-                        return;
-                      }
-
-                      setSettings(prev => ({ ...prev, status: 'offline' }));
-                      
-                      try {
-                        const { error } = await supabase
-                          .from('streamers')
-                          .update({ 
-                            status: 'offline',
-                            is_live: false,
-                            current_clicks: 0,
-                            total_time_added: 0
-                          })
-                          .eq('id', streamer.id);
-
-                        if (error) throw error;
-
-                        setStreamer(prev => prev ? { 
-                          ...prev, 
-                          status: 'offline',
-                          is_live: false,
-                          current_clicks: 0,
-                          total_time_added: 0
-                        } : null);
-                        
-                        toast({
-                          title: "🔄 Nouveau pauvrathon",
-                          description: "Un nouveau pauvrathon a été initialisé !",
-                        });
-                      } catch (error) {
-                        console.error('Error resetting stream:', error);
-                        toast({
-                          title: "Erreur",
-                          description: "Impossible de redémarrer le pauvrathon.",
-                          variant: "destructive",
-                        });
-                      }
-                    }}
-                  >
-                    <RotateCcw className="mr-2 h-4 w-4" />
-                    Nouveau pauvrathon
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Mini Stats */}
-            <Card className="neon-border">
+            {/* Statistiques */}
+            <Card>
               <CardHeader>
                 <CardTitle>Statistiques</CardTitle>
               </CardHeader>
