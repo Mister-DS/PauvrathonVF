@@ -77,6 +77,28 @@ export default function Discovery() {
     searchTwitchStreamers();
   };
 
+  // Fonction pour obtenir l'URL de l'avatar d'un streamer
+  const getStreamerAvatar = (streamer: any) => {
+    const displayName = streamer.profile?.twitch_display_name || 
+                        streamer.profiles?.twitch_display_name || 
+                        streamer.profile?.twitch_username || 
+                        streamer.profiles?.twitch_username || 
+                        'Streamer';
+    
+    return streamer.profile?.avatar_url || 
+           streamer.profiles?.avatar_url || 
+           `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName)}`;
+  };
+
+  // Fonction pour obtenir le nom d'affichage d'un streamer
+  const getStreamerDisplayName = (streamer: any) => {
+    return streamer.profile?.twitch_display_name || 
+           streamer.profiles?.twitch_display_name || 
+           streamer.profile?.twitch_username || 
+           streamer.profiles?.twitch_username || 
+           'Streamer inconnu';
+  };
+
   if (loading && loadingTwitch) {
     return (
       <div className="min-h-screen bg-background">
@@ -170,14 +192,14 @@ export default function Discovery() {
                       {/* Header with Avatar and Status */}
                       <div className="flex items-center space-x-3 mb-4">
                         <Avatar className="h-12 w-12">
-                          <AvatarImage src={streamer.profile?.avatar_url || ''} />
+                          <AvatarImage src={getStreamerAvatar(streamer)} alt={getStreamerDisplayName(streamer)} />
                           <AvatarFallback>
-                            {streamer.profile?.twitch_display_name?.charAt(0) || 'S'}
+                            {getStreamerDisplayName(streamer).charAt(0).toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
                         <div className="flex-1">
                           <h3 className="font-semibold text-lg">
-                            {streamer.profile?.twitch_display_name || streamer.profile?.twitch_username || 'Streamer inconnu'}
+                            {getStreamerDisplayName(streamer)}
                           </h3>
                           <div className="flex items-center space-x-2">
                             {streamer.is_live ? (
@@ -305,6 +327,10 @@ export default function Discovery() {
                             src={stream.thumbnail_url.replace('{width}', '440').replace('{height}', '248')} 
                             alt={stream.title}
                             className="w-full h-auto"
+                            onError={(e) => {
+                              const target = e.target as HTMLImageElement;
+                              target.src = 'https://via.placeholder.com/440x248/667eea/ffffff?text=Stream+Live';
+                            }}
                           />
                           <Badge className="absolute top-2 right-2 bg-red-500 text-white">
                             <Radio className="w-3 h-3 mr-1" />
@@ -316,14 +342,15 @@ export default function Discovery() {
                           {/* Header with Avatar and Name */}
                           <div className="flex items-center space-x-3 mb-3">
                             <Avatar className="h-10 w-10">
+                              <AvatarImage src={stream.profile_image_url} alt={stream.user_name} />
                               <AvatarFallback>
-                                {stream.user_name.charAt(0)}
+                                {stream.user_name.charAt(0).toUpperCase()}
                               </AvatarFallback>
                             </Avatar>
                             <div className="flex-1">
                               <h3 className="font-semibold">{stream.user_name}</h3>
                               <p className="text-xs text-muted-foreground">
-                                {stream.game_name}
+                                {stream.game_name || 'Juste bavardage'}
                               </p>
                             </div>
                           </div>

@@ -60,6 +60,12 @@ interface PauvrathonStreamer {
     avatar_url?: string;
     twitch_id?: string;
   };
+  profiles?: {
+    twitch_username?: string;
+    twitch_display_name?: string;
+    avatar_url?: string;
+    twitch_id?: string;
+  };
 }
 
 export default function Following() {
@@ -86,27 +92,48 @@ export default function Following() {
     try {
       setLoadingTwitch(true);
       
-      // Appel à votre fonction Supabase pour récupérer les follows Twitch
-      const { data, error } = await supabase.functions.invoke('get-twitch-follows', {
-        body: { user_id: user.id }
-      });
+      // Tentative principale pour obtenir les follows
+      try {
+        const { data, error } = await supabase.functions.invoke('get-twitch-follows', {
+          body: { user_id: user.id }
+        });
 
-      if (error) throw error;
-      
-      if (data && data.streams) {
-        setTwitchLiveStreamers(data.streams);
-      } else {
-        setTwitchLiveStreamers([]);
+        if (error) throw error;
+        
+        if (data && data.streams) {
+          setTwitchLiveStreamers(data.streams);
+          return; // Succès, sortir de la fonction
+        }
+      } catch (primaryError) {
+        console.error('Erreur principale Twitch API:', primaryError);
+        
+        // Plan B: Tenter d'utiliser l'API de recherche
+        try {
+          const { data: searchData } = await supabase.functions.invoke('search-twitch-streams', {
+            body: { query: 'subathon' }
+          });
+          
+          if (searchData && searchData.streams) {
+            // Utiliser les résultats de recherche comme fallback
+            setTwitchLiveStreamers(searchData.streams.slice(0, 6)); // Limiter à 6 streams
+            toast({
+              title: "Information",
+              description: "Affichage des streams populaires au lieu de vos follows.",
+            });
+            return;
+          }
+        } catch (secondaryError) {
+          console.error('Erreur secondaire Twitch API:', secondaryError);
+          // Continuer avec une liste vide
+        }
       }
+      
+      // Si on arrive ici, aucune méthode n'a fonctionné
+      setTwitchLiveStreamers([]);
       
     } catch (error) {
       console.error('Erreur récupération streams Twitch:', error);
       setTwitchLiveStreamers([]);
-      toast({
-        title: "Erreur",
-        description: "Impossible de récupérer vos follows Twitch en direct.",
-        variant: "destructive",
-      });
     } finally {
       setLoadingTwitch(false);
     }
@@ -150,18 +177,24 @@ export default function Following() {
 
   const getStreamerDisplayName = (streamer: PauvrathonStreamer) => {
     return streamer.profile?.twitch_display_name || 
+           streamer.profiles?.twitch_display_name ||
            streamer.profile?.twitch_username ||
+           streamer.profiles?.twitch_username ||
            'Streamer';
   };
 
   const getStreamerUsername = (streamer: PauvrathonStreamer) => {
     return streamer.profile?.twitch_username || 
+           streamer.profiles?.twitch_username ||
            'unknown';
   };
 
   const getStreamerAvatar = (streamer: PauvrathonStreamer) => {
     return streamer.profile?.avatar_url || 
-           null;
+           streamer.profiles?.avatar_url ||
+           `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
+             getStreamerDisplayName(streamer)
+           )}`;
   };
 
   // Filtre des streamers Pauvrathon
@@ -308,7 +341,7 @@ export default function Following() {
                               <div className="flex items-center space-x-4">
                                 <div className="relative">
                                   <Avatar className="h-12 w-12">
-                                    <AvatarImage src={avatar || ''} alt={displayName} />
+                                    <AvatarImage src={avatar} alt={displayName} />
                                     <AvatarFallback>
                                       {displayName.charAt(0).toUpperCase()}
                                     </AvatarFallback>
@@ -407,7 +440,7 @@ export default function Following() {
                               <div className="flex items-center space-x-4">
                                 <div className="relative">
                                   <Avatar className="h-12 w-12">
-                                    <AvatarImage src={avatar || ''} alt={displayName} />
+                                    <AvatarImage src={avatar} alt={displayName} />
                                     <AvatarFallback>
                                       {displayName.charAt(0).toUpperCase()}
                                     </AvatarFallback>
@@ -504,7 +537,7 @@ export default function Following() {
                               <div className="flex items-center space-x-4">
                                 <div className="relative">
                                   <Avatar className="h-12 w-12">
-                                    <AvatarImage src={avatar || ''} alt={displayName} />
+                                    <AvatarImage src={avatar} alt={displayName} />
                                     <AvatarFallback>
                                       {displayName.charAt(0).toUpperCase()}
                                     </AvatarFallback>
@@ -635,25 +668,25 @@ export default function Following() {
                           <CardTitle className="text-lg truncate">{stream.user_name}</CardTitle>
                           <p className="text-sm text-muted-foreground truncate">{stream.game_name || 'Juste bavardage'}</p>
                         </div>
+                        </div>
                       </div>
                     </CardHeader>
-                    
                     <CardContent className="pt-2">
-                      <p className="text-sm text-muted-foreground mb-4 line-clamp-2">{stream.title}</p>
-                      <Button asChild className="w-full">
-                        <a href={`https://twitch.tv/${stream.user_login}`} target="_blank" rel="noopener noreferrer">
-                          <ArrowUpRight className="w-4 h-4 mr-2" />
-                          Regarder sur Twitch
-                        </a>
-                      </Button>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
-      </div>
-    </div>
-  );
+                  <p className="text-sm text-muted-foreground mb-4 line-clamp-2">{stream.title}</p>
+                  <Button asChild className="w-full">
+                    <a href={`https://twitch.tv/${stream.user_login}`} target="_blank" rel="noopener noreferrer">
+                      <ArrowUpRight className="w-4 h-4 mr-2" />
+                      Regarder sur Twitch
+                    </a>
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </TabsContent>
+    </Tabs>
+  </div>
+</div>
+);
 }
