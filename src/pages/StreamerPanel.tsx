@@ -161,7 +161,7 @@ export default function StreamerPanel() {
 
   useEffect(() => {
     if (streamer) {
-      setSubathonUrl(`${window.location.origin}/subathon/${streamer.id}`);
+      setSubathonUrl(`${window.location.origin}/streamer/${streamer.id}`);
     }
   }, [streamer]);
 
