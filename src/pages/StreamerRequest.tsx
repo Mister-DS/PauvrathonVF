@@ -63,11 +63,11 @@ export default function StreamerRequest() {
 
         if (createProfileError) throw createProfileError;
         
-        // Maintenant, créer la demande avec la référence au profil créé
+        // Maintenant, créer la demande avec l'ID de l'utilisateur authentifié
         const { error } = await supabase
           .from('streamer_requests')
           .insert({
-            user_id: newProfile.id, // Important: Utilisez l'ID du profil, pas l'ID de l'utilisateur
+            user_id: user.id, // Utiliser l'ID de l'utilisateur authentifié pour RLS
             twitch_username: formData.twitchUsername,
             stream_link: formData.streamLink,
             motivation: formData.motivation,
@@ -75,11 +75,11 @@ export default function StreamerRequest() {
 
         if (error) throw error;
       } else {
-        // Le profil existe, utilisez son ID
+        // Le profil existe, utiliser l'ID de l'utilisateur authentifié
         const { error } = await supabase
           .from('streamer_requests')
           .insert({
-            user_id: profileData.id, // Important: Utilisez l'ID du profil, pas l'ID de l'utilisateur
+            user_id: user.id, // Utiliser l'ID de l'utilisateur authentifié pour RLS
             twitch_username: formData.twitchUsername,
             stream_link: formData.streamLink,
             motivation: formData.motivation,

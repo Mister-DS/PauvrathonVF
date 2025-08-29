@@ -251,7 +251,7 @@ const handleStatusChange = async (newStatus: 'live' | 'paused' | 'offline' | 'en
         toast({
           title: "Attention",
           description: "Vous n'avez sélectionné aucun mini-jeu. Les viewers ne pourront pas jouer.",
-          variant: "warning",
+          variant: "default",
         });
       }
     }
