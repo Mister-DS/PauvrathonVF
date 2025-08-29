@@ -228,60 +228,91 @@ export default function StreamerPanel() {
     }
   };
 
-  const handleStatusChange = async (newStatus: 'live' | 'paused' | 'offline' | 'ended') => {
-    if (!streamer) return;
+  // Dans StreamerPanel.tsx, modifiez la fonction handleStatusChange
 
-    try {
-      const updateData: any = { 
-        status: newStatus,
-        is_live: newStatus === 'live'
-      };
+const handleStatusChange = async (newStatus: 'live' | 'paused' | 'offline' | 'ended') => {
+  if (!streamer) return;
 
-      // Si on démarre, enregistrer le timestamp
-      if (newStatus === 'live' && settings.status !== 'live') {
-        updateData.stream_started_at = new Date().toISOString();
-      }
+  try {
+    // Ajouter un délai avant la mise à jour pour éviter les problèmes de concurrence
+    await new Promise(resolve => setTimeout(resolve, 100));
 
-      // Si on met en pause, enregistrer le timestamp
-      if (newStatus === 'paused') {
-        updateData.pause_started_at = new Date().toISOString();
-      }
+    const updateData: any = { 
+      status: newStatus,
+      is_live: newStatus === 'live'
+    };
 
-      // Si on termine, remettre à zéro
-      if (newStatus === 'ended') {
-        updateData.current_clicks = 0;
-      }
-
-      const { error } = await supabase
-        .from('streamers')
-        .update(updateData)
-        .eq('id', streamer.id);
-
-      if (error) throw error;
-
-      setStreamer(prev => prev ? { ...prev, ...updateData } : null);
-      setSettings(prev => ({ ...prev, status: newStatus }));
+    // Si on démarre, enregistrer le timestamp
+    if (newStatus === 'live' && settings.status !== 'live') {
+      updateData.stream_started_at = new Date().toISOString();
       
-      const statusMessages = {
-        live: "Stream en direct",
-        paused: "Stream en pause", 
-        offline: "Stream hors ligne",
-        ended: "Pauvrathon terminé"
-      };
-
-      toast({
-        title: statusMessages[newStatus],
-        description: `Votre pauvrathon est maintenant ${newStatus === 'live' ? 'en direct' : newStatus === 'paused' ? 'en pause' : newStatus === 'ended' ? 'terminé' : 'hors ligne'}.`,
-      });
-    } catch (error) {
-      console.error('Error updating status:', error);
-      toast({
-        title: "Erreur",
-        description: "Impossible de mettre à jour le statut.",
-        variant: "destructive",
-      });
+      // S'assurer que les mini-jeux sont correctement configurés avant de démarrer
+      if (!settings.active_minigames || settings.active_minigames.length === 0) {
+        toast({
+          title: "Attention",
+          description: "Vous n'avez sélectionné aucun mini-jeu. Les viewers ne pourront pas jouer.",
+          variant: "warning",
+        });
+      }
     }
-  };
+
+    // Si on met en pause, enregistrer le timestamp
+    if (newStatus === 'paused') {
+      updateData.pause_started_at = new Date().toISOString();
+    }
+
+    // Si on termine, remettre à zéro
+    if (newStatus === 'ended') {
+      updateData.current_clicks = 0;
+    }
+
+    // Ajouter une vérification pour s'assurer que les paramètres essentiels sont définis
+    if (newStatus === 'live' && (!settings.clicks_required || settings.clicks_required <= 0)) {
+      updateData.clicks_required = 100; // Valeur par défaut
+    }
+
+    // Mettre à jour les paramètres locaux avant la base de données
+    setSettings(prev => ({ ...prev, status: newStatus }));
+
+    // Mettre à jour la base de données
+    const { error } = await supabase
+      .from('streamers')
+      .update(updateData)
+      .eq('id', streamer.id);
+
+    if (error) throw error;
+
+    // Mettre à jour l'état local après confirmation de la mise à jour en DB
+    setStreamer(prev => prev ? { ...prev, ...updateData } : null);
+    
+    const statusMessages = {
+      live: "Stream en direct",
+      paused: "Stream en pause", 
+      offline: "Stream hors ligne",
+      ended: "Pauvrathon terminé"
+    };
+
+    toast({
+      title: statusMessages[newStatus],
+      description: `Votre pauvrathon est maintenant ${newStatus === 'live' ? 'en direct' : newStatus === 'paused' ? 'en pause' : newStatus === 'ended' ? 'terminé' : 'hors ligne'}.`,
+    });
+
+    // Si nécessaire, rafraîchir les données après la mise à jour
+    if (newStatus === 'live') {
+      await fetchStreamerData();
+    }
+  } catch (error) {
+    console.error('Error updating status:', error);
+    toast({
+      title: "Erreur",
+      description: "Impossible de mettre à jour le statut.",
+      variant: "destructive",
+    });
+    
+    // Revenir à l'état précédent en cas d'erreur
+    setSettings(prev => ({ ...prev, status: streamer.status }));
+  }
+};
 
   const topContributor = stats.length > 0 ? stats[0] : null;
 
