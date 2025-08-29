@@ -49,6 +49,10 @@ export interface Streamer {
   stream_title?: string;
   time_mode: 'fixed' | 'random';
   max_random_time: number;
+  initial_duration: number;
+  stream_started_at?: string | null;
+  pause_started_at?: string | null;
+  total_paused_duration?: number;
   created_at: string;
   updated_at: string;
   profile?: Profile | null;

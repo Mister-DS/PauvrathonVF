@@ -164,9 +164,12 @@ const SubathonPage = () => {
 
           data = {
             ...streamerResponse.data,
-            profiles: profileResponse.data || null,
-            profile: profileResponse.data || null
+            profiles: profileResponse.data || null
           };
+          // Ajouter aussi profile pour compatibilité
+          if (profileResponse.data) {
+            (data as any).profile = profileResponse.data;
+          }
         }
       }
 
@@ -366,8 +369,8 @@ const SubathonPage = () => {
   };
 
   const checkStreamStatus = async () => {
-    if (!streamer?.profiles?.twitch_username && !streamer?.profile?.twitch_username) return;
-    const twitchUsername = streamer?.profiles?.twitch_username || streamer?.profile?.twitch_username;
+    if (!streamer?.profile?.twitch_username) return;
+    const twitchUsername = streamer?.profile?.twitch_username;
 
     try {
       const response = await fetch(`/api/twitch/stream-status/${twitchUsername}`);
@@ -548,26 +551,21 @@ const SubathonPage = () => {
 
   const getTwitchUsername = () => {
     if (!streamer) return null;
-    return streamer?.profiles?.twitch_username || 
-           streamer?.profile?.twitch_username || 
-           streamer?.profiles?.twitch_display_name?.replace(/\s+/g, '').toLowerCase() ||
+    return streamer?.profile?.twitch_username || 
            streamer?.profile?.twitch_display_name?.replace(/\s+/g, '').toLowerCase() ||
            null;
   };
 
   const getDisplayName = () => {
     if (!streamer) return 'Streamer inconnu';
-    return streamer?.profiles?.twitch_display_name || 
-           streamer?.profile?.twitch_display_name ||
-           streamer?.profiles?.twitch_username ||
+    return streamer?.profile?.twitch_display_name || 
            streamer?.profile?.twitch_username ||
            'Streamer inconnu';
   };
 
   const getAvatarUrl = () => {
     if (!streamer) return null;
-    return streamer?.profiles?.avatar_url || 
-           streamer?.profile?.avatar_url || 
+    return streamer?.profile?.avatar_url || 
            null;
   };
 

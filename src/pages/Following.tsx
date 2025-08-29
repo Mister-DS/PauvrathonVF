@@ -46,12 +46,6 @@ interface PauvrathonStreamer {
   stream_title?: string;
   active_minigames: string[];
   initial_duration: number;
-  profiles?: {
-    twitch_username?: string;
-    twitch_display_name?: string;
-    avatar_url?: string;
-    twitch_id?: string;
-  };
   profile?: {
     twitch_username?: string;
     twitch_display_name?: string;
@@ -197,21 +191,17 @@ export default function Following() {
 
   const getStreamerDisplayName = (streamer: PauvrathonStreamer) => {
     return streamer.profile?.twitch_display_name || 
-           streamer.profiles?.twitch_display_name ||
            streamer.profile?.twitch_username ||
-           streamer.profiles?.twitch_username ||
            'Streamer';
   };
 
   const getStreamerUsername = (streamer: PauvrathonStreamer) => {
     return streamer.profile?.twitch_username || 
-           streamer.profiles?.twitch_username ||
            'unknown';
   };
 
   const getStreamerAvatar = (streamer: PauvrathonStreamer) => {
     return streamer.profile?.avatar_url || 
-           streamer.profiles?.avatar_url ||
            null;
   };
 
