@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,7 +25,11 @@ import {
   Pause,
   RotateCcw,
   Dice1,
-  Square
+  Square,
+  Eye,
+  TrendingUp,
+  Zap,
+  Link
 } from 'lucide-react';
 
 interface Minigame {
@@ -36,8 +40,85 @@ interface Minigame {
   is_active: boolean;
 }
 
+// Composant pour afficher le temps écoulé depuis le début du stream
+const LiveTimer = ({ startTime }: { startTime: string | null }) => {
+  const [elapsedTime, setElapsedTime] = useState(0);
+
+  useEffect(() => {
+    if (!startTime) return;
+
+    const calculateElapsedTime = () => {
+      const start = new Date(startTime).getTime();
+      const now = new Date().getTime();
+      setElapsedTime(Math.floor((now - start) / 1000));
+    };
+
+    calculateElapsedTime();
+    const interval = setInterval(calculateElapsedTime, 1000);
+
+    return () => clearInterval(interval);
+  }, [startTime]);
+
+  const formatTime = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  if (!startTime) return null;
+
+  return (
+    <div className="flex items-center justify-center p-4 bg-gradient-to-r from-red-500 to-orange-500 text-white rounded-lg">
+      <div className="text-center">
+        <div className="flex items-center justify-center mb-2">
+          <div className="w-3 h-3 bg-red-400 rounded-full animate-pulse mr-2"></div>
+          <span className="font-semibold">EN DIRECT</span>
+        </div>
+        <div className="text-2xl font-mono font-bold">{formatTime(elapsedTime)}</div>
+        <p className="text-sm opacity-80 mt-1">Temps écoulé</p>
+      </div>
+    </div>
+  );
+};
+
+// Composant pour les statistiques en direct
+const LiveStats = ({ streamer, stats }: { streamer: Streamer, stats: SubathonStats[] }) => {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white p-4 rounded-lg text-center">
+        <Zap className="mx-auto h-6 w-6 mb-2" />
+        <div className="text-2xl font-bold">{streamer.current_clicks}</div>
+        <p className="text-sm opacity-80">Clics actuels</p>
+      </div>
+      
+      <div className="bg-gradient-to-br from-green-500 to-emerald-600 text-white p-4 rounded-lg text-center">
+        <Clock className="mx-auto h-6 w-6 mb-2" />
+        <div className="text-2xl font-bold">{streamer.total_time_added}s</div>
+        <p className="text-sm opacity-80">Temps ajouté</p>
+      </div>
+      
+      <div className="bg-gradient-to-br from-purple-500 to-pink-600 text-white p-4 rounded-lg text-center">
+        <Eye className="mx-auto h-6 w-6 mb-2" />
+        <div className="text-2xl font-bold">{stats.length}</div>
+        <p className="text-sm opacity-80">Participants</p>
+      </div>
+      
+      <div className="bg-gradient-to-br from-amber-500 to-orange-600 text-white p-4 rounded-lg text-center">
+        <TrendingUp className="mx-auto h-6 w-6 mb-2" />
+        <div className="text-2xl font-bold">
+          {stats.reduce((sum, stat) => sum + stat.games_played, 0)}
+        </div>
+        <p className="text-sm opacity-80">Parties jouées</p>
+      </div>
+    </div>
+  );
+};
+
 export default function StreamerPanel() {
   const { user, profile } = useAuth();
+  const navigate = useNavigate();
   const [streamer, setStreamer] = useState<Streamer | null>(null);
   const [stats, setStats] = useState<SubathonStats[]>([]);
   const [availableMinigames, setAvailableMinigames] = useState<Minigame[]>([]);
@@ -57,6 +138,7 @@ export default function StreamerPanel() {
   // Configuration du temps initial
   const [initialHours, setInitialHours] = useState(2);
   const [initialMinutes, setInitialMinutes] = useState(0);
+  const [subathonUrl, setSubathonUrl] = useState('');
 
   // Redirect if not authenticated or not a streamer
   if (!user || (profile?.role !== 'streamer' && profile?.role !== 'admin')) {
@@ -71,10 +153,17 @@ export default function StreamerPanel() {
     // Set up real-time updates for streamer data
     const interval = setInterval(() => {
       fetchStreamerData();
-    }, 30000); // Refresh every 30 seconds
+      fetchStats();
+    }, 5000); // Refresh every 5 seconds for live data
 
     return () => clearInterval(interval);
   }, [user]);
+
+  useEffect(() => {
+    if (streamer) {
+      setSubathonUrl(`${window.location.origin}/subathon/${streamer.id}`);
+    }
+  }, [streamer]);
 
   const fetchStreamerData = async () => {
     if (!user) return;
@@ -228,91 +317,97 @@ export default function StreamerPanel() {
     }
   };
 
-  // Dans StreamerPanel.tsx, modifiez la fonction handleStatusChange
+  const handleStatusChange = async (newStatus: 'live' | 'paused' | 'offline' | 'ended') => {
+    if (!streamer) return;
 
-const handleStatusChange = async (newStatus: 'live' | 'paused' | 'offline' | 'ended') => {
-  if (!streamer) return;
+    try {
+      // Ajouter un délai avant la mise à jour pour éviter les problèmes de concurrence
+      await new Promise(resolve => setTimeout(resolve, 100));
 
-  try {
-    // Ajouter un délai avant la mise à jour pour éviter les problèmes de concurrence
-    await new Promise(resolve => setTimeout(resolve, 100));
+      const updateData: any = { 
+        status: newStatus,
+        is_live: newStatus === 'live'
+      };
 
-    const updateData: any = { 
-      status: newStatus,
-      is_live: newStatus === 'live'
-    };
-
-    // Si on démarre, enregistrer le timestamp
-    if (newStatus === 'live' && settings.status !== 'live') {
-      updateData.stream_started_at = new Date().toISOString();
-      
-      // S'assurer que les mini-jeux sont correctement configurés avant de démarrer
-      if (!settings.active_minigames || settings.active_minigames.length === 0) {
-        toast({
-          title: "Attention",
-          description: "Vous n'avez sélectionné aucun mini-jeu. Les viewers ne pourront pas jouer.",
-          variant: "default",
-        });
+      // Si on démarre, enregistrer le timestamp
+      if (newStatus === 'live' && settings.status !== 'live') {
+        updateData.stream_started_at = new Date().toISOString();
+        
+        // S'assurer que les mini-jeux sont correctement configurés avant de démarrer
+        if (!settings.active_minigames || settings.active_minigames.length === 0) {
+          toast({
+            title: "Attention",
+            description: "Vous n'avez sélectionné aucun mini-jeu. Les viewers ne pourront pas jouer.",
+            variant: "default",
+          });
+        }
       }
+
+      // Si on met en pause, enregistrer le timestamp
+      if (newStatus === 'paused') {
+        updateData.pause_started_at = new Date().toISOString();
+      }
+
+      // Si on termine, remettre à zéro
+      if (newStatus === 'ended') {
+        updateData.current_clicks = 0;
+      }
+
+      // Ajouter une vérification pour s'assurer que les paramètres essentiels sont définis
+      if (newStatus === 'live' && (!settings.clicks_required || settings.clicks_required <= 0)) {
+        updateData.clicks_required = 100; // Valeur par défaut
+      }
+
+      // Mettre à jour les paramètres locaux avant la base de données
+      setSettings(prev => ({ ...prev, status: newStatus }));
+
+      // Mettre à jour la base de données
+      const { error } = await supabase
+        .from('streamers')
+        .update(updateData)
+        .eq('id', streamer.id);
+
+      if (error) throw error;
+
+      // Mettre à jour l'état local après confirmation de la mise à jour en DB
+      setStreamer(prev => prev ? { ...prev, ...updateData } : null);
+      
+      const statusMessages = {
+        live: "Stream en direct",
+        paused: "Stream en pause", 
+        offline: "Stream hors ligne",
+        ended: "Pauvrathon terminé"
+      };
+
+      toast({
+        title: statusMessages[newStatus],
+        description: `Votre pauvrathon est maintenant ${newStatus === 'live' ? 'en direct' : newStatus === 'paused' ? 'en pause' : newStatus === 'ended' ? 'terminé' : 'hors ligne'}.`,
+      });
+
+      // Si nécessaire, rafraîchir les données après la mise à jour
+      if (newStatus === 'live') {
+        await fetchStreamerData();
+      }
+    } catch (error) {
+      console.error('Error updating status:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de mettre à jour le statut.",
+        variant: "destructive",
+      });
+      
+      // Revenir à l'état précédent en cas d'erreur
+      setSettings(prev => ({ ...prev, status: streamer.status }));
     }
+  };
 
-    // Si on met en pause, enregistrer le timestamp
-    if (newStatus === 'paused') {
-      updateData.pause_started_at = new Date().toISOString();
-    }
-
-    // Si on termine, remettre à zéro
-    if (newStatus === 'ended') {
-      updateData.current_clicks = 0;
-    }
-
-    // Ajouter une vérification pour s'assurer que les paramètres essentiels sont définis
-    if (newStatus === 'live' && (!settings.clicks_required || settings.clicks_required <= 0)) {
-      updateData.clicks_required = 100; // Valeur par défaut
-    }
-
-    // Mettre à jour les paramètres locaux avant la base de données
-    setSettings(prev => ({ ...prev, status: newStatus }));
-
-    // Mettre à jour la base de données
-    const { error } = await supabase
-      .from('streamers')
-      .update(updateData)
-      .eq('id', streamer.id);
-
-    if (error) throw error;
-
-    // Mettre à jour l'état local après confirmation de la mise à jour en DB
-    setStreamer(prev => prev ? { ...prev, ...updateData } : null);
-    
-    const statusMessages = {
-      live: "Stream en direct",
-      paused: "Stream en pause", 
-      offline: "Stream hors ligne",
-      ended: "Pauvrathon terminé"
-    };
-
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(subathonUrl);
     toast({
-      title: statusMessages[newStatus],
-      description: `Votre pauvrathon est maintenant ${newStatus === 'live' ? 'en direct' : newStatus === 'paused' ? 'en pause' : newStatus === 'ended' ? 'terminé' : 'hors ligne'}.`,
+      title: "Lien copié",
+      description: "Le lien de votre pauvrathon a été copié dans le presse-papier.",
     });
-
-    // Si nécessaire, rafraîchir les données après la mise à jour
-    if (newStatus === 'live') {
-      await fetchStreamerData();
-    }
-  } catch (error) {
-    console.error('Error updating status:', error);
-    toast({
-      title: "Erreur",
-      description: "Impossible de mettre à jour le statut.",
-      variant: "destructive",
-    });
-    
-    // Revenir à l'état précédent en cas d'erreur
-    setSettings(prev => ({ ...prev, status: streamer.status }));
-  }
-};
+  };
 
   const topContributor = stats.length > 0 ? stats[0] : null;
 
@@ -369,9 +464,31 @@ const handleStatusChange = async (newStatus: 'live' | 'paused' | 'offline' | 'en
           </p>
         </div>
 
+        {/* Affichage du timer en direct si le stream est live */}
+        {streamer.status === 'live' && (
+          <div className="mb-6">
+            <LiveTimer startTime={streamer.stream_started_at} />
+          </div>
+        )}
+
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Settings */}
           <div className="lg:col-span-2 space-y-6">
+            {/* Statistiques en direct si le stream est live */}
+            {streamer.status === 'live' && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <TrendingUp className="mr-2 h-5 w-5" />
+                    Statistiques en Direct
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <LiveStats streamer={streamer} stats={stats} />
+                </CardContent>
+              </Card>
+            )}
+
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
@@ -678,16 +795,27 @@ const handleStatusChange = async (newStatus: 'live' | 'paused' | 'offline' | 'en
                   </Button>
                 )}
 
-                <Button 
-                  variant="outline" 
-                  className="w-full"
-                  asChild
-                >
-                  <a href={`/subathon/${streamer.id}`} target="_blank">
+                <div className="pt-2 border-t">
+                  <h4 className="text-sm font-medium mb-2">Lien de votre pauvrathon</h4>
+                  <div className="flex items-center space-x-2">
+                    <Input 
+                      value={subathonUrl} 
+                      readOnly 
+                      className="text-xs"
+                    />
+                    <Button size="icon" onClick={copyToClipboard}>
+                      <Link className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    className="w-full mt-2"
+                    onClick={() => window.open(subathonUrl, '_blank')}
+                  >
                     <Play className="mr-2 h-4 w-4" />
-                    Voir ma page Pauvrathon
-                  </a>
-                </Button>
+                    Ouvrir ma page Pauvrathon
+                  </Button>
+                </div>
               </CardContent>
             </Card>
 

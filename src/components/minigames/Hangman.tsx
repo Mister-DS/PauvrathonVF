@@ -10,9 +10,11 @@ interface HangmanProps {
 }
 
 const WORDS = [
-  'JAVASCRIPT', 'TYPESCRIPT', 'REACT', 'TWITCH', 'STREAMER', 'GAMING',
-  'COMPUTER', 'KEYBOARD', 'MONITOR', 'INTERNET', 'WEBSITE', 'BROWSER',
-  'GITHUB', 'CODING', 'PROGRAM', 'FUNCTION', 'VARIABLE', 'ARRAY'
+      "chat", "chien", "maison", "route", "ordinateur", "fenetre", "voiture", "arbre", "pomme", "musique",
+    "plage", "oiseau", "soleil", "montagne", "riviere", "carte", "papier", "stylo", "livre", "porte",
+    "lampe", "table", "chaise", "ville", "pays", "carton", "ciseaux", "pierre", "pont", "feu",
+    "piscine", "lune", "etoile", "nuage", "fleur", "herbe", "cadeau", "bateau", "train", "avion",
+    "guitare", "piano", "violon", "trompette", "flute", "tambour", "sport", "football", "tennis", "voyage"
 ];
 
 export function Hangman({ onWin, onLose, attempts, maxAttempts }: HangmanProps) {
