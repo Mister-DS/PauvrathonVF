@@ -161,7 +161,15 @@ export type Database = {
           twitch_username?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "fk_streamer_requests_profiles"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       streamers: {
         Row: {
@@ -171,12 +179,16 @@ export type Database = {
           created_at: string
           current_clicks: number | null
           id: string
+          initial_duration: number | null
           is_live: boolean | null
           max_random_time: number | null
+          pause_started_at: string | null
           status: string | null
+          stream_started_at: string | null
           stream_title: string | null
           time_increment: number | null
           time_mode: string | null
+          total_paused_duration: number | null
           total_time_added: number | null
           twitch_id: string
           updated_at: string
@@ -189,12 +201,16 @@ export type Database = {
           created_at?: string
           current_clicks?: number | null
           id?: string
+          initial_duration?: number | null
           is_live?: boolean | null
           max_random_time?: number | null
+          pause_started_at?: string | null
           status?: string | null
+          stream_started_at?: string | null
           stream_title?: string | null
           time_increment?: number | null
           time_mode?: string | null
+          total_paused_duration?: number | null
           total_time_added?: number | null
           twitch_id: string
           updated_at?: string
@@ -207,12 +223,16 @@ export type Database = {
           created_at?: string
           current_clicks?: number | null
           id?: string
+          initial_duration?: number | null
           is_live?: boolean | null
           max_random_time?: number | null
+          pause_started_at?: string | null
           status?: string | null
+          stream_started_at?: string | null
           stream_title?: string | null
           time_increment?: number | null
           time_mode?: string | null
+          total_paused_duration?: number | null
           total_time_added?: number | null
           twitch_id?: string
           updated_at?: string
