@@ -32,38 +32,66 @@ export default function StreamerRequest() {
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
+  e.preventDefault();
+  setLoading(true);
 
-    try {
-      const { error } = await supabase
-        .from('streamer_requests')
+  try {
+    // Vérifier si l'utilisateur a un profil
+    const { data: profileData, error: profileError } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('user_id', user.id)
+      .single();
+
+    if (profileError && profileError.code !== 'PGRST116') {
+      // PGRST116 signifie "aucune ligne trouvée", les autres erreurs sont problématiques
+      throw profileError;
+    }
+
+    // Si aucun profil n'existe, en créer un
+    if (!profileData) {
+      const { error: createProfileError } = await supabase
+        .from('profiles')
         .insert({
           user_id: user.id,
           twitch_username: formData.twitchUsername,
-          stream_link: formData.streamLink,
-          motivation: formData.motivation,
+          // Utilisez le nom d'utilisateur comme display_name par défaut si nécessaire
+          twitch_display_name: profile?.twitch_display_name || formData.twitchUsername,
+          // Autres champs obligatoires de la table profiles
         });
 
-      if (error) throw error;
-
-      toast({
-        title: "Demande envoyée !",
-        description: "Votre demande pour devenir streamer a été envoyée. Vous serez notifié de la décision.",
-      });
-
-      navigate('/profil');
-    } catch (error: any) {
-      console.error('Error submitting streamer request:', error);
-      toast({
-        title: "Erreur",
-        description: error.message || "Impossible d'envoyer la demande.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
+      if (createProfileError) throw createProfileError;
     }
-  };
+
+    // Maintenant, soumettre la demande de streamer
+    const { error } = await supabase
+      .from('streamer_requests')
+      .insert({
+        user_id: user.id,
+        twitch_username: formData.twitchUsername,
+        stream_link: formData.streamLink,
+        motivation: formData.motivation,
+      });
+
+    if (error) throw error;
+
+    toast({
+      title: "Demande envoyée !",
+      description: "Votre demande pour devenir streamer a été envoyée. Vous serez notifié de la décision.",
+    });
+
+    navigate('/profil');
+  } catch (error: any) {
+    console.error('Error submitting streamer request:', error);
+    toast({
+      title: "Erreur",
+      description: error.message || "Impossible d'envoyer la demande.",
+      variant: "destructive",
+    });
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));

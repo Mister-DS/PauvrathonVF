@@ -192,12 +192,12 @@ export default function StreamerPanel() {
     }
   };
 
-  const handleMinigameToggle = (minigameCode: string, checked: boolean) => {
+  const handleMinigameToggle = (minigameId: string, checked: boolean) => {
     setSettings(prev => ({
       ...prev,
       active_minigames: checked 
-        ? [...prev.active_minigames, minigameCode]
-        : prev.active_minigames.filter(code => code !== minigameCode)
+        ? [...prev.active_minigames, minigameId]
+        : prev.active_minigames.filter(id => id !== minigameId)
     }));
   };
 
@@ -476,9 +476,9 @@ export default function StreamerPanel() {
                         <div key={minigame.id} className="flex items-center space-x-3 p-3 border rounded">
                           <Checkbox
                             id={`minigame-${minigame.id}`}
-                            checked={settings.active_minigames.includes(minigame.code)}
+                            checked={settings.active_minigames.includes(minigame.id)}
                             onCheckedChange={(checked) => 
-                              handleMinigameToggle(minigame.code, checked as boolean)
+                              handleMinigameToggle(minigame.id, checked as boolean)
                             }
                           />
                           <div className="flex-1">
