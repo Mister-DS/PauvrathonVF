@@ -163,9 +163,10 @@ const SubathonPage = () => {
             .single();
 
           data = {
-            ...streamerResponse.data
+            ...streamerResponse.data,
+            profiles: profileResponse.data || null
           };
-          // Ajouter le profil séparément
+          // Ajouter aussi profile pour compatibilité
           if (profileResponse.data) {
             (data as any).profile = profileResponse.data;
           }
