@@ -31,14 +31,15 @@ export default function StreamerRequest() {
     return <Navigate to="/" replace />;
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      // D'après votre schéma, la FK pointe vers profiles.id et non profiles.user_id
-      // Vérifions d'abord si le profil existe
-      const { data: profileData, error: profileCheckError } = await supabase
+      // Récupérer ou créer le profil pour obtenir son ID
+      let profileId;
+      
+      const { data: existingProfile, error: profileCheckError } = await supabase
         .from('profiles')
         .select('id')
         .eq('user_id', user.id)
@@ -48,8 +49,8 @@ export default function StreamerRequest() {
         throw profileCheckError;
       }
 
-      // Si le profil n'existe pas, créez-le d'abord
-      if (!profileData) {
+      if (!existingProfile) {
+        // Créer le profil s'il n'existe pas
         const { data: newProfile, error: createProfileError } = await supabase
           .from('profiles')
           .insert({
@@ -62,31 +63,39 @@ export default function StreamerRequest() {
           .single();
 
         if (createProfileError) throw createProfileError;
-        
-        // Maintenant, créer la demande avec l'ID de l'utilisateur authentifié
-        const { error } = await supabase
-          .from('streamer_requests')
-          .insert({
-            user_id: user.id, // Utiliser l'ID de l'utilisateur authentifié pour RLS
-            twitch_username: formData.twitchUsername,
-            stream_link: formData.streamLink,
-            motivation: formData.motivation,
-          });
-
-        if (error) throw error;
+        profileId = newProfile.id;
       } else {
-        // Le profil existe, utiliser l'ID de l'utilisateur authentifié
-        const { error } = await supabase
-          .from('streamer_requests')
-          .insert({
-            user_id: user.id, // Utiliser l'ID de l'utilisateur authentifié pour RLS
-            twitch_username: formData.twitchUsername,
-            stream_link: formData.streamLink,
-            motivation: formData.motivation,
-          });
-
-        if (error) throw error;
+        profileId = existingProfile.id;
       }
+
+      // Vérifier s'il n'y a pas déjà une demande en cours
+      const { data: existingRequest } = await supabase
+        .from('streamer_requests')
+        .select('id, status')
+        .eq('user_id', profileId)
+        .eq('status', 'pending')
+        .single();
+
+      if (existingRequest) {
+        toast({
+          title: "Demande déjà en cours",
+          description: "Vous avez déjà une demande en cours d'examen.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Créer la demande avec l'ID du profil
+      const { error } = await supabase
+        .from('streamer_requests')
+        .insert({
+          user_id: profileId, // Utiliser l'ID du profil, pas de l'utilisateur auth
+          twitch_username: formData.twitchUsername,
+          stream_link: formData.streamLink,
+          motivation: formData.motivation,
+        });
+
+      if (error) throw error;
 
       toast({
         title: "Demande envoyée !",
@@ -94,7 +103,7 @@ export default function StreamerRequest() {
       });
 
       navigate('/profil');
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error submitting streamer request:', error);
       toast({
         title: "Erreur",
@@ -106,7 +115,7 @@ export default function StreamerRequest() {
     }
   };
 
-  const handleChange = (field: string, value: string) => {
+  const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 

@@ -10,11 +10,11 @@ interface HangmanProps {
 }
 
 const WORDS = [
-      "chat", "chien", "maison", "route", "ordinateur", "fenetre", "voiture", "arbre", "pomme", "musique",
-    "plage", "oiseau", "soleil", "montagne", "riviere", "carte", "papier", "stylo", "livre", "porte",
-    "lampe", "table", "chaise", "ville", "pays", "carton", "ciseaux", "pierre", "pont", "feu",
-    "piscine", "lune", "etoile", "nuage", "fleur", "herbe", "cadeau", "bateau", "train", "avion",
-    "guitare", "piano", "violon", "trompette", "flute", "tambour", "sport", "football", "tennis", "voyage"
+  "chat", "chien", "maison", "route", "ordinateur", "fenetre", "voiture", "arbre", "pomme", "musique",
+  "plage", "oiseau", "soleil", "montagne", "riviere", "carte", "papier", "stylo", "livre", "porte",
+  "lampe", "table", "chaise", "ville", "pays", "carton", "ciseaux", "pierre", "pont", "feu",
+  "piscine", "lune", "etoile", "nuage", "fleur", "herbe", "cadeau", "bateau", "train", "avion",
+  "guitare", "piano", "violon", "trompette", "flute", "tambour", "sport", "football", "tennis", "voyage"
 ];
 
 export function Hangman({ onWin, onLose, attempts, maxAttempts }: HangmanProps) {
@@ -25,18 +25,20 @@ export function Hangman({ onWin, onLose, attempts, maxAttempts }: HangmanProps) 
 
   useEffect(() => {
     const randomWord = WORDS[Math.floor(Math.random() * WORDS.length)];
-    setWord(randomWord);
+    setWord(randomWord.toLowerCase()); // S'assurer que le mot est en minuscules
   }, []);
 
   const handleLetterGuess = (letter: string) => {
-    if (guessedLetters.has(letter)) return;
+    const lowerLetter = letter.toLowerCase(); // Convertir en minuscules pour la comparaison
+    
+    if (guessedLetters.has(lowerLetter)) return;
 
     const newGuessedLetters = new Set(guessedLetters);
-    newGuessedLetters.add(letter);
+    newGuessedLetters.add(lowerLetter);
     setGuessedLetters(newGuessedLetters);
 
-    if (!word.includes(letter)) {
-      const newWrongGuesses = [...wrongGuesses, letter];
+    if (!word.includes(lowerLetter)) {
+      const newWrongGuesses = [...wrongGuesses, letter]; // Garder la lettre majuscule pour l'affichage
       setWrongGuesses(newWrongGuesses);
       
       const newAttempts = currentAttempts + 1;
@@ -50,7 +52,7 @@ export function Hangman({ onWin, onLose, attempts, maxAttempts }: HangmanProps) 
 
   const displayWord = word
     .split('')
-    .map(letter => guessedLetters.has(letter) ? letter : '_')
+    .map(letter => guessedLetters.has(letter) ? letter.toUpperCase() : '_') // Afficher en majuscules
     .join(' ');
 
   const isWon = word.split('').every(letter => guessedLetters.has(letter));
@@ -59,10 +61,10 @@ export function Hangman({ onWin, onLose, attempts, maxAttempts }: HangmanProps) 
   useEffect(() => {
     if (isWon && word) {
       // Calculer le score basé sur les erreurs (moins d'erreurs = meilleur score)
-      const score = Math.max(1, maxAttempts - currentAttempts + 1);
+      const score = Math.max(1, maxAttempts - wrongGuesses.length);
       setTimeout(() => onWin(score), 1000);
     }
-  }, [isWon, word, onWin, maxAttempts, currentAttempts]);
+  }, [isWon, word, onWin, maxAttempts, wrongGuesses.length]);
 
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
   const remainingAttempts = maxAttempts - currentAttempts;
@@ -75,7 +77,7 @@ export function Hangman({ onWin, onLose, attempts, maxAttempts }: HangmanProps) 
     '  +---+\n  |   |\n  O   |\n  |   |\n      |\n      |\n=========',
     '  +---+\n  |   |\n  O   |\n /|   |\n      |\n      |\n=========',
     '  +---+\n  |   |\n  O   |\n /|\\  |\n      |\n      |\n=========',
-    '  +---+\n  |   |\n  O   |\n /|\\  |\n /    |\n      |\n=========',
+    '  +---+\n  |   |\n  O   |\n /|\\  |\n /    |\n      |\n      |\n=========',
     '  +---+\n  |   |\n  O   |\n /|\\  |\n / \\  |\n      |\n=========',
     '  +---+\n  |   |\n  O   |\n /|\\  |\n / \\  |\n  |   |\n=========',
     '  +---+\n  |   |\n  O   |\n /|\\  |\n / \\  |\n  |   |\n=========\n Game Over!',
@@ -107,6 +109,12 @@ export function Hangman({ onWin, onLose, attempts, maxAttempts }: HangmanProps) 
           <p className="text-2xl font-mono tracking-wider mb-4">
             {displayWord}
           </p>
+          {/* Affichage de debug en mode développement */}
+          {process.env.NODE_ENV === 'development' && (
+            <p className="text-xs text-muted-foreground">
+              Debug: Mot = "{word}"
+            </p>
+          )}
         </div>
 
         {isWon && (
@@ -120,28 +128,33 @@ export function Hangman({ onWin, onLose, attempts, maxAttempts }: HangmanProps) 
         {isLost && (
           <div className="text-center p-2 rounded bg-red-100 dark:bg-red-900">
             <p className="font-medium text-red-600 dark:text-red-400">
-              💀 Perdu ! Le mot était: {word}
+              💀 Perdu ! Le mot était: {word.toUpperCase()}
             </p>
           </div>
         )}
 
         {!isWon && !isLost && (
           <div className="grid grid-cols-6 gap-1">
-            {alphabet.map(letter => (
-              <Button
-                key={letter}
-                variant={guessedLetters.has(letter) ? 
-                  (word.includes(letter) ? 'default' : 'destructive') : 
-                  'outline'
-                }
-                size="sm"
-                onClick={() => handleLetterGuess(letter)}
-                disabled={guessedLetters.has(letter)}
-                className="text-xs p-1 h-8"
-              >
-                {letter}
-              </Button>
-            ))}
+            {alphabet.map(letter => {
+              const isGuessed = guessedLetters.has(letter.toLowerCase());
+              const isCorrect = word.includes(letter.toLowerCase());
+              
+              return (
+                <Button
+                  key={letter}
+                  variant={isGuessed ? 
+                    (isCorrect ? 'default' : 'destructive') : 
+                    'outline'
+                  }
+                  size="sm"
+                  onClick={() => handleLetterGuess(letter)}
+                  disabled={isGuessed}
+                  className="text-xs p-1 h-8"
+                >
+                  {letter}
+                </Button>
+              );
+            })}
           </div>
         )}
 
@@ -149,6 +162,15 @@ export function Hangman({ onWin, onLose, attempts, maxAttempts }: HangmanProps) 
           <div className="text-center">
             <p className="text-sm text-muted-foreground">
               Lettres incorrectes: {wrongGuesses.join(', ')}
+            </p>
+          </div>
+        )}
+
+        {/* Aide visuelle pour les lettres trouvées */}
+        {guessedLetters.size > 0 && !isWon && !isLost && (
+          <div className="text-center">
+            <p className="text-xs text-muted-foreground">
+              Lettres trouvées: {Array.from(guessedLetters).filter(letter => word.includes(letter)).map(l => l.toUpperCase()).join(', ')}
             </p>
           </div>
         )}

@@ -1,4 +1,3 @@
-// src/pages/SubathonPage.tsx
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -12,13 +11,14 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { GuessNumber } from '@/components/minigames/GuessNumber';
 import { Hangman } from '@/components/minigames/Hangman';
+import { DynamicGame, useDynamicGames } from '@/components/DynamicGame';
 import { TwitchPlayer } from '@/components/TwitchPlayer';
 import { Navigation } from '@/components/Navigation';
 import { toast } from '@/hooks/use-toast';
 import { Streamer } from '@/types';
 import { 
   Maximize, Minimize, Trophy, RotateCcw, AlertTriangle, 
-  Wifi, Play, Pause, Square, Clock, Settings 
+  Wifi, Play, Pause, Square, Clock, Settings, Gamepad2
 } from 'lucide-react';
 
 const SubathonPage = () => {
@@ -30,7 +30,7 @@ const SubathonPage = () => {
   const [currentClicks, setCurrentClicks] = useState(0);
   const [clicksRequired, setClicksRequired] = useState(10);
   const [showMinigame, setShowMinigame] = useState(false);
-  const [currentGame, setCurrentGame] = useState<string>('');
+  const [currentGame, setCurrentGame] = useState<any>(null);
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [streamOnline, setStreamOnline] = useState(false);
@@ -54,6 +54,9 @@ const SubathonPage = () => {
   // Mode simulation pour les tests
   const [simulationMode, setSimulationMode] = useState(false);
 
+  // Hook pour les jeux dynamiques
+  const { games, loading: gamesLoading, getRandomGame, getGameByName } = useDynamicGames();
+
   useEffect(() => {
     fetchStreamerData();
     const interval = setInterval(checkStreamStatus, 30000);
@@ -67,7 +70,7 @@ const SubathonPage = () => {
       setCurrentTime(now);
       
       if (streamer?.status === 'live' && pauvrathonStartTime) {
-        const baseDuration = (streamer.initial_duration || 7200); // En secondes
+        const baseDuration = (streamer.initial_duration || 7200);
         const totalDuration = baseDuration + (streamer.total_time_added || 0);
         const elapsed = Math.floor((now.getTime() - pauvrathonStartTime.getTime()) / 1000);
         const remaining = Math.max(0, totalDuration - elapsed);
@@ -166,7 +169,6 @@ const SubathonPage = () => {
             ...streamerResponse.data,
             profiles: profileResponse.data || null
           };
-          // Ajouter aussi profile pour compatibilité
           if (profileResponse.data) {
             (data as any).profile = profileResponse.data;
           }
@@ -179,11 +181,10 @@ const SubathonPage = () => {
       setCurrentClicks(data.current_clicks || 0);
       setClicksRequired(data.clicks_required || 10);
       
-      // Vérifier si l'utilisateur est le propriétaire du stream
       setIsStreamerOwner(user?.id === data.user_id);
       
-      // Activer la simulation automatiquement pour mister_ds_ (ID: 5cee82f9-1c72-4a76-abdc-021976598a77)
-      if (user.id === '5cee82f9-1c72-4a76-abdc-021976598a77') {
+      // Activer la simulation automatiquement pour mister_ds_
+      if (user && user.id === '5cee82f9-1c72-4a76-abdc-021976598a77') {
         setSimulationMode(true);
         console.log('Mode simulation activé automatiquement pour mister_ds_');
         toast({
@@ -192,7 +193,6 @@ const SubathonPage = () => {
         });
       }
       
-      // Initialiser les valeurs de temps
       if (data.initial_duration) {
         setInitialHours(Math.floor(data.initial_duration / 3600));
         setInitialMinutes(Math.floor((data.initial_duration % 3600) / 60));
@@ -401,7 +401,6 @@ const SubathonPage = () => {
       return;
     }
 
-    // Mode simulation OU statut live en base
     const canClick = simulationMode || streamer.status === 'live';
     
     if (!canClick) {
@@ -444,13 +443,43 @@ const SubathonPage = () => {
   };
 
   const launchRandomMinigame = () => {
-    const games = ['guessNumber', 'hangman'];
-    const randomGame = games[Math.floor(Math.random() * games.length)];
-    setCurrentGame(randomGame);
+    if (gamesLoading) {
+      toast({
+        title: "Chargement",
+        description: "Chargement des jeux en cours...",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Essayer d'abord les jeux dynamiques
+    const dynamicGame = getRandomGame();
+    
+    if (dynamicGame) {
+      setCurrentGame(dynamicGame);
+      setShowMinigame(true);
+      setFailedAttempts(0);
+      setShowVictoryButton(false);
+      setGameWon(false);
+      toast({
+        title: "Jeu dynamique lancé !",
+        description: `Jeu: ${dynamicGame.name}`,
+      });
+      return;
+    }
+
+    // Fallback vers les jeux statiques si aucun jeu dynamique disponible
+    const staticGames = ['guessNumber', 'hangman'];
+    const randomGame = staticGames[Math.floor(Math.random() * staticGames.length)];
+    setCurrentGame({ name: randomGame, type: 'static' });
     setShowMinigame(true);
     setFailedAttempts(0);
     setShowVictoryButton(false);
     setGameWon(false);
+    toast({
+      title: "Jeu statique lancé",
+      description: "Aucun jeu dynamique disponible, utilisation des jeux par défaut.",
+    });
   };
 
   const handleGameWin = async (score: number = 1) => {
@@ -459,9 +488,8 @@ const SubathonPage = () => {
     setShowVictoryButton(true);
     setShowMinigame(false);
     
-    // Calculer le temps à ajouter basé sur le score
     const baseTime = streamer.time_increment || 30;
-    const randomBonus = Math.floor(Math.random() * score * 10); // Plus de score = plus de bonus potentiel
+    const randomBonus = Math.floor(Math.random() * score * 10);
     const timeToAdd = baseTime + randomBonus;
     
     toast({
@@ -469,7 +497,6 @@ const SubathonPage = () => {
       description: `Score: ${score}! Temps à ajouter: ${timeToAdd}s (base: ${baseTime}s + bonus: ${randomBonus}s)`,
     });
     
-    // Enregistrer immédiatement le temps
     try {
       const newTotalTime = (streamer.total_time_added || 0) + timeToAdd;
       const { error } = await supabase
@@ -479,7 +506,6 @@ const SubathonPage = () => {
 
       if (error) throw error;
       
-      // Réinitialiser pour permettre de rejouer
       setFailedAttempts(0);
       setShowVictoryButton(false);
       setGameWon(false);
@@ -533,7 +559,7 @@ const SubathonPage = () => {
     setFailedAttempts(newFailedAttempts);
     setShowMinigame(false);
 
-    if (newFailedAttempts >= 3) { // 3 tentatives maximum
+    if (newFailedAttempts >= 3) {
       toast({
         title: "Échec total",
         description: "3 tentatives échouées ! Vous devez recommencer à cliquer.",
@@ -595,8 +621,51 @@ const SubathonPage = () => {
 
   const getAvatarUrl = () => {
     if (!streamer) return null;
-    return streamer?.profile?.avatar_url || 
-           null;
+    return streamer?.profile?.avatar_url || null;
+  };
+
+  // Rendu du jeu actuel
+  const renderCurrentGame = () => {
+    if (!currentGame) return null;
+
+    // Jeu dynamique depuis la base de données
+    if (currentGame.code) {
+      return (
+        <DynamicGame
+          gameCode={currentGame.code}
+          gameName={currentGame.name}
+          onWin={handleGameWin}
+          onLose={handleGameLose}
+          attempts={0}
+          maxAttempts={12}
+        />
+      );
+    }
+
+    // Jeux statiques (fallback)
+    if (currentGame.name === 'guessNumber' || currentGame.type === 'static') {
+      return (
+        <GuessNumber
+          onWin={handleGameWin}
+          onLose={handleGameLose}
+          attempts={0}
+          maxAttempts={12}
+        />
+      );
+    }
+
+    if (currentGame.name === 'hangman' || currentGame.type === 'static') {
+      return (
+        <Hangman
+          onWin={handleGameWin}
+          onLose={handleGameLose}
+          attempts={0}
+          maxAttempts={12}
+        />
+      );
+    }
+
+    return null;
   };
 
   if (loading) {
@@ -633,7 +702,6 @@ const SubathonPage = () => {
   const displayName = getDisplayName();
   const avatarUrl = getAvatarUrl();
   
-  // État effectif pour l'interaction - mode simulation OU statut live
   const canInteract = user && (simulationMode || streamer.status === 'live');
 
   return (
@@ -858,6 +926,14 @@ const SubathonPage = () => {
                       Vous devez vous connecter pour participer au subathon
                     </p>
                   )}
+
+                  {/* Indicateur des jeux disponibles */}
+                  {!gamesLoading && games.length > 0 && (
+                    <div className="text-center text-sm text-muted-foreground bg-muted/50 p-2 rounded">
+                      <Gamepad2 className="w-4 h-4 inline mr-2" />
+                      {games.length} jeu{games.length > 1 ? 'x' : ''} dynamique{games.length > 1 ? 's' : ''} disponible{games.length > 1 ? 's' : ''}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}
@@ -869,29 +945,16 @@ const SubathonPage = () => {
                 <Card className="border-2 border-primary">
                   <CardHeader>
                     <CardTitle className="flex items-center justify-between">
-                      {currentGame === 'guessNumber' ? 'Devine le chiffre' : 'Jeu du pendu'}
+                      {currentGame?.name ? (
+                        currentGame.code ? `${currentGame.name} (Dynamique)` : currentGame.name
+                      ) : 'Mini-jeu'}
                       <span className="text-sm font-normal text-muted-foreground">
                         Tentative: {failedAttempts + 1}/3 • 12 essais par tentative
                       </span>
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {currentGame === 'guessNumber' && (
-                      <GuessNumber
-                        onWin={handleGameWin}
-                        onLose={handleGameLose}
-                        attempts={0}
-                        maxAttempts={12}
-                      />
-                    )}
-                    {currentGame === 'hangman' && (
-                      <Hangman
-                        onWin={handleGameWin}
-                        onLose={handleGameLose}
-                        attempts={0}
-                        maxAttempts={12}
-                      />
-                    )}
+                    {renderCurrentGame()}
                   </CardContent>
                 </Card>
               )}
@@ -984,6 +1047,14 @@ const SubathonPage = () => {
                        </span>
                      </div>
                   </div>
+
+                  {/* Statistiques des jeux dynamiques */}
+                  {!gamesLoading && (
+                    <div className="flex justify-between items-center">
+                      <span>Jeux dynamiques:</span>
+                      <span className="font-bold text-purple-600">{games.length} disponible{games.length > 1 ? 's' : ''}</span>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
