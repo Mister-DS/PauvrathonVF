@@ -1,506 +1,612 @@
-import { Link, Navigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
+import { Navigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Navigation } from '@/components/Navigation';
-import { FollowButton } from '@/components/FollowButton';
 import { useAuth } from '@/contexts/AuthContext';
-import { useFollowedStreamers } from '@/hooks/useFollowedStreamers';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/hooks/use-toast';
 import { 
-  Heart, 
+  Radio, 
+  Eye, 
   Users, 
   Clock, 
-  Gamepad2, 
-  Radio, 
-  Power, 
-  Tv, 
   Trophy, 
-  RefreshCw, 
-  AlertCircle, 
-  Eye,
-  ArrowUpRight,
+  RefreshCw,
+  AlertCircle,
   Square,
-  Swords
+  ArrowUpRight,
+  Heart,
+  ExternalLink,
+  Play
 } from 'lucide-react';
-import { toast } from '@/hooks/use-toast';
+import { Link } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+
+interface PauvrathonStreamer {
+  id: string;
+  user_id: string;
+  twitch_id: string;
+  time_increment: number;
+  clicks_required: number;
+  cooldown_seconds: number;
+  current_clicks: number;
+  total_time_added: number;
+  is_live: boolean;
+  stream_title: string;
+  time_mode: string;
+  max_random_time: number;
+  status: string;
+  stream_started_at: string;
+  pause_started_at: string;
+  total_paused_duration: number;
+  initial_duration: number;
+  profile?: {
+    twitch_display_name: string;
+    twitch_username: string;
+    avatar_url: string;
+  };
+}
 
 interface TwitchStream {
   id: string;
   user_id: string;
   user_login: string;
   user_name: string;
-  game_id: string;
-  game_name: string;
-  type: string;
   title: string;
   viewer_count: number;
   started_at: string;
-  language: string;
+  game_name: string;
   thumbnail_url: string;
   profile_image_url: string;
 }
 
-interface PauvrathonStreamer {
-  id: string;
-  user_id: string;
-  status: 'live' | 'paused' | 'offline' | 'ended';
-  time_increment: number;
-  clicks_required: number;
-  current_clicks: number;
-  total_time_added: number;
-  stream_title?: string;
-  active_minigames: string[];
-  initial_duration: number;
-  profile?: {
-    twitch_username?: string;
-    twitch_display_name?: string;
-    avatar_url?: string;
-    twitch_id?: string;
-  };
-  profiles?: {
-    twitch_username?: string;
-    twitch_display_name?: string;
-    avatar_url?: string;
-    twitch_id?: string;
-  };
-}
-
-export default function Following() {
+export default function FollowsPage() {
   const { user } = useAuth();
-  const { followedStreamers, loading: loadingFollowed, refetch } = useFollowedStreamers();
-  const [twitchLiveStreamers, setTwitchLiveStreamers] = useState<TwitchStream[]>([]);
+  const [pauvrathonFollows, setPauvrathonFollows] = useState<PauvrathonStreamer[]>([]);
+  const [twitchFollows, setTwitchFollows] = useState<TwitchStream[]>([]);
+  const [loadingPauvrathon, setLoadingPauvrathon] = useState(true);
   const [loadingTwitch, setLoadingTwitch] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  
-  // État pour le filtre de l'onglet Pauvrathon
-  const [pauvrathonFilter, setPauvrathonFilter] = useState<'all' | 'live'>('all');
 
+  // Redirect if not authenticated
   if (!user) {
     return <Navigate to="/auth" replace />;
   }
 
   useEffect(() => {
-    fetchTwitchFollowedLiveStreams();
+    fetchPauvrathonFollows();
+    fetchTwitchFollows();
+    
+    // Actualiser toutes les 30 secondes
+    const interval = setInterval(() => {
+      fetchPauvrathonFollows();
+      fetchTwitchFollows();
+    }, 30000);
+    
+    return () => clearInterval(interval);
   }, [user]);
 
- // Remplacer l'appel à la fonction
-const fetchTwitchFollowedLiveStreams = async () => {
-  if (!user) return;
+  const fetchPauvrathonFollows = async () => {
+    try {
+      // Récupérer les streamers que l'utilisateur suit
+      const { data: followsData, error: followsError } = await supabase
+        .from('user_follows')
+        .select(`
+          streamer_id,
+          streamers!inner (
+            id,
+            user_id,
+            twitch_id,
+            time_increment,
+            clicks_required,
+            cooldown_seconds,
+            current_clicks,
+            total_time_added,
+            is_live,
+            stream_title,
+            time_mode,
+            max_random_time,
+            status,
+            stream_started_at,
+            pause_started_at,
+            total_paused_duration,
+            initial_duration,
+            profiles!inner (
+              twitch_display_name,
+              twitch_username,
+              avatar_url
+            )
+          )
+        `)
+        .eq('follower_user_id', user.id);
 
-  try {
-    setLoadingTwitch(true);
-    
-    // Utiliser la fonction get-twitch-live-streams au lieu de get-twitch-follows
-    const { data, error } = await supabase.functions.invoke('get-twitch-live-streams', {
-      body: { user_id: user.id }
-    });
+      if (followsError) {
+        console.error('Erreur follows:', followsError);
+        
+        // Fallback : récupérer quelques streamers actifs pour la démo
+        const { data: allStreamers, error: streamersError } = await supabase
+          .from('streamers')
+          .select(`
+            id,
+            user_id,
+            twitch_id,
+            time_increment,
+            clicks_required,
+            cooldown_seconds,
+            current_clicks,
+            total_time_added,
+            is_live,
+            stream_title,
+            time_mode,
+            max_random_time,
+            status,
+            stream_started_at,
+            pause_started_at,
+            total_paused_duration,
+            initial_duration,
+            profiles!inner (
+              twitch_display_name,
+              twitch_username,
+              avatar_url
+            )
+          `)
+          .eq('is_live', true)
+          .limit(6);
 
-    if (error) {
-      console.error('Erreur API Twitch:', error);
-      throw error;
+        if (!streamersError && allStreamers) {
+          setPauvrathonFollows(allStreamers as any);
+        }
+      } else {
+        // Transformer les données pour avoir la bonne structure
+        const streamers = followsData
+          ?.map((follow: any) => follow.streamers)
+          ?.filter(Boolean) || [];
+        
+        setPauvrathonFollows(streamers as any);
+      }
+    } catch (error) {
+      console.error('Erreur récupération follows Pauvrathon:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de charger vos follows Pauvrathon.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingPauvrathon(false);
     }
-    
-    if (data && data.streams) {
-      setTwitchLiveStreamers(data.streams);
-    } else {
-      setTwitchLiveStreamers([]);
-    }
-  } catch (error) {
-    console.error('Erreur récupération streams Twitch:', error);
-    setTwitchLiveStreamers([]);
-    
-    toast({
-      title: "Information",
-      description: "Impossible de récupérer vos follows Twitch en direct. Vérifiez que vous avez connecté votre compte Twitch.",
-      variant: "default",
-    });
-  } finally {
-    setLoadingTwitch(false);
-  }
-};
+  };
 
-  const refreshAll = async () => {
+  const fetchTwitchFollows = async () => {
+    try {
+      // Utiliser votre Edge Function existante
+      const { data: twitchData, error: twitchError } = await supabase.functions.invoke('get-twitch-follows');
+
+      if (twitchError) {
+        console.error('Erreur Edge Function Twitch:', twitchError);
+        setTwitchFollows([]);
+        return;
+      }
+
+      // Traiter les données retournées par l'Edge Function
+      const follows = twitchData?.follows || [];
+      
+      // Transformer les données Twitch pour correspondre à votre interface
+      const transformedFollows = follows.map((stream: any) => ({
+        id: stream.id,
+        user_id: stream.user_id,
+        user_login: stream.user_login,
+        user_name: stream.display_name || stream.user_name,
+        title: stream.title,
+        viewer_count: stream.viewer_count,
+        started_at: stream.started_at,
+        game_name: stream.game_name || 'Juste bavardage',
+        thumbnail_url: stream.thumbnail_url || 'https://via.placeholder.com/440x248/667eea/ffffff?text=Stream+Live',
+        profile_image_url: stream.profile_image_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(stream.user_name)}`,
+      }));
+      
+      setTwitchFollows(transformedFollows);
+    } catch (error) {
+      console.error('Erreur récupération follows Twitch:', error);
+      setTwitchFollows([]);
+      toast({
+        title: "Erreur",
+        description: "Impossible de charger vos follows Twitch.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingTwitch(false);
+    }
+  };
+
+  const handleRefresh = async () => {
     setRefreshing(true);
     await Promise.all([
-      fetchTwitchFollowedLiveStreams(),
-      refetch()
+      fetchPauvrathonFollows(),
+      fetchTwitchFollows()
     ]);
     setRefreshing(false);
     toast({
-      title: "Actualisé",
+      title: "Actualisation terminée",
       description: "Les données ont été mises à jour.",
     });
   };
 
-  const formatDuration = (startedAt: string) => {
-    const now = new Date();
-    const started = new Date(startedAt);
-    const diffMs = now.getTime() - started.getTime();
-    const diffHrs = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-    
-    if (diffHrs > 0) {
-      return `${diffHrs}h ${diffMins}m`;
+  const getStreamerStatus = (streamer: PauvrathonStreamer) => {
+    if (streamer.is_live && streamer.status === 'live') {
+      return 'live';
+    } else if (streamer.status === 'paused') {
+      return 'paused';
+    } else {
+      return 'offline';
     }
-    return `${diffMins}m`;
   };
 
-  const formatViewerCount = (count: number) => {
-    if (count >= 1000000) {
-      return `${(count / 1000000).toFixed(1)}M`;
+  const formatTime = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    return `${hours}h ${minutes}m`;
+  };
+
+  const formatStreamDuration = (startedAt: string) => {
+    const start = new Date(startedAt);
+    const now = new Date();
+    const diffMs = now.getTime() - start.getTime();
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+    
+    if (diffHours > 0) {
+      return `${diffHours}h ${diffMinutes}m`;
     }
-    if (count >= 1000) {
-      return `${(count / 1000).toFixed(1)}k`;
-    }
-    return count.toString();
+    return `${diffMinutes}m`;
   };
 
   const getStreamerDisplayName = (streamer: PauvrathonStreamer) => {
     return streamer.profile?.twitch_display_name || 
-           streamer.profiles?.twitch_display_name ||
-           streamer.profile?.twitch_username ||
-           streamer.profiles?.twitch_username ||
-           'Streamer';
-  };
-
-  const getStreamerUsername = (streamer: PauvrathonStreamer) => {
-    return streamer.profile?.twitch_username || 
-           streamer.profiles?.twitch_username ||
-           'unknown';
+           streamer.profile?.twitch_username || 
+           'Streamer inconnu';
   };
 
   const getStreamerAvatar = (streamer: PauvrathonStreamer) => {
+    const displayName = getStreamerDisplayName(streamer);
     return streamer.profile?.avatar_url || 
-           streamer.profiles?.avatar_url ||
-           `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
-             getStreamerDisplayName(streamer)
-           )}`;
+           `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName)}`;
   };
 
-  // Filtre des streamers Pauvrathon
-  const filteredPauvrathonStreamers = followedStreamers.filter(streamer => {
-    if (pauvrathonFilter === 'live') return streamer.status === 'live';
-    return true;
-  });
+  const handleFollowStreamer = async (streamerId: string) => {
+    try {
+      const { error } = await supabase
+        .from('user_follows')
+        .insert({
+          follower_user_id: user.id,
+          streamer_id: streamerId
+        });
 
-  // Séparer les streamers Pauvrathon par statut
-  const liveStreamers = filteredPauvrathonStreamers.filter(s => s.status === 'live');
-  const pausedStreamers = filteredPauvrathonStreamers.filter(s => s.status === 'paused');
-  const offlineStreamers = filteredPauvrathonStreamers.filter(s => s.status === 'offline' || s.status === 'ended');
+      if (error) {
+        if (error.code === '23505') { // Unique constraint violation
+          toast({
+            title: "Déjà suivi",
+            description: "Vous suivez déjà ce streamer.",
+            variant: "default",
+          });
+        } else {
+          throw error;
+        }
+      } else {
+        toast({
+          title: "Suivi ajouté",
+          description: "Vous suivez maintenant ce streamer.",
+        });
+        fetchPauvrathonFollows(); // Refresh the list
+      }
+    } catch (error) {
+      console.error('Erreur follow:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de suivre ce streamer.",
+        variant: "destructive",
+      });
+    }
+  };
 
-  const totalPauvrathon = followedStreamers.length;
-  const totalLivePauvrathon = liveStreamers.length;
-  const totalTwitchLive = twitchLiveStreamers.length;
+  const handleUnfollowStreamer = async (streamerId: string) => {
+    try {
+      const { error } = await supabase
+        .from('user_follows')
+        .delete()
+        .eq('follower_user_id', user.id)
+        .eq('streamer_id', streamerId);
+
+      if (error) {
+        throw error;
+      }
+
+      toast({
+        title: "Suivi retiré",
+        description: "Vous ne suivez plus ce streamer.",
+      });
+      fetchPauvrathonFollows(); // Refresh the list
+    } catch (error) {
+      console.error('Erreur unfollow:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de ne plus suivre ce streamer.",
+        variant: "destructive",
+      });
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
       <Navigation />
       
       <div className="container mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold mb-4">Mes Suivis</h1>
-            <p className="text-muted-foreground">
-              Streamers Twitch en direct et Pauvrathon suivis
-            </p>
+        <div className="mb-8">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-4xl font-bold mb-2 bg-gradient-to-r from-purple-600 to-pink-600 text-transparent bg-clip-text">
+                Mes Suivis
+              </h1>
+              <p className="text-muted-foreground">
+                Suivez vos streamers préférés et découvrez qui est en live
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              onClick={handleRefresh}
+              disabled={refreshing}
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+              Actualiser
+            </Button>
           </div>
-          <Button 
-            onClick={refreshAll} 
-            disabled={refreshing}
-            variant="outline"
-          >
-            <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-            Actualiser
-          </Button>
         </div>
 
-        <Tabs defaultValue="pauvrathon" className="w-full mb-8">
-          <TabsList className="mb-4">
-            <TabsTrigger value="pauvrathon">
-              <Trophy className="h-4 w-4 mr-2" />
-              Pauvrathon ({totalPauvrathon})
+        <Tabs defaultValue="pauvrathon" className="w-full">
+          <TabsList className="mb-6">
+            <TabsTrigger value="pauvrathon" className="flex items-center">
+              <Trophy className="w-4 h-4 mr-2" />
+              Follows Pauvrathon ({pauvrathonFollows.length})
             </TabsTrigger>
-            <TabsTrigger value="twitch">
-              <Tv className="h-4 w-4 mr-2" />
-              Twitch Live ({totalTwitchLive})
+            <TabsTrigger value="twitch" className="flex items-center">
+              <Radio className="w-4 h-4 mr-2" />
+              Lives Twitch ({twitchFollows.length})
             </TabsTrigger>
           </TabsList>
 
-          {/* Section Pauvrathon */}
+          {/* Section 1 : Follows Pauvrathon */}
           <TabsContent value="pauvrathon">
-            <div className="mb-6 flex justify-between items-center">
-              <div className="flex space-x-2">
-                <Button
-                  variant={pauvrathonFilter === 'all' ? 'default' : 'outline'}
-                  onClick={() => setPauvrathonFilter('all')}
-                  size="sm"
-                >
-                  Tous
-                </Button>
-                <Button
-                  variant={pauvrathonFilter === 'live' ? 'default' : 'outline'}
-                  onClick={() => setPauvrathonFilter('live')}
-                  size="sm"
-                  className="flex items-center space-x-1"
-                >
-                  <Radio className="w-4 h-4 text-red-500 mr-1" />
-                  En live ({totalLivePauvrathon})
-                </Button>
-              </div>
-            </div>
-
-            {loadingFollowed ? (
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {loadingPauvrathon ? (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {[...Array(6)].map((_, i) => (
                   <Card key={i} className="animate-pulse">
-                    <CardHeader>
-                      <div className="flex items-center space-x-4">
-                        <div className="rounded-full bg-muted h-12 w-12" />
-                        <div className="space-y-2 flex-1">
-                          <div className="h-4 bg-muted rounded w-24" />
-                          <div className="h-3 bg-muted rounded w-16" />
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-3">
-                        <div className="h-3 bg-muted rounded" />
-                        <div className="h-3 bg-muted rounded w-3/4" />
-                        <div className="h-10 bg-muted rounded" />
-                      </div>
+                    <CardContent className="p-6">
+                      <div className="h-4 bg-muted rounded w-3/4 mb-4" />
+                      <div className="h-3 bg-muted rounded w-1/2 mb-2" />
+                      <div className="h-3 bg-muted rounded w-2/3" />
                     </CardContent>
                   </Card>
                 ))}
               </div>
-            ) : totalPauvrathon === 0 ? (
-              <div className="text-center py-16 bg-muted/30 rounded-lg border-2 border-dashed">
-                <Heart className="mx-auto h-16 w-16 text-muted-foreground mb-4" />
-                <h3 className="text-xl font-semibold mb-2">
-                  Aucun streamer Pauvrathon suivi
-                </h3>
-                <p className="text-muted-foreground mb-6">
-                  Vous ne suivez aucun streamer participant au Pauvrathon.
-                  <br />
-                  Découvrez des streamers pour commencer !
-                </p>
-                <Button asChild size="lg">
-                  <Link to="/discovery">
-                    <Users className="w-4 h-4 mr-2" />
-                    Découvrir des Streamers
-                  </Link>
-                </Button>
-              </div>
-            ) : filteredPauvrathonStreamers.length === 0 ? (
-              <div className="text-center py-12 bg-muted/30 rounded-lg border-2 border-dashed">
-                <AlertCircle className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-                <h3 className="text-xl font-semibold mb-2">
-                  Aucun streamer en direct
-                </h3>
-                <p className="text-muted-foreground mb-4">
-                  Aucun de vos streamers Pauvrathon suivis n'est actuellement en ligne.
-                </p>
-              </div>
+            ) : pauvrathonFollows.length === 0 ? (
+              <Card className="text-center py-12">
+                <CardContent>
+                  <Heart className="mx-auto h-16 w-16 text-muted-foreground mb-4" />
+                  <h3 className="text-xl font-medium mb-2">Aucun follow Pauvrathon</h3>
+                  <p className="text-muted-foreground mb-4">
+                    Vous ne suivez aucun streamer Pauvrathon pour le moment.
+                  </p>
+                  <Button asChild>
+                    <Link to="/discovery">
+                      <Eye className="w-4 h-4 mr-2" />
+                      Découvrir des streamers
+                    </Link>
+                  </Button>
+                </CardContent>
+              </Card>
             ) : (
-              <div className="space-y-8">
-                {/* Streamers en direct */}
-                {liveStreamers.length > 0 && (
-                  <div>
-                    <div className="flex items-center space-x-2 mb-4">
-                      <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
-                      <h3 className="text-xl font-semibold text-green-600">
-                        En direct ({liveStreamers.length})
-                      </h3>
-                    </div>
-                    <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {liveStreamers.map((streamer) => {
-                        const displayName = getStreamerDisplayName(streamer);
-                        const username = getStreamerUsername(streamer);
-                        const avatar = getStreamerAvatar(streamer);
+              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                {pauvrathonFollows.map((streamer) => (
+                  <Card key={streamer.id} className="overflow-hidden hover:shadow-lg transition-shadow border-2 border-primary/20">
+                    <CardContent className="p-6">
+                      {/* Header avec Avatar et Status */}
+                      <div className="flex items-center space-x-3 mb-4">
+                        <Avatar className="h-12 w-12">
+                          <AvatarImage src={getStreamerAvatar(streamer)} alt={getStreamerDisplayName(streamer)} />
+                          <AvatarFallback>
+                            {getStreamerDisplayName(streamer).charAt(0).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-lg">
+                            {getStreamerDisplayName(streamer)}
+                          </h3>
+                          <div className="flex items-center space-x-2">
+                            {getStreamerStatus(streamer) === 'live' ? (
+                              <Badge className="bg-red-500 text-white">
+                                <Radio className="w-3 h-3 mr-1" />
+                                En live
+                              </Badge>
+                            ) : getStreamerStatus(streamer) === 'paused' ? (
+                              <Badge className="bg-yellow-500 text-white">
+                                <Clock className="w-3 h-3 mr-1" />
+                                En pause
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary">
+                                <Square className="w-3 h-3 mr-1" />
+                                Hors ligne
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Statistiques */}
+                      <div className="space-y-3 mb-4">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="flex items-center">
+                            <Trophy className="w-4 h-4 mr-1 text-orange-500" />
+                            Progression
+                          </span>
+                          <span className="font-medium">
+                            {streamer.current_clicks}/{streamer.clicks_required}
+                          </span>
+                        </div>
                         
-                        return (
-                          <Card key={streamer.id} className="hover:shadow-lg transition-shadow group border-2 border-green-500/20">
-                            <CardHeader>
-                              <div className="flex items-center space-x-4">
-                                <div className="relative">
-                                  <Avatar className="h-12 w-12">
-                                    <AvatarImage src={avatar} alt={displayName} />
-                                    <AvatarFallback>
-                                      {displayName.charAt(0).toUpperCase()}
-                                    </AvatarFallback>
-                                  </Avatar>
-                                  <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-background bg-green-500 animate-pulse" />
-                                </div>
-                                <div className="flex-1">
-                                  <CardTitle className="text-lg">{displayName}</CardTitle>
-                                  <p className="text-sm text-muted-foreground">@{username}</p>
-                                </div>
-                                <Badge variant="default" className="bg-gradient-to-r from-purple-600 to-pink-600">
-                                  <Trophy className="w-3 h-3 mr-1" />
-                                  Live
-                                </Badge>
-                              </div>
-                            </CardHeader>
-                            
-                            <CardContent className="space-y-4">
-                              <div className="flex items-center justify-between text-sm">
-                                <div className="flex items-center space-x-1">
-                                  <Clock className="h-4 w-4 text-muted-foreground" />
-                                  <span>+{streamer.time_increment}s par victoire</span>
-                                </div>
-                                <div className="flex items-center space-x-1">
-                                  <Gamepad2 className="h-4 w-4 text-muted-foreground" />
-                                  <span>{Array.isArray(streamer.active_minigames) ? streamer.active_minigames.length : 0} jeux</span>
-                                </div>
-                              </div>
-                              
-                              <div className="space-y-2">
-                                <div className="flex justify-between text-sm">
-                                  <span>Progression:</span>
-                                  <span className="font-medium">
-                                    {streamer.current_clicks}/{streamer.clicks_required} clics
-                                  </span>
-                                </div>
-                                <div className="w-full bg-muted rounded-full h-2">
-                                  <div 
-                                    className="bg-gradient-to-r from-blue-500 to-purple-600 h-2 rounded-full transition-all duration-300"
-                                    style={{ 
-                                      width: `${Math.min(100, (streamer.current_clicks / streamer.clicks_required) * 100)}%` 
-                                    }}
-                                  />
-                                </div>
-                              </div>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="flex items-center">
+                            <Clock className="w-4 h-4 mr-1 text-blue-500" />
+                            Temps ajouté
+                          </span>
+                          <span className="font-medium text-green-600">
+                            +{formatTime(streamer.total_time_added || 0)}
+                          </span>
+                        </div>
 
-                              <div className="text-sm">
-                                <span className="text-muted-foreground">Temps total ajouté:</span>
-                                <span className="ml-2 font-medium text-green-600">
-                                  {Math.floor((streamer.total_time_added || 0) / 60)}min {(streamer.total_time_added || 0) % 60}s
-                                </span>
-                              </div>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="flex items-center">
+                            <Play className="w-4 h-4 mr-1 text-purple-500" />
+                            Durée initiale
+                          </span>
+                          <span className="font-medium">
+                            {formatTime(streamer.initial_duration || 7200)}
+                          </span>
+                        </div>
 
-                              {streamer.stream_title && (
-                                <div className="text-sm text-muted-foreground bg-muted p-2 rounded">
-                                  "{streamer.stream_title}"
-                                </div>
-                              )}
+                        {/* Afficher le titre du stream s'il existe */}
+                        {streamer.stream_title && (
+                          <div className="mt-2 p-2 bg-muted/50 rounded text-xs">
+                            <span className="font-medium">Stream :</span> {streamer.stream_title}
+                          </div>
+                        )}
+                      </div>
 
-                              <div className="flex flex-col gap-2">
-                                <FollowButton streamerId={streamer.id} showCount />
-                                
-                                <Link to={`/subathon/${streamer.id}`}>
-                                  <Button className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700">
-                                    <Swords className="w-4 h-4 mr-2" />
-                                    Participer au Pauvrathon
-                                  </Button>
-                                </Link>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* Sections pour les streamers en pause et hors ligne - Code existant conservé */}
-                {/* ... */}
+                      {/* Actions */}
+                      <div className="flex space-x-2">
+                        <Button asChild variant="outline" className="flex-1">
+                          <Link to={`/streamer/${streamer.id}`}>
+                            <Eye className="w-4 h-4 mr-2" />
+                            Voir
+                          </Link>
+                        </Button>
+                        
+                        {streamer.profile?.twitch_username && (
+                          <Button asChild variant="outline" size="icon">
+                            <a 
+                              href={`https://twitch.tv/${streamer.profile.twitch_username}`} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                            >
+                              <ExternalLink className="w-4 h-4" />
+                            </a>
+                          </Button>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
             )}
           </TabsContent>
 
-          {/* Section Twitch Live - Streamers suivis en direct */}
+          {/* Section 2 : Follows Twitch en live */}
           <TabsContent value="twitch">
             {loadingTwitch ? (
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {[...Array(6)].map((_, i) => (
                   <Card key={i} className="animate-pulse">
-                    <div className="h-48 bg-muted rounded-t-lg" />
-                    <CardHeader>
-                      <div className="flex items-center space-x-4">
-                        <div className="rounded-full bg-muted h-10 w-10" />
-                        <div className="space-y-2 flex-1">
-                          <div className="h-4 bg-muted rounded w-24" />
-                          <div className="h-3 bg-muted rounded w-16" />
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-3">
-                        <div className="h-3 bg-muted rounded" />
-                        <div className="h-10 bg-muted rounded" />
+                    <CardContent className="p-0">
+                      <div className="h-48 bg-muted" />
+                      <div className="p-4 space-y-2">
+                        <div className="h-4 bg-muted rounded w-3/4" />
+                        <div className="h-3 bg-muted rounded w-1/2" />
                       </div>
                     </CardContent>
                   </Card>
                 ))}
               </div>
-            ) : totalTwitchLive === 0 ? (
-              <div className="text-center py-12 bg-muted/30 rounded-lg border-2 border-dashed">
-                <Radio className="mx-auto h-16 w-16 text-muted-foreground mb-4" />
-                <h3 className="text-xl font-semibold mb-2">
-                  Aucun stream Twitch en direct
-                </h3>
-                <p className="text-muted-foreground mb-4">
-                  Aucun des streamers Twitch que vous suivez n'est actuellement en ligne.
-                </p>
-                <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                  <AlertCircle className="h-4 w-4" />
-                  <span>Connectez votre compte Twitch dans les paramètres pour voir vos follows</span>
-                </div>
-              </div>
+            ) : twitchFollows.length === 0 ? (
+              <Card className="text-center py-12">
+                <CardContent>
+                  <Radio className="mx-auto h-16 w-16 text-muted-foreground mb-4" />
+                  <h3 className="text-xl font-medium mb-2">Aucun follow Twitch en live</h3>
+                  <p className="text-muted-foreground">
+                    Aucun de vos follows Twitch n'est actuellement en direct, ou vous n'avez pas encore connecté votre compte Twitch.
+                  </p>
+                </CardContent>
+              </Card>
             ) : (
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {twitchLiveStreamers.map((stream) => (
-                  <Card key={stream.id} className="hover:shadow-lg transition-shadow overflow-hidden group border-2 border-transparent hover:border-purple-500/20">
-                    <div className="relative">
-                      <img 
-                        src={stream.thumbnail_url?.replace('{width}', '440').replace('{height}', '248')} 
-                        alt={stream.title}
-                        className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
-                        onError={(e) => {
-                          const target = e.target as HTMLImageElement;
-                          target.src = 'https://via.placeholder.com/320x180/667eea/ffffff?text=Stream+Live';
-                        }}
-                      />
-                      <div className="absolute top-2 left-2">
-                        <Badge className="bg-red-500 text-white">
-                          <Radio className="w-3 h-3 mr-1" />
-                          EN DIRECT
+              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                {twitchFollows.map((stream) => (
+                  <Card key={stream.id} className="overflow-hidden hover:shadow-lg transition-shadow">
+                    <CardContent className="p-0">
+                      {/* Thumbnail */}
+                      <div className="relative">
+                        <img 
+                          src={stream.thumbnail_url.replace('{width}', '440').replace('{height}', '248')} 
+                          alt={stream.title}
+                          className="w-full h-auto aspect-video object-cover"
+                          onError={(e) => {
+                            const target = e.target as HTMLImageElement;
+                            target.src = 'https://via.placeholder.com/440x248/667eea/ffffff?text=Stream+Live';
+                          }}
+                        />
+                        <div className="absolute top-2 left-2 flex gap-2">
+                          <Badge className="bg-red-500 text-white">
+                            <Radio className="w-3 h-3 mr-1" />
+                            {stream.viewer_count?.toLocaleString() || '0'} spectateurs
+                          </Badge>
+                        </div>
+                        <Badge className="absolute bottom-2 right-2 bg-black/70 text-white">
+                          <Clock className="w-3 h-3 mr-1" />
+                          {formatStreamDuration(stream.started_at)}
                         </Badge>
                       </div>
-                      <div className="absolute top-2 right-2 bg-black/70 text-white px-2 py-1 rounded text-sm flex items-center gap-1">
-                        <Eye className="w-3 h-3" />
-                        {formatViewerCount(stream.viewer_count)}
-                      </div>
-                      <div className="absolute bottom-2 right-2 bg-black/70 text-white px-2 py-1 rounded text-sm">
-                        {formatDuration(stream.started_at)}
-                      </div>
-                    </div>
-                    
-                    <CardHeader className="pb-2">
-                      <div className="flex items-center space-x-3">
-                        <Avatar className="h-10 w-10">
-                          <AvatarImage src={stream.profile_image_url} alt={stream.user_name} />
-                          <AvatarFallback>
-                            {stream.user_name.charAt(0).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 min-w-0">
-                          <CardTitle className="text-lg truncate">{stream.user_name}</CardTitle>
-                          <p className="text-sm text-muted-foreground truncate">{stream.game_name || 'Juste bavardage'}</p>
+
+                      <div className="p-4">
+                        {/* Header avec Avatar et Nom */}
+                        <div className="flex items-center space-x-3 mb-3">
+                          <Avatar className="h-10 w-10">
+                            <AvatarImage 
+                              src={stream.profile_image_url || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(stream.user_name)}`} 
+                              alt={stream.user_name} 
+                            />
+                            <AvatarFallback>
+                              {stream.user_name.charAt(0).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1">
+                            <h3 className="font-semibold">{stream.user_name}</h3>
+                            <p className="text-xs text-muted-foreground">
+                              {stream.game_name}
+                            </p>
+                          </div>
                         </div>
+
+                        {/* Titre du stream */}
+                        <p className="text-sm line-clamp-2 mb-4 leading-relaxed">
+                          {stream.title}
+                        </p>
+
+                        {/* Action */}
+                        <Button 
+                          asChild 
+                          variant="outline" 
+                          className="w-full"
+                        >
+                          <a 
+                            href={`https://twitch.tv/${stream.user_login}`} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                          >
+                            <ArrowUpRight className="w-4 h-4 mr-2" />
+                            Regarder sur Twitch
+                          </a>
+                        </Button>
                       </div>
-                    </CardHeader>
-                    <CardContent className="pt-2">
-                      <p className="text-sm text-muted-foreground mb-4 line-clamp-2">{stream.title}</p>
-                      <Button asChild className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700">
-                        <a href={`https://twitch.tv/${stream.user_login}`} target="_blank" rel="noopener noreferrer">
-                          <ArrowUpRight className="w-4 h-4 mr-2" />
-                          Regarder sur Twitch
-                        </a>
-                      </Button>
                     </CardContent>
                   </Card>
                 ))}

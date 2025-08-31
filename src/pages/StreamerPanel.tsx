@@ -37,7 +37,9 @@ import {
   HelpCircle,
   Clock4,
   ClipboardCheck,
-  Check
+  Check,
+  Monitor,
+  Copy
 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 
@@ -121,10 +123,12 @@ const PauvrathonTimer = ({ status, startTime, initialDuration, addedTime }) => {
 export default function AdminPanel() {
   const { user, profile } = useAuth();
   const [streamer, setStreamer] = useState(null);
+  const [originalStreamerData, setOriginalStreamerData] = useState(null); // NOUVEAU : pour tracking des changements
   const [availableMinigames, setAvailableMinigames] = useState([]);
   const [stats, setStats] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false); // NOUVEAU : indicateur de changements
   
   // États pour la configuration
   const [timeMode, setTimeMode] = useState('fixed');
@@ -137,8 +141,9 @@ export default function AdminPanel() {
   const [cooldownTime, setCooldownTime] = useState(30);
   const [selectedGames, setSelectedGames] = useState([]);
   
-  // URL de la page pauvrathon
+  // URLs
   const [pauvrathonUrl, setPauvrathonUrl] = useState('');
+  const [overlayUrl, setOverlayUrl] = useState(''); // NOUVEAU : URL overlay
   
   // Redirect if not authenticated or not an admin
   if (!user || profile?.role !== 'admin') {
@@ -166,12 +171,43 @@ export default function AdminPanel() {
     }
   }, [streamer]);
   
-  // Mettre à jour l'URL quand le streamer est chargé
+  // Mettre à jour les URLs quand le streamer est chargé
   useEffect(() => {
     if (streamer) {
       setPauvrathonUrl(`${window.location.origin}/streamer/${streamer.id}`);
+      setOverlayUrl(`${window.location.origin}/overlay/${streamer.id}`); // NOUVEAU
     }
   }, [streamer]);
+
+  // NOUVEAU : Détecter les changements non sauvegardés
+  useEffect(() => {
+    if (!originalStreamerData) return;
+    
+    const currentConfig = {
+      time_mode: timeMode,
+      time_increment: fixedTime,
+      min_random_time: minRandomTime,
+      max_random_time: maxRandomTime,
+      clicks_required: clicksRequired,
+      cooldown_seconds: cooldownTime,
+      initial_duration: (initialHours * 3600) + (initialMinutes * 60),
+      active_minigames: selectedGames
+    };
+    
+    const originalConfig = {
+      time_mode: originalStreamerData.time_mode || 'fixed',
+      time_increment: originalStreamerData.time_increment || 30,
+      min_random_time: originalStreamerData.min_random_time || 10,
+      max_random_time: originalStreamerData.max_random_time || 60,
+      clicks_required: originalStreamerData.clicks_required || 100,
+      cooldown_seconds: originalStreamerData.cooldown_seconds || 30,
+      initial_duration: originalStreamerData.initial_duration || 7200,
+      active_minigames: originalStreamerData.active_minigames || []
+    };
+    
+    const hasChanges = JSON.stringify(currentConfig) !== JSON.stringify(originalConfig);
+    setHasUnsavedChanges(hasChanges);
+  }, [timeMode, fixedTime, minRandomTime, maxRandomTime, clicksRequired, cooldownTime, initialHours, initialMinutes, selectedGames, originalStreamerData]);
 
   const fetchStreamerData = async () => {
     if (!user) return;
@@ -187,6 +223,7 @@ export default function AdminPanel() {
       
       if (data) {
         setStreamer(data);
+        setOriginalStreamerData(data); // NOUVEAU : sauvegarder les données originales
         
         // Initialiser les états avec les données du streamer
         setInitialHours(Math.floor((data.initial_duration || 7200) / 3600));
@@ -260,17 +297,30 @@ export default function AdminPanel() {
         clicks_required: clicksRequired,
         cooldown_seconds: cooldownTime,
         initial_duration: calculatedDuration,
-        active_minigames: selectedGames
+        active_minigames: selectedGames,
+        updated_at: new Date().toISOString() // NOUVEAU : timestamp de mise à jour
       };
 
-      const { error } = await supabase
+      console.log('Sauvegarde des paramètres:', updatedSettings); // DEBUG
+
+      const { data, error } = await supabase
         .from('streamers')
         .update(updatedSettings)
-        .eq('id', streamer.id);
+        .eq('id', streamer.id)
+        .select()
+        .single(); // NOUVEAU : récupérer les données mises à jour
 
-      if (error) throw error;
+      if (error) {
+        console.error('Erreur de sauvegarde:', error);
+        throw error;
+      }
 
-      setStreamer(prev => ({ ...prev, ...updatedSettings }));
+      console.log('Données sauvegardées:', data); // DEBUG
+
+      // Mettre à jour l'état local avec les nouvelles données
+      setStreamer(data);
+      setOriginalStreamerData(data); // NOUVEAU : mettre à jour les données originales
+      setHasUnsavedChanges(false); // NOUVEAU : plus de changements non sauvegardés
       
       toast({
         title: "Paramètres sauvegardés",
@@ -279,8 +329,8 @@ export default function AdminPanel() {
     } catch (error) {
       console.error('Error saving settings:', error);
       toast({
-        title: "Erreur",
-        description: "Impossible de sauvegarder les paramètres.",
+        title: "Erreur de sauvegarde",
+        description: `Impossible de sauvegarder les paramètres: ${error.message}`,
         variant: "destructive",
       });
     } finally {
@@ -294,7 +344,8 @@ export default function AdminPanel() {
     try {
       const updateData = { 
         status: newStatus,
-        is_live: newStatus === 'live'
+        is_live: newStatus === 'live',
+        updated_at: new Date().toISOString()
       };
 
       // Si on démarre, enregistrer le timestamp
@@ -306,7 +357,7 @@ export default function AdminPanel() {
           toast({
             title: "Attention",
             description: "Aucun mini-jeu n'a été sélectionné. Les viewers ne pourront pas jouer.",
-            variant: "warning",
+            variant: "destructive",
           });
         }
       }
@@ -322,14 +373,21 @@ export default function AdminPanel() {
         updateData.total_time_added = 0;
       }
 
-      const { error } = await supabase
+      console.log('Mise à jour du statut:', updateData); // DEBUG
+
+      const { data, error } = await supabase
         .from('streamers')
         .update(updateData)
-        .eq('id', streamer.id);
+        .eq('id', streamer.id)
+        .select()
+        .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Erreur mise à jour statut:', error);
+        throw error;
+      }
 
-      setStreamer(prev => ({ ...prev, ...updateData }));
+      setStreamer(data);
       
       const statusMessages = {
         live: "Pauvrathon démarré",
@@ -350,7 +408,7 @@ export default function AdminPanel() {
       console.error('Error updating status:', error);
       toast({
         title: "Erreur",
-        description: "Impossible de mettre à jour le statut.",
+        description: `Impossible de mettre à jour le statut: ${error.message}`,
         variant: "destructive",
       });
     }
@@ -368,14 +426,19 @@ export default function AdminPanel() {
     if (!streamer) return;
 
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('streamers')
-        .update({ current_clicks: 0 })
-        .eq('id', streamer.id);
+        .update({ 
+          current_clicks: 0,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', streamer.id)
+        .select()
+        .single();
 
       if (error) throw error;
 
-      setStreamer(prev => ({ ...prev, current_clicks: 0 }));
+      setStreamer(data);
       
       toast({
         title: "Clics remis à zéro",
@@ -385,18 +448,26 @@ export default function AdminPanel() {
       console.error('Error resetting clicks:', error);
       toast({
         title: "Erreur",
-        description: "Impossible de remettre à zéro les clics.",
+        description: `Impossible de remettre à zéro les clics: ${error.message}`,
         variant: "destructive",
       });
     }
   };
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(pauvrathonUrl);
+  const copyToClipboard = (url, type) => {
+    navigator.clipboard.writeText(url);
     toast({
       title: "Lien copié",
-      description: "Le lien de la page Pauvrathon a été copié dans le presse-papier.",
+      description: `Le lien ${type} a été copié dans le presse-papier.`,
     });
+  };
+
+  const copyOverlayLink = () => {
+    copyToClipboard(overlayUrl, 'de l\'overlay');
+  };
+
+  const copyPauvrathonLink = () => {
+    copyToClipboard(pauvrathonUrl, 'de la page Pauvrathon');
   };
 
   if (loading) {
@@ -439,10 +510,17 @@ export default function AdminPanel() {
                 <TabsTrigger value="configuration">
                   <Settings className="w-4 h-4 mr-2" />
                   Configuration
+                  {hasUnsavedChanges && (
+                    <Badge variant="destructive" className="ml-2 text-xs">•</Badge>
+                  )}
                 </TabsTrigger>
                 <TabsTrigger value="statistics">
                   <BarChart3 className="w-4 h-4 mr-2" />
                   Statistiques
+                </TabsTrigger>
+                <TabsTrigger value="links">
+                  <Link className="w-4 h-4 mr-2" />
+                  Liens & Overlay
                 </TabsTrigger>
               </TabsList>
               
@@ -674,9 +752,6 @@ export default function AdminPanel() {
                         {availableMinigames.map((minigame) => (
                           <div 
                             key={minigame.id} 
-                            className={`flex items-start space-x-3 p-4 border rounded-lg transition-colors ${
-                              selectedGames.includes(minigame.id) ? 'bg-primary/5 border-primary/30' : ''
-                            }`}
                           >
                             <Checkbox
                               id={`minigame-${minigame.id}`}
@@ -711,11 +786,141 @@ export default function AdminPanel() {
                     <div className="text-sm text-muted-foreground">
                       <span className="font-medium">{selectedGames.length}</span> mini-jeux sélectionnés sur {availableMinigames.length} disponibles
                     </div>
-                    <Button onClick={handleSaveSettings} disabled={saving}>
+                    <Button 
+                      onClick={handleSaveSettings} 
+                      disabled={saving || !hasUnsavedChanges}
+                      variant={hasUnsavedChanges ? "default" : "outline"}
+                    >
                       <Save className="mr-2 h-4 w-4" />
-                      {saving ? 'Sauvegarde...' : 'Enregistrer les paramètres'}
+                      {saving ? 'Sauvegarde...' : hasUnsavedChanges ? 'Sauvegarder les changements' : 'Paramètres sauvegardés'}
                     </Button>
                   </CardFooter>
+                </Card>
+              </TabsContent>
+
+              {/* NOUVEAU : Onglet Liens & Overlay */}
+              <TabsContent value="links">
+                <div className="grid gap-6 md:grid-cols-2">
+                  {/* Page Pauvrathon */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center">
+                        <Eye className="mr-2 h-5 w-5" />
+                        Page Pauvrathon
+                      </CardTitle>
+                      <CardDescription>
+                        Lien vers la page publique de votre Pauvrathon
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex items-center space-x-2">
+                        <Input 
+                          value={pauvrathonUrl} 
+                          readOnly 
+                          className="text-sm"
+                        />
+                        <Button size="icon" onClick={copyPauvrathonLink}>
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      
+                      <Button 
+                        variant="outline" 
+                        className="w-full"
+                        onClick={() => window.open(pauvrathonUrl, '_blank')}
+                      >
+                        <ExternalLink className="mr-2 h-4 w-4" />
+                        Voir la page
+                      </Button>
+
+                      <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg">
+                        <strong>Usage :</strong> Partagez ce lien avec vos viewers pour qu'ils puissent participer au Pauvrathon.
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Overlay OBS */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center">
+                        <Monitor className="mr-2 h-5 w-5" />
+                        Overlay OBS
+                      </CardTitle>
+                      <CardDescription>
+                        Lien de l'overlay pour votre logiciel de streaming
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex items-center space-x-2">
+                        <Input 
+                          value={overlayUrl} 
+                          readOnly 
+                          className="text-sm"
+                        />
+                        <Button size="icon" onClick={copyOverlayLink}>
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      
+                      <Button 
+                        variant="outline" 
+                        className="w-full"
+                        onClick={() => window.open(overlayUrl, '_blank')}
+                      >
+                        <Monitor className="mr-2 h-4 w-4" />
+                        Tester l'overlay
+                      </Button>
+
+                      <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg space-y-2">
+                        <p><strong>Configuration OBS :</strong></p>
+                        <ol className="list-decimal list-inside space-y-1 text-xs">
+                          <li>Ajoutez une source "Navigateur"</li>
+                          <li>Collez l'URL de l'overlay</li>
+                          <li>Définissez la taille : 400x200px</li>
+                          <li>Positionnez où vous voulez</li>
+                        </ol>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Instructions détaillées */}
+                <Card className="mt-6">
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <HelpCircle className="mr-2 h-5 w-5" />
+                      Guide d'utilisation
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid md:grid-cols-2 gap-6">
+                      <div>
+                        <h4 className="font-medium mb-3 flex items-center">
+                          <Eye className="mr-2 h-4 w-4" />
+                          Page Pauvrathon
+                        </h4>
+                        <ul className="text-sm space-y-2 text-muted-foreground">
+                          <li>• Partagez ce lien avec vos viewers</li>
+                          <li>• Ils peuvent cliquer et jouer aux mini-jeux</li>
+                          <li>• Le timer se met à jour en temps réel</li>
+                          <li>• Compatible mobile et desktop</li>
+                        </ul>
+                      </div>
+                      
+                      <div>
+                        <h4 className="font-medium mb-3 flex items-center">
+                          <Monitor className="mr-2 h-4 w-4" />
+                          Overlay OBS
+                        </h4>
+                        <ul className="text-sm space-y-2 text-muted-foreground">
+                          <li>• Affiche le timer en temps réel</li>
+                          <li>• Progression des clics</li>
+                          <li>• Statut du Pauvrathon</li>
+                          <li>• Design transparent pour stream</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </CardContent>
                 </Card>
               </TabsContent>
               
@@ -741,7 +946,7 @@ export default function AdminPanel() {
                       <div className="bg-primary/10 p-4 rounded-lg text-center">
                         <Trophy className="mx-auto h-6 w-6 mb-2 text-primary" />
                         <div className="text-2xl font-bold">
-                          {stats.reduce((sum, stat) => sum + stat.games_won, 0)}
+                          {stats.reduce((sum, stat) => sum + (stat.games_won || 0), 0)}
                         </div>
                         <p className="text-sm text-muted-foreground">Victoires</p>
                       </div>
@@ -749,7 +954,7 @@ export default function AdminPanel() {
                       <div className="bg-primary/10 p-4 rounded-lg text-center">
                         <Check className="mx-auto h-6 w-6 mb-2 text-primary" />
                         <div className="text-2xl font-bold">
-                          {stats.reduce((sum, stat) => sum + stat.clicks_contributed, 0)}
+                          {stats.reduce((sum, stat) => sum + (stat.clicks_contributed || 0), 0)}
                         </div>
                         <p className="text-sm text-muted-foreground">Clics totaux</p>
                       </div>
@@ -757,7 +962,7 @@ export default function AdminPanel() {
                       <div className="bg-primary/10 p-4 rounded-lg text-center">
                         <Clock className="mx-auto h-6 w-6 mb-2 text-primary" />
                         <div className="text-2xl font-bold">
-                          {stats.reduce((sum, stat) => sum + stat.time_contributed, 0)}s
+                          {stats.reduce((sum, stat) => sum + (stat.time_contributed || 0), 0)}s
                         </div>
                         <p className="text-sm text-muted-foreground">Temps ajouté</p>
                       </div>
@@ -795,9 +1000,9 @@ export default function AdminPanel() {
                                   )}
                                   <span className="font-medium">{stat.player_twitch_username || 'Anonyme'}</span>
                                 </div>
-                                <div className="text-center">{stat.clicks_contributed}</div>
-                                <div className="text-center">{stat.games_won}/{stat.games_played}</div>
-                                <div className="text-center">{stat.time_contributed}s</div>
+                                <div className="text-center">{stat.clicks_contributed || 0}</div>
+                                <div className="text-center">{stat.games_won || 0}/{stat.games_played || 0}</div>
+                                <div className="text-center">{stat.time_contributed || 0}s</div>
                               </div>
                             ))}
                           </div>
@@ -865,34 +1070,6 @@ export default function AdminPanel() {
                     Nouveau Pauvrathon
                   </Button>
                 )}
-              </CardContent>
-            </Card>
-            
-            {/* Lien vers la page */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Lien de la page Pauvrathon</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center space-x-2">
-                  <Input 
-                    value={pauvrathonUrl} 
-                    readOnly 
-                    className="text-xs"
-                  />
-                  <Button size="icon" onClick={copyToClipboard}>
-                    <Link className="h-4 w-4" />
-                  </Button>
-                </div>
-                
-                <Button 
-                  variant="outline" 
-                  className="w-full"
-                  onClick={() => window.open(pauvrathonUrl, '_blank')}
-                >
-                  <ExternalLink className="mr-2 h-4 w-4" />
-                  Voir la page
-                </Button>
               </CardContent>
             </Card>
             
@@ -982,7 +1159,7 @@ export default function AdminPanel() {
                     <span className="font-medium text-foreground">Terminer</span> : Arrête définitivement le Pauvrathon actuel.
                   </p>
                   <p>
-                    <span className="font-medium text-foreground">Mini-jeux</span> : Sélectionnez au moins un mini-jeu pour permettre aux participants de jouer.
+                    <span className="font-medium text-foreground">Overlay</span> : Ajoutez l'URL dans OBS comme source navigateur.
                   </p>
                 </div>
               </CardContent>

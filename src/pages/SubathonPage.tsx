@@ -39,8 +39,6 @@ const SubathonPage = () => {
   const [gameWon, setGameWon] = useState(false);
   const [streamData, setStreamData] = useState<any>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
-  const [pauvrathonStartTime, setPauvrathonStartTime] = useState<Date | null>(null);
-  const [pausedTimeRemaining, setPausedTimeRemaining] = useState<number | null>(null);
   const [timeRemaining, setTimeRemaining] = useState<string>('');
   const [playerLoaded, setPlayerLoaded] = useState(false);
   const [forceStreamOnline, setForceStreamOnline] = useState(false);
@@ -59,20 +57,38 @@ const SubathonPage = () => {
 
   useEffect(() => {
     fetchStreamerData();
-    const interval = setInterval(checkStreamStatus, 30000);
-    return () => clearInterval(interval);
+    const interval = setInterval(fetchStreamerData, 5000); // Actualiser plus souvent
+    const statusInterval = setInterval(checkStreamStatus, 30000);
+    return () => {
+      clearInterval(interval);
+      clearInterval(statusInterval);
+    };
   }, [id]);
 
-  // Timer avec gestion de la pause
+  // TIMER CORRIGÉ - Gestion correcte des pauses
   useEffect(() => {
     const timer = setInterval(() => {
       const now = new Date();
       setCurrentTime(now);
       
-      if (streamer?.status === 'live' && pauvrathonStartTime) {
-        const baseDuration = (streamer.initial_duration || 7200);
-        const totalDuration = baseDuration + (streamer.total_time_added || 0);
-        const elapsed = Math.floor((now.getTime() - pauvrathonStartTime.getTime()) / 1000);
+      if (!streamer) {
+        setTimeRemaining("--:--:--");
+        return;
+      }
+
+      const baseDuration = streamer.initial_duration || 7200;
+      const totalDuration = baseDuration + (streamer.total_time_added || 0);
+
+      if (streamer.status === 'live' && streamer.stream_started_at) {
+        // Mode LIVE : calculer en temps réel
+        const startTime = new Date(streamer.stream_started_at).getTime();
+        let elapsed = Math.floor((now.getTime() - startTime) / 1000);
+        
+        // Soustraire le temps de pause accumulé si le champ existe
+        if (streamer.total_paused_duration) {
+          elapsed = Math.max(0, elapsed - streamer.total_paused_duration);
+        }
+        
         const remaining = Math.max(0, totalDuration - elapsed);
         
         if (remaining > 0) {
@@ -83,18 +99,46 @@ const SubathonPage = () => {
         } else {
           setTimeRemaining("Terminé");
         }
-      } else if (streamer?.status === 'paused' && pausedTimeRemaining !== null) {
-        const hours = Math.floor(pausedTimeRemaining / 3600);
-        const minutes = Math.floor((pausedTimeRemaining % 3600) / 60);
-        const seconds = pausedTimeRemaining % 60;
-        setTimeRemaining(`${hours}h ${minutes}m ${seconds}s`);
-      } else if (streamer?.status === 'ended') {
+        
+      } else if (streamer.status === 'paused') {
+        // Mode PAUSE : afficher le temps figé au moment de la pause
+        if (streamer.pause_started_at && streamer.stream_started_at) {
+          const startTime = new Date(streamer.stream_started_at).getTime();
+          const pauseTime = new Date(streamer.pause_started_at).getTime();
+          let elapsedWhenPaused = Math.floor((pauseTime - startTime) / 1000);
+          
+          // Soustraire le temps de pause accumulé avant cette pause
+          if (streamer.total_paused_duration) {
+            elapsedWhenPaused = Math.max(0, elapsedWhenPaused - streamer.total_paused_duration);
+          }
+          
+          const remainingWhenPaused = Math.max(0, totalDuration - elapsedWhenPaused);
+          
+          const hours = Math.floor(remainingWhenPaused / 3600);
+          const minutes = Math.floor((remainingWhenPaused % 3600) / 60);
+          const seconds = remainingWhenPaused % 60;
+          setTimeRemaining(`${hours}h ${minutes}m ${seconds}s`);
+        } else {
+          // Fallback si pas de timestamps
+          const hours = Math.floor(totalDuration / 3600);
+          const minutes = Math.floor((totalDuration % 3600) / 60);
+          const seconds = totalDuration % 60;
+          setTimeRemaining(`${hours}h ${minutes}m ${seconds}s`);
+        }
+        
+      } else if (streamer.status === 'ended') {
         setTimeRemaining("Terminé");
+      } else {
+        // Status offline ou autre
+        const hours = Math.floor(totalDuration / 3600);
+        const minutes = Math.floor((totalDuration % 3600) / 60);
+        const seconds = totalDuration % 60;
+        setTimeRemaining(`${hours}h ${minutes}m ${seconds}s`);
       }
     }, 1000);
     
     return () => clearInterval(timer);
-  }, [streamer?.status, streamer?.total_time_added, streamer?.initial_duration, pauvrathonStartTime, pausedTimeRemaining]);
+  }, [streamer?.status, streamer?.total_time_added, streamer?.initial_duration, streamer?.stream_started_at, streamer?.pause_started_at, streamer?.total_paused_duration]);
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -106,82 +150,48 @@ const SubathonPage = () => {
     return () => clearTimeout(timer);
   }, [countdown, showMinigame, failedAttempts]);
 
+  // FONCTION CORRIGÉE pour récupérer les données streamer
   const fetchStreamerData = async () => {
     if (!id) return;
 
     try {
-      let { data, error } = await supabase
+      // Récupérer d'abord les données du streamer
+      const { data: streamerData, error: streamerError } = await supabase
         .from('streamers')
-        .select(`
-          *,
-          profiles!inner(
-            id,
-            user_id,
-            twitch_id,
-            twitch_username,
-            twitch_display_name,
-            avatar_url,
-            role
-          )
-        `)
+        .select('*')
         .eq('id', id)
         .single();
 
-      if (error || !data) {
-        const response = await supabase
-          .from('streamers')
-          .select(`
-            *,
-            profiles(
-              id,
-              user_id,
-              twitch_id,
-              twitch_username,
-              twitch_display_name,
-              avatar_url,
-              role
-            )
-          `)
-          .eq('id', id)
-          .single();
-        
-        data = response.data;
-        error = response.error;
-      }
-
-      if (error || !data) {
-        const streamerResponse = await supabase
-          .from('streamers')
-          .select('*')
-          .eq('id', id)
-          .single();
-
-        if (streamerResponse.error) throw streamerResponse.error;
-
-        if (streamerResponse.data) {
-          const profileResponse = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('user_id', streamerResponse.data.user_id)
-            .single();
-
-          data = {
-            ...streamerResponse.data,
-            profiles: profileResponse.data || null
-          };
-          if (profileResponse.data) {
-            (data as any).profile = profileResponse.data;
-          }
-        }
-      }
-
-      if (!data) throw new Error('Aucune donnée trouvée pour ce streamer');
-
-      setStreamer(data as unknown as Streamer);
-      setCurrentClicks(data.current_clicks || 0);
-      setClicksRequired(data.clicks_required || 10);
+      if (streamerError) throw streamerError;
       
-      setIsStreamerOwner(user?.id === data.user_id);
+      if (!streamerData) {
+        throw new Error('Streamer non trouvé');
+      }
+
+      // Récupérer séparément le profil avec l'user_id du streamer
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', streamerData.user_id)
+        .single();
+
+      if (profileError) {
+        console.warn('Profil non trouvé:', profileError);
+      }
+
+      // Combiner les données
+      const completeStreamerData = {
+        ...streamerData,
+        profile: profileData || null
+      };
+
+      console.log('Données streamer chargées:', completeStreamerData);
+
+      setStreamer(completeStreamerData as unknown as Streamer);
+      setCurrentClicks(streamerData.current_clicks || 0);
+      setClicksRequired(streamerData.clicks_required || 10);
+      
+      setIsStreamerOwner(user?.id === streamerData.user_id);
       
       // Activer la simulation automatiquement pour mister_ds_
       if (user && user.id === '5cee82f9-1c72-4a76-abdc-021976598a77') {
@@ -193,44 +203,17 @@ const SubathonPage = () => {
         });
       }
       
-      if (data.initial_duration) {
-        setInitialHours(Math.floor(data.initial_duration / 3600));
-        setInitialMinutes(Math.floor((data.initial_duration % 3600) / 60));
+      if (streamerData.initial_duration) {
+        setInitialHours(Math.floor(streamerData.initial_duration / 3600));
+        setInitialMinutes(Math.floor((streamerData.initial_duration % 3600) / 60));
       }
 
-      const isLive = data.status === 'live';
-      const isPaused = data.status === 'paused';
+      const isLive = streamerData.status === 'live';
       
       if (playerLoaded && !forceStreamOnline) {
         console.log('Using Twitch player detection for stream status');
       } else {
         setStreamOnline(isLive);
-      }
-      
-      // Gestion des temps avec persistance
-      if (isLive) {
-        const startTime = data.stream_started_at 
-          ? new Date(data.stream_started_at) 
-          : new Date();
-        setPauvrathonStartTime(startTime);
-        setPausedTimeRemaining(null);
-      } else if (isPaused) {
-        const baseDuration = data.initial_duration || 7200;
-        const totalDuration = baseDuration + (data.total_time_added || 0);
-        
-        if (data.pause_started_at && data.stream_started_at) {
-          const pauseTime = new Date(data.pause_started_at);
-          const startTime = new Date(data.stream_started_at);
-          const elapsedWhenPaused = Math.floor((pauseTime.getTime() - startTime.getTime()) / 1000);
-          const remainingWhenPaused = Math.max(0, totalDuration - elapsedWhenPaused);
-          setPausedTimeRemaining(remainingWhenPaused);
-        } else {
-          setPausedTimeRemaining(totalDuration);
-        }
-        setPauvrathonStartTime(null);
-      } else {
-        setPauvrathonStartTime(null);
-        setPausedTimeRemaining(null);
       }
 
     } catch (error) {
@@ -284,6 +267,7 @@ const SubathonPage = () => {
         .from('streamers')
         .update({ 
           status: 'live',
+          is_live: true,
           stream_started_at: now.toISOString(),
           pause_started_at: null
         })
@@ -316,6 +300,7 @@ const SubathonPage = () => {
         .from('streamers')
         .update({ 
           status: 'paused',
+          is_live: false,
           pause_started_at: now.toISOString()
         })
         .eq('id', streamer.id);
@@ -346,6 +331,7 @@ const SubathonPage = () => {
         .from('streamers')
         .update({ 
           status: 'ended',
+          is_live: false,
           pause_started_at: null
         })
         .eq('id', streamer.id);
@@ -488,13 +474,20 @@ const SubathonPage = () => {
     setShowVictoryButton(true);
     setShowMinigame(false);
     
-    const baseTime = streamer.time_increment || 30;
-    const randomBonus = Math.floor(Math.random() * score * 10);
-    const timeToAdd = baseTime + randomBonus;
+    // Calculer le temps selon le mode configuré
+    let timeToAdd: number;
+    
+    if (streamer.time_mode === 'random') {
+      const minTime = streamer.min_random_time || 10;
+      const maxTime = streamer.max_random_time || 60;
+      timeToAdd = Math.floor(Math.random() * (maxTime - minTime + 1)) + minTime;
+    } else {
+      timeToAdd = streamer.time_increment || 30;
+    }
     
     toast({
       title: "Félicitations !",
-      description: `Score: ${score}! Temps à ajouter: ${timeToAdd}s (base: ${baseTime}s + bonus: ${randomBonus}s)`,
+      description: `Score: ${score}! Temps à ajouter: ${timeToAdd}s`,
     });
     
     try {
@@ -505,6 +498,9 @@ const SubathonPage = () => {
         .eq('id', streamer.id);
 
       if (error) throw error;
+      
+      // Actualiser les données pour refléter le changement
+      await fetchStreamerData();
       
       setFailedAttempts(0);
       setShowVictoryButton(false);
@@ -540,9 +536,7 @@ const SubathonPage = () => {
         description: `${timeToAdd} secondes ajoutées au subathon de ${displayName} !`,
       });
 
-      setTimeout(() => {
-        navigate(`/streamer/${streamer.id}`);
-      }, 2000);
+      await fetchStreamerData();
 
     } catch (error) {
       console.error('Error adding time:', error);
@@ -577,14 +571,18 @@ const SubathonPage = () => {
   };
 
   const toggleFullscreen = () => setIsFullscreen(!isFullscreen);
+  
   const handlePlayerReady = () => {
     setPlayerLoaded(true);
     setTimeout(checkStreamStatus, 2000);
   };
+  
   const handleStreamOnline = () => setStreamOnline(true);
+  
   const handleStreamOffline = () => {
     if (streamer?.status !== 'live') setStreamOnline(false);
   };
+  
   const resetClickingPhase = () => {
     setFailedAttempts(0);
     setShowMinigame(false);
@@ -596,6 +594,7 @@ const SubathonPage = () => {
       description: "Vous pouvez recommencer à cliquer !",
     });
   };
+  
   const forceStreamOnlineToggle = () => {
     setForceStreamOnline(!forceStreamOnline);
     setStreamOnline(!forceStreamOnline);
@@ -740,7 +739,10 @@ const SubathonPage = () => {
             <p className="text-muted-foreground text-xl mb-2">Pauvrathon en cours</p>
             {(streamer?.status === 'live' || streamer?.status === 'paused') && timeRemaining && (
               <div className="flex items-center gap-4 text-lg font-bold">
-                <span className="text-orange-500">Temps restant: {timeRemaining}</span>
+                <span className={`${streamer?.status === 'paused' ? 'text-yellow-500' : 'text-orange-500'}`}>
+                  Temps restant: {timeRemaining}
+                  {streamer?.status === 'paused' && <span className="ml-2 text-yellow-500">(EN PAUSE)</span>}
+                </span>
                 {streamData?.viewer_count && (
                   <span className="text-purple-500">{streamData.viewer_count} spectateurs</span>
                 )}
@@ -791,7 +793,6 @@ const SubathonPage = () => {
                       Durée totale: {initialHours}h {initialMinutes}m
                     </p>
                     <Button onClick={updateInitialDuration} className="w-full">
-                      <Clock className="w-4 h-4 mr-2" />
                       Mettre à jour la durée
                     </Button>
                   </div>
@@ -897,14 +898,16 @@ const SubathonPage = () => {
                       onClick={handleClick} 
                       className={`w-full py-6 text-xl font-bold ${
                         !canInteract ? 'bg-gray-600 hover:bg-gray-600' : 
+                        streamer?.status === 'paused' ? 'bg-yellow-600 hover:bg-yellow-600' :
                         simulationMode ? 'bg-purple-600 hover:bg-purple-700' : ''
                       }`}
-                      disabled={showMinigame || !canInteract || countdown > 0}
+                      disabled={showMinigame || !canInteract || countdown > 0 || streamer?.status === 'paused'}
                       size="lg"
                     >
                       {countdown > 0 ? `Nouveau jeu dans ${countdown}s` :
                        !user ? 'Connectez-vous pour jouer' :
-                       simulationMode ? '🧪 Mode Test - Cliquer pour jouer !' :
+                       streamer?.status === 'paused' ? 'Pauvrathon en pause' :
+                       simulationMode ? 'Mode Test - Cliquer pour jouer !' :
                        !canInteract ? 'Pauvrathon non actif' : 
                        'Cliquer pour jouer !'}
                     </Button>
@@ -987,11 +990,24 @@ const SubathonPage = () => {
                   </div>
                   
                    {(streamer.status === 'live' || streamer.status === 'paused') && (
-                     <div className="flex justify-between items-center p-3 bg-orange-50 dark:bg-orange-950 rounded-lg border-l-4 border-orange-500">
+                     <div className={`flex justify-between items-center p-3 rounded-lg border-l-4 ${
+                       streamer.status === 'paused' 
+                         ? 'bg-yellow-50 dark:bg-yellow-950 border-yellow-500' 
+                         : 'bg-orange-50 dark:bg-orange-950 border-orange-500'
+                     }`}>
                        <span className="font-bold">Temps restant:</span>
-                       <span className="font-bold text-xl text-orange-600">
-                         {timeRemaining || 'Calcul en cours...'}
-                       </span>
+                       <div className="text-right">
+                         <span className={`font-bold text-xl ${
+                           streamer.status === 'paused' ? 'text-yellow-600' : 'text-orange-600'
+                         }`}>
+                           {timeRemaining || 'Calcul en cours...'}
+                         </span>
+                         {streamer.status === 'paused' && (
+                           <div className="text-xs text-yellow-600 font-medium">
+                             (Timer en pause)
+                           </div>
+                         )}
+                       </div>
                      </div>
                    )}
                   
@@ -1020,7 +1036,11 @@ const SubathonPage = () => {
                   
                   <div className="flex justify-between items-center">
                     <span>Temps par victoire:</span>
-                    <span className="font-bold text-blue-600">{streamer.time_increment || 30}s</span>
+                    <span className="font-bold text-blue-600">
+                      {streamer.time_mode === 'random' 
+                        ? `${streamer.min_random_time || 10}-${streamer.max_random_time || 60}s` 
+                        : `${streamer.time_increment || 30}s`}
+                    </span>
                   </div>
                   
                   <div className="flex justify-between items-center">
@@ -1029,7 +1049,7 @@ const SubathonPage = () => {
                   </div>
                   
                   <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
-                    <span>Statut du stream:</span>
+                    <span>Statut du Pauvrathon:</span>
                      <div className="flex items-center gap-2">
                        <div className={`w-2 h-2 rounded-full ${
                          streamer?.status === 'live' ? 'bg-red-500 animate-pulse' : 
