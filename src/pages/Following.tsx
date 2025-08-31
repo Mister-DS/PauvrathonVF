@@ -372,7 +372,7 @@ export default function Following() {
                                 </div>
                                 <div className="flex items-center space-x-1">
                                   <Gamepad2 className="h-4 w-4 text-muted-foreground" />
-                                  <span>{streamer.active_minigames?.length || 0} jeux</span>
+                                  <span>{Array.isArray(streamer.active_minigames) ? streamer.active_minigames.length : 0} jeux</span>
                                 </div>
                               </div>
                               

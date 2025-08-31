@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 interface HangmanProps {
-  onWin: () => void;
+  onWin: (score: number) => void;
   onLose: () => void;
   attempts: number;
   maxAttempts: number;
@@ -58,9 +58,11 @@ export function Hangman({ onWin, onLose, attempts, maxAttempts }: HangmanProps) 
 
   useEffect(() => {
     if (isWon && word) {
-      setTimeout(() => onWin(), 1000);
+      // Calculer le score basé sur les erreurs (moins d'erreurs = meilleur score)
+      const score = Math.max(1, maxAttempts - currentAttempts + 1);
+      setTimeout(() => onWin(score), 1000);
     }
-  }, [isWon, word, onWin]);
+  }, [isWon, word, onWin, maxAttempts, currentAttempts]);
 
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
   const remainingAttempts = maxAttempts - currentAttempts;

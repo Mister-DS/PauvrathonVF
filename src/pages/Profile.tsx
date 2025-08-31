@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,11 +7,65 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Navigation } from '@/components/Navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useStreamerStatus } from '@/hooks/useStreamerStatus';
-import { User, Trophy, Clock, Gamepad2, Calendar, LogOut } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/hooks/use-toast';
+import { 
+  User, 
+  Trophy, 
+  Clock, 
+  Gamepad2, 
+  Calendar, 
+  LogOut, 
+  Trash2, 
+  AlertTriangle 
+} from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 export default function Profile() {
   const { user, profile, signOut, connectTwitch, twitchUser } = useAuth();
   const { isLive } = useStreamerStatus(user?.id);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDeleteAccount = async () => {
+    if (!user) return;
+    
+    setIsDeleting(true);
+    try {
+      // Supprimer toutes les données utilisateur en cascade
+      const { error } = await supabase.rpc('delete_user_cascade', {
+        user_id: user.id
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Compte supprimé",
+        description: "Votre compte et toutes vos données ont été supprimés.",
+      });
+
+      // Déconnexion après suppression
+      await signOut();
+    } catch (error: any) {
+      console.error('Error deleting account:', error);
+      toast({
+        title: "Erreur",
+        description: error.message || "Impossible de supprimer le compte.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   // Redirect if not authenticated
   if (!user) {
@@ -171,6 +226,62 @@ export default function Profile() {
               </CardContent>
             </Card>
           )}
+
+          {/* Account Deletion */}
+          <Card className="border-destructive/20">
+            <CardHeader>
+              <CardTitle className="flex items-center text-destructive">
+                <AlertTriangle className="mr-2 h-5 w-5" />
+                Zone de Danger
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground mb-4">
+                Supprimer définitivement votre compte et toutes vos données associées. 
+                Cette action est <strong>irréversible</strong>.
+              </p>
+              
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive" disabled={isDeleting}>
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    {isDeleting ? 'Suppression...' : 'Supprimer mon compte'}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle className="flex items-center text-destructive">
+                      <AlertTriangle className="mr-2 h-5 w-5" />
+                      Confirmer la suppression
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      <strong>Cette action est irréversible !</strong>
+                      <br /><br />
+                      En confirmant, vous supprimez définitivement :
+                      <ul className="list-disc list-inside mt-2 space-y-1">
+                        <li>Votre profil utilisateur</li>
+                        <li>Vos statistiques de jeu</li>
+                        <li>Vos demandes streamer</li>
+                        <li>Vos données de suivis</li>
+                        <li>Toutes vos données personnelles</li>
+                      </ul>
+                      <br />
+                      Êtes-vous absolument certain de vouloir continuer ?
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Annuler</AlertDialogCancel>
+                    <AlertDialogAction 
+                      onClick={handleDeleteAccount}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      Oui, supprimer définitivement
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>

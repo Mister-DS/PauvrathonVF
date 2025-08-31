@@ -8,7 +8,7 @@ import {
   NavigationMenuItem,
   NavigationMenuList,
 } from '@/components/ui/navigation-menu';
-import { User, Settings, Shield, LogOut } from 'lucide-react';
+import { User, Settings, Shield, LogOut, Menu, X } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,11 +16,15 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 export function Navigation() {
   const { user, profile, signOut } = useAuth();
   const location = useLocation();
   const [hasStreamerProfile, setHasStreamerProfile] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
+  const isMobile = useIsMobile();
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -44,6 +48,69 @@ export function Navigation() {
     checkStreamerProfile();
   }, [user, profile]);
 
+  const navigationItems = [
+    { path: '/decouverte', label: 'Découverte', show: !!user },
+    { path: '/suivis', label: 'Suivis', show: !!user },
+    { 
+      path: '/demande-streamer', 
+      label: 'Devenir Streamer', 
+      show: !!user && !hasStreamerProfile && profile?.role !== 'streamer' && profile?.role !== 'admin' 
+    },
+    { 
+      path: '/streamer', 
+      label: 'Mon Panneau', 
+      show: !!user && (profile?.role === 'streamer' || hasStreamerProfile || profile?.role === 'admin') 
+    },
+    { 
+      path: '/admin', 
+      label: 'Admin', 
+      show: !!user && profile?.role === 'admin' 
+    },
+  ];
+
+  const MobileMenu = () => (
+    <Sheet open={isOpen} onOpenChange={setIsOpen}>
+      <SheetTrigger asChild>
+        <Button variant="ghost" size="sm" className="md:hidden">
+          <Menu className="h-5 w-5" />
+        </Button>
+      </SheetTrigger>
+      <SheetContent side="left" className="w-80">
+        <div className="flex flex-col space-y-4 mt-8">
+          <Link to="/" className="text-2xl font-bold text-primary mb-6" onClick={() => setIsOpen(false)}>
+            Pauvrathon
+          </Link>
+          
+          {navigationItems.filter(item => item.show).map((item) => (
+            <Link key={item.path} to={item.path} onClick={() => setIsOpen(false)}>
+              <Button 
+                variant={isActive(item.path) ? 'default' : 'ghost'}
+                className="w-full justify-start"
+              >
+                {item.label}
+              </Button>
+            </Link>
+          ))}
+          
+          {user && (
+            <div className="border-t pt-4 mt-6">
+              <Link to="/profil" onClick={() => setIsOpen(false)}>
+                <Button variant="ghost" className="w-full justify-start">
+                  <User className="mr-2 h-4 w-4" />
+                  Profil
+                </Button>
+              </Link>
+              <Button variant="ghost" className="w-full justify-start" onClick={() => { signOut(); setIsOpen(false); }}>
+                <LogOut className="mr-2 h-4 w-4" />
+                Déconnexion
+              </Button>
+            </div>
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+
   return (
     <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto px-4">
@@ -53,75 +120,31 @@ export function Navigation() {
               Pauvrathon
             </Link>
             
-            {user && (
+            {/* Desktop Navigation */}
+            {user && !isMobile && (
               <NavigationMenu>
                 <NavigationMenuList className="space-x-2">
-                  <NavigationMenuItem>
-                    <Link to="/decouverte">
-                      <Button 
-                        variant={isActive('/decouverte') ? 'default' : 'ghost'}
-                        size="sm"
-                      >
-                        Découverte
-                      </Button>
-                    </Link>
-                  </NavigationMenuItem>
-                  
-                  <NavigationMenuItem>
-                    <Link to="/suivis">
-                      <Button 
-                        variant={isActive('/suivis') ? 'default' : 'ghost'}
-                        size="sm"
-                      >
-                        Suivis
-                      </Button>
-                    </Link>
-                  </NavigationMenuItem>
-                  
-                  {!hasStreamerProfile && profile?.role !== 'streamer' && profile?.role !== 'admin' && (
-                    <NavigationMenuItem>
-                      <Link to="/demande-streamer">
+                  {navigationItems.filter(item => item.show).map((item) => (
+                    <NavigationMenuItem key={item.path}>
+                      <Link to={item.path}>
                         <Button 
-                          variant={isActive('/demande-streamer') ? 'default' : 'ghost'}
+                          variant={isActive(item.path) ? 'default' : 'ghost'}
                           size="sm"
                         >
-                          Devenir Streamer
+                          {item.label}
                         </Button>
                       </Link>
                     </NavigationMenuItem>
-                  )}
-                  
-                  {(profile?.role === 'streamer' || hasStreamerProfile || profile?.role === 'admin') && (
-                    <NavigationMenuItem>
-                      <Link to="/streamer">
-                        <Button 
-                          variant={isActive('/streamer') ? 'default' : 'ghost'}
-                          size="sm"
-                        >
-                          Mon Panneau
-                        </Button>
-                      </Link>
-                    </NavigationMenuItem>
-                  )}
-                  
-                  {profile?.role === 'admin' && (
-                    <NavigationMenuItem>
-                      <Link to="/admin">
-                        <Button 
-                          variant={isActive('/admin') ? 'default' : 'ghost'}
-                          size="sm"
-                        >
-                          Admin
-                        </Button>
-                      </Link>
-                    </NavigationMenuItem>
-                  )}
+                  ))}
                 </NavigationMenuList>
               </NavigationMenu>
             )}
           </div>
 
           <div className="flex items-center space-x-4">
+            {/* Mobile Menu */}
+            {user && isMobile && <MobileMenu />}
+            
             {user ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
