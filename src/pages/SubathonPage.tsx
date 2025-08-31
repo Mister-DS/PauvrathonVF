@@ -97,7 +97,7 @@ const SubathonPage = () => {
     let timer: NodeJS.Timeout;
     if (countdown > 0) {
       timer = setTimeout(() => setCountdown(countdown - 1), 1000);
-    } else if (countdown === 0 && !showMinigame && failedAttempts > 0 && failedAttempts < 12) {
+    } else if (countdown === 0 && !showMinigame && failedAttempts > 0 && failedAttempts < 3) {
       setShowMinigame(true);
     }
     return () => clearTimeout(timer);
@@ -533,20 +533,20 @@ const SubathonPage = () => {
     setFailedAttempts(newFailedAttempts);
     setShowMinigame(false);
 
-    if (newFailedAttempts >= 12) { // Changé de 3 à 12
+    if (newFailedAttempts >= 3) { // 3 tentatives maximum
       toast({
         title: "Échec total",
-        description: "12 échecs ! Vous devez recommencer à cliquer.",
+        description: "3 tentatives échouées ! Vous devez recommencer à cliquer.",
         variant: "destructive",
       });
       setFailedAttempts(0);
     } else {
       toast({
-        title: `Échec ${newFailedAttempts}/12`,
-        description: "Nouvelle tentative dans 3 secondes...",
+        title: `Tentative ${newFailedAttempts}/3 échouée`,
+        description: `Nouvelle tentative (12 essais) dans 3 secondes...`,
         variant: "destructive",
       });
-      setCountdown(3); // Réduit le délai à 3 secondes
+      setCountdown(3);
     }
   };
 
@@ -871,7 +871,7 @@ const SubathonPage = () => {
                     <CardTitle className="flex items-center justify-between">
                       {currentGame === 'guessNumber' ? 'Devine le chiffre' : 'Jeu du pendu'}
                       <span className="text-sm font-normal text-muted-foreground">
-                        Échecs: {failedAttempts}/12
+                        Tentative: {failedAttempts + 1}/3 • 12 essais par tentative
                       </span>
                     </CardTitle>
                   </CardHeader>
@@ -880,7 +880,7 @@ const SubathonPage = () => {
                       <GuessNumber
                         onWin={handleGameWin}
                         onLose={handleGameLose}
-                        attempts={failedAttempts}
+                        attempts={0}
                         maxAttempts={12}
                       />
                     )}
@@ -888,7 +888,7 @@ const SubathonPage = () => {
                       <Hangman
                         onWin={handleGameWin}
                         onLose={handleGameLose}
-                        attempts={failedAttempts}
+                        attempts={0}
                         maxAttempts={12}
                       />
                     )}
