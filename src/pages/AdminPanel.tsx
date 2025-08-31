@@ -12,11 +12,11 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { StreamerRequest, Streamer, Minigame } from '@/types';
-import { 
-  Shield, 
-  UserCheck, 
-  UserX, 
-  Users, 
+import {
+  Shield,
+  UserCheck,
+  UserX,
+  Users,
   Clock,
   Gamepad2,
   Plus,
@@ -27,6 +27,16 @@ import {
   Crown,
   UserMinus
 } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
+// Liste des mini-jeux fiables, gérée en dur dans le code
+// Chaque jeu a un nom unique (id), un nom affiché, et une description
+const predefinedGames = [
+  { id: 'guess_number', name: 'Devine le nombre', description: 'Les viewers doivent deviner le nombre mystère.' },
+  { id: 'click_race', name: 'Course aux clics', description: 'Le premier à cliquer 100 fois l\'emporte.' },
+  { id: 'random_emote', name: 'Émote aléatoire', description: 'Le premier à poster l\'émote du jour gagne.' },
+  // Ajoutez vos futurs mini-jeux ici après les avoir codés
+];
 
 export default function AdminPanel() {
   const { user, profile } = useAuth();
@@ -34,11 +44,8 @@ export default function AdminPanel() {
   const [streamers, setStreamers] = useState<Streamer[]>([]);
   const [minigames, setMinigames] = useState<Minigame[]>([]);
   const [loading, setLoading] = useState(true);
-  const [newMinigame, setNewMinigame] = useState({
-    name: '',
-    code: '',
-    description: ''
-  });
+  const [newMinigameName, setNewMinigameName] = useState('');
+  const [newMinigameDescription, setNewMinigameDescription] = useState('');
 
   // Redirect if not admin
   if (!user || profile?.role !== 'admin') {
@@ -62,7 +69,7 @@ export default function AdminPanel() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      
+
       setRequests((data || []) as StreamerRequest[]);
     } catch (error) {
       console.error('Error fetching requests:', error);
@@ -85,12 +92,12 @@ export default function AdminPanel() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      
+
       const streamersWithProfile = (data || []).map(streamer => ({
         ...streamer,
         profile: Array.isArray(streamer.profiles) ? streamer.profiles[0] : streamer.profiles
       }));
-      
+
       setStreamers(streamersWithProfile as unknown as Streamer[]);
     } catch (error) {
       console.error('Error fetching streamers:', error);
@@ -105,7 +112,7 @@ export default function AdminPanel() {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      
+
       setMinigames(data || []);
     } catch (error) {
       console.error('Error fetching minigames:', error);
@@ -122,7 +129,7 @@ export default function AdminPanel() {
       // Update request status
       const { error: updateError } = await supabase
         .from('streamer_requests')
-        .update({ 
+        .update({
           status: action,
           reviewed_at: new Date().toISOString(),
           reviewed_by: user.id
@@ -203,50 +210,64 @@ export default function AdminPanel() {
   };
 
   const handleAddMinigame = async () => {
-  if (!newMinigame.name || !newMinigame.code) {
-    toast({
-      title: "Erreur",
-      description: "Le nom et le code sont requis.",
-      variant: "destructive",
-    });
-    return;
-  }
-
-  try {
-    // Vérification basique que le code contient un composant React valide
-    const cleanCode = newMinigame.code.trim();
-    if (!cleanCode.includes('export') || !cleanCode.includes('return')) {
-      throw new Error("Le code ne semble pas être un composant React valide");
+    if (!newMinigameName) {
+      toast({
+        title: "Erreur",
+        description: "Veuillez sélectionner un mini-jeu.",
+        variant: "destructive",
+      });
+      return;
     }
 
-    // Ajout du mini-jeu avec is_active = true par défaut
-    const { error } = await supabase
-      .from('minigames')
-      .insert({
-        ...newMinigame,
-        is_active: true,  // Jeu actif par défaut
-        created_by: user.id
+    try {
+      // Vérifier si le mini-jeu existe déjà
+      const existingGame = minigames.find(g => g.name === newMinigameName);
+      if (existingGame) {
+        toast({
+          title: "Mini-jeu déjà existant",
+          description: "Ce mini-jeu a déjà été ajouté.",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      const gameToAdd = predefinedGames.find(g => g.id === newMinigameName);
+      if (!gameToAdd) {
+        toast({
+          title: "Erreur",
+          description: "Le mini-jeu sélectionné n'est pas valide.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { error } = await supabase
+        .from('minigames')
+        .insert({
+          name: gameToAdd.id, // On stocke l'ID unique du jeu
+          description: gameToAdd.description,
+          is_active: true,  // Jeu actif par défaut
+          created_by: user.id
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: "Mini-jeu ajouté",
+        description: `Le mini-jeu "${gameToAdd.name}" a été ajouté avec succès et est maintenant disponible.`,
       });
 
-    if (error) throw error;
-
-    toast({
-      title: "Mini-jeu ajouté",
-      description: "Le nouveau mini-jeu a été ajouté avec succès et est maintenant disponible pour les streamers.",
-    });
-
-    // Réinitialiser le formulaire
-    setNewMinigame({ name: '', code: '', description: '' });
-    fetchMinigames();
-  } catch (error: any) {
-    console.error('Error adding minigame:', error);
-    toast({
-      title: "Erreur",
-      description: error.message || "Impossible d'ajouter le mini-jeu.",
-      variant: "destructive",
-    });
-  }
-};
+      setNewMinigameName('');
+      fetchMinigames();
+    } catch (error: any) {
+      console.error('Error adding minigame:', error);
+      toast({
+        title: "Erreur",
+        description: error.message || "Impossible d'ajouter le mini-jeu.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleCreateAdminStreamerProfile = async () => {
     try {
@@ -316,11 +337,12 @@ export default function AdminPanel() {
   const pendingRequests = requests.filter(r => r.status === 'pending');
   const totalStreamers = streamers.length;
   const totalActiveGames = minigames.filter(m => m.is_active).length;
+  const gamesNotInDb = predefinedGames.filter(g => !minigames.some(dbGame => dbGame.name === g.id));
 
   return (
     <div className="min-h-screen bg-background">
       <Navigation />
-      
+
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2 gradient-text flex items-center">
@@ -330,7 +352,7 @@ export default function AdminPanel() {
           <p className="text-muted-foreground mb-4">
             Gérez les utilisateurs, streamers et mini-jeux de la plateforme
           </p>
-          
+
           {/* Admin Quick Actions */}
           <div className="flex gap-4">
             <Button
@@ -356,7 +378,7 @@ export default function AdminPanel() {
               </div>
             </CardContent>
           </Card>
-          
+
           <Card className="glass-effect">
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
@@ -368,7 +390,7 @@ export default function AdminPanel() {
               </div>
             </CardContent>
           </Card>
-          
+
           <Card className="neon-border">
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
@@ -380,7 +402,7 @@ export default function AdminPanel() {
               </div>
             </CardContent>
           </Card>
-          
+
           <Card className="glass-effect">
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
@@ -431,26 +453,26 @@ export default function AdminPanel() {
                           </div>
                           <Badge variant="outline">En attente</Badge>
                         </div>
-                        
+
                         <div className="mb-3">
                           <p className="text-sm mb-1"><strong>Chaîne:</strong></p>
-                          <a 
-                            href={request.stream_link} 
-                            target="_blank" 
+                          <a
+                            href={request.stream_link}
+                            target="_blank"
                             rel="noopener noreferrer"
                             className="text-primary hover:underline text-sm"
                           >
                             {request.stream_link}
                           </a>
                         </div>
-                        
+
                         <div className="mb-4">
                           <p className="text-sm mb-1"><strong>Motivation:</strong></p>
                           <p className="text-sm text-muted-foreground bg-muted/50 p-2 rounded">
                             {request.motivation}
                           </p>
                         </div>
-                        
+
                         <div className="flex space-x-2">
                           <Button
                             size="sm"
@@ -542,51 +564,26 @@ export default function AdminPanel() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
-                  <Label htmlFor="game-name">Nom du jeu</Label>
-                  <Input
-                    id="game-name"
-                    value={newMinigame.name}
-                    onChange={(e) => setNewMinigame(prev => ({ ...prev, name: e.target.value }))}
-                    placeholder="Ex: guess_number"
-                  />
+                  <Label htmlFor="game-select">Sélectionner un jeu</Label>
+                  <Select onValueChange={setNewMinigameName} value={newMinigameName}>
+                    <SelectTrigger id="game-select">
+                      <SelectValue placeholder="Choisissez un mini-jeu" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {gamesNotInDb.length === 0 ? (
+                        <SelectItem disabled value="">Tous les jeux sont déjà ajoutés</SelectItem>
+                      ) : (
+                        gamesNotInDb.map(game => (
+                          <SelectItem key={game.id} value={game.id}>
+                            {game.name}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
                 </div>
-                
-                <div>
-                  <Label htmlFor="game-code">Code JavaScript du Mini-jeu *</Label>
-                  <div className="text-sm text-muted-foreground mb-2">
-                    Entrez le code React/JavaScript qui sera utilisé pour afficher et exécuter le mini-jeu.
-                    Ce code sera intégré dynamiquement dans l'interface du streamer.
-                  </div>
-                  <Textarea
-                    id="game-code"
-                    value={newMinigame.code}
-                    onChange={(e) => setNewMinigame(prev => ({ ...prev, code: e.target.value }))}
-                    placeholder={`// Exemple de mini-jeu simple
-export const MonMinijeu = ({ onWin, onLose }) => {
-  return (
-    <div>
-      <h3>Mon Mini-jeu</h3>
-      <button onClick={onWin}>Gagner</button>
-      <button onClick={onLose}>Perdre</button>
-    </div>
-  );
-};`}
-                    className="min-h-[200px] font-mono text-sm"
-                  />
-                </div>
-                
-                <div>
-                  <Label htmlFor="game-description">Description</Label>
-                  <Textarea
-                    id="game-description"
-                    value={newMinigame.description}
-                    onChange={(e) => setNewMinigame(prev => ({ ...prev, description: e.target.value }))}
-                    placeholder="Description du mini-jeu..."
-                    rows={3}
-                  />
-                </div>
-                
-                <Button onClick={handleAddMinigame} className="w-full neon-glow">
+
+                <Button onClick={handleAddMinigame} className="w-full neon-glow" disabled={!newMinigameName || gamesNotInDb.length === 0}>
                   <Plus className="mr-2 h-4 w-4" />
                   Ajouter le Mini-jeu
                 </Button>
@@ -613,7 +610,7 @@ export const MonMinijeu = ({ onWin, onLose }) => {
                         <div>
                           <p className="font-medium">{minigame.name}</p>
                           <p className="text-sm text-muted-foreground">
-                            {minigame.description || minigame.code}
+                            {minigame.description || 'Pas de description'}
                           </p>
                         </div>
                         <div className="flex items-center space-x-2">

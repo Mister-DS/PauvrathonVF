@@ -1,4 +1,6 @@
-import { useState, useEffect } from 'react';
+// src/pages/StreamerPannel.tsx
+
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Navigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -39,19 +41,18 @@ import {
   ClipboardCheck,
   Check,
   Monitor,
-  Copy
+  Copy,
+  Loader2
 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 
-interface Minigame {
-  id: string;
-  name: string;
-  code: string;
-  description: string;
-  is_active: boolean;
-}
+// Utility function to validate UUID format
+const isUUID = (uuid: string): boolean => {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(uuid);
+};
 
-// Composant pour le timer de pauvrathon
+// Composant pour le timer de pauvrathon (pas de changements)
 const PauvrathonTimer = ({ status, startTime, initialDuration, addedTime }) => {
   const [timeRemaining, setTimeRemaining] = useState(initialDuration);
   const [elapsedPercent, setElapsedPercent] = useState(100);
@@ -122,13 +123,13 @@ const PauvrathonTimer = ({ status, startTime, initialDuration, addedTime }) => {
 
 export default function AdminPanel() {
   const { user, profile } = useAuth();
-  const [streamer, setStreamer] = useState(null);
-  const [originalStreamerData, setOriginalStreamerData] = useState(null); // NOUVEAU : pour tracking des changements
-  const [availableMinigames, setAvailableMinigames] = useState([]);
-  const [stats, setStats] = useState([]);
+  const [streamer, setStreamer] = useState<any>(null);
+  const [originalStreamerData, setOriginalStreamerData] = useState<any>(null);
+  const [availableMinigames, setAvailableMinigames] = useState<any[]>([]);
+  const [stats, setStats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false); // NOUVEAU : indicateur de changements
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   
   // États pour la configuration
   const [timeMode, setTimeMode] = useState('fixed');
@@ -139,93 +140,57 @@ export default function AdminPanel() {
   const [maxRandomTime, setMaxRandomTime] = useState(60);
   const [clicksRequired, setClicksRequired] = useState(100);
   const [cooldownTime, setCooldownTime] = useState(30);
-  const [selectedGames, setSelectedGames] = useState([]);
+  const [selectedGames, setSelectedGames] = useState<string[]>([]);
   
   // URLs
   const [pauvrathonUrl, setPauvrathonUrl] = useState('');
-  const [overlayUrl, setOverlayUrl] = useState(''); // NOUVEAU : URL overlay
+  const [overlayUrl, setOverlayUrl] = useState('');
   
-  // Redirect if not authenticated or not an admin
-  if (!user || profile?.role !== 'admin') {
+  // **MODIFICATION : État pour le player vidéo et sa référence**
+  const videoRef = useRef<HTMLIFrameElement>(null);
+  const [videoStatus, setVideoStatus] = useState<'paused' | 'playing' | 'loading'>('paused');
+  
+  if (!user) {
     return <Navigate to="/" replace />;
   }
-
-  useEffect(() => {
-    fetchStreamerData();
-    fetchAvailableMinigames();
-    
-    // Set up real-time updates
-    const interval = setInterval(() => {
-      if (streamer?.status === 'live') {
-        fetchStreamerData();
-        fetchStats();
-      }
-    }, 5000);
-    
-    return () => clearInterval(interval);
-  }, [user]);
-
-  useEffect(() => {
-    if (streamer) {
-      fetchStats();
-    }
-  }, [streamer]);
+  if (profile && profile.role !== 'admin') {
+    return <Navigate to="/" replace />;
+  }
   
-  // Mettre à jour les URLs quand le streamer est chargé
-  useEffect(() => {
-    if (streamer) {
-      setPauvrathonUrl(`${window.location.origin}/streamer/${streamer.id}`);
-      setOverlayUrl(`${window.location.origin}/overlay/${streamer.id}`); // NOUVEAU
-    }
-  }, [streamer]);
-
-  // NOUVEAU : Détecter les changements non sauvegardés
-  useEffect(() => {
-    if (!originalStreamerData) return;
-    
-    const currentConfig = {
-      time_mode: timeMode,
-      time_increment: fixedTime,
-      min_random_time: minRandomTime,
-      max_random_time: maxRandomTime,
-      clicks_required: clicksRequired,
-      cooldown_seconds: cooldownTime,
-      initial_duration: (initialHours * 3600) + (initialMinutes * 60),
-      active_minigames: selectedGames
-    };
-    
-    const originalConfig = {
-      time_mode: originalStreamerData.time_mode || 'fixed',
-      time_increment: originalStreamerData.time_increment || 30,
-      min_random_time: originalStreamerData.min_random_time || 10,
-      max_random_time: originalStreamerData.max_random_time || 60,
-      clicks_required: originalStreamerData.clicks_required || 100,
-      cooldown_seconds: originalStreamerData.cooldown_seconds || 30,
-      initial_duration: originalStreamerData.initial_duration || 7200,
-      active_minigames: originalStreamerData.active_minigames || []
-    };
-    
-    const hasChanges = JSON.stringify(currentConfig) !== JSON.stringify(originalConfig);
-    setHasUnsavedChanges(hasChanges);
-  }, [timeMode, fixedTime, minRandomTime, maxRandomTime, clicksRequired, cooldownTime, initialHours, initialMinutes, selectedGames, originalStreamerData]);
-
-  const fetchStreamerData = async () => {
+  const fetchStreamerData = useCallback(async () => {
     if (!user) return;
-
+    
+    setLoading(true);
     try {
       const { data, error } = await supabase
         .from('streamers')
-        .select('*')
+        .select(`
+          id,
+          user_id,
+          time_mode,
+          time_increment,
+          min_random_time,
+          max_random_time,
+          clicks_required,
+          cooldown_seconds,
+          initial_duration,
+          active_minigames,
+          status,
+          is_live,
+          total_time_added,
+          current_clicks,
+          stream_started_at,
+          pause_started_at
+        `)
         .eq('user_id', user.id)
         .single();
 
       if (error && error.code !== 'PGRST116') throw error;
-      
+
       if (data) {
         setStreamer(data);
-        setOriginalStreamerData(data); // NOUVEAU : sauvegarder les données originales
+        setOriginalStreamerData(data);
         
-        // Initialiser les états avec les données du streamer
         setInitialHours(Math.floor((data.initial_duration || 7200) / 3600));
         setInitialMinutes(Math.floor(((data.initial_duration || 7200) % 3600) / 60));
         setTimeMode(data.time_mode || 'fixed');
@@ -246,9 +211,9 @@ export default function AdminPanel() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
 
-  const fetchAvailableMinigames = async () => {
+  const fetchAvailableMinigames = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('minigames')
@@ -261,10 +226,13 @@ export default function AdminPanel() {
     } catch (error) {
       console.error('Error fetching minigames:', error);
     }
-  };
+  }, []);
 
-  const fetchStats = async () => {
-    if (!streamer) return;
+  const fetchStats = useCallback(async () => {
+    if (!streamer || !isUUID(streamer.id)) {
+      console.error("Invalid streamer ID for fetching stats.");
+      return;
+    }
 
     try {
       const { data, error } = await supabase
@@ -279,14 +247,95 @@ export default function AdminPanel() {
     } catch (error) {
       console.error('Error fetching stats:', error);
     }
-  };
+  }, [streamer]);
+
+  useEffect(() => {
+    fetchStreamerData();
+    fetchAvailableMinigames();
+  }, [fetchStreamerData, fetchAvailableMinigames]);
+
+  useEffect(() => {
+    if (streamer) {
+      fetchStats();
+      const streamerChannel = supabase
+        .channel(`public:streamers:id=eq.${streamer.id}`)
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'streamers', filter: `id=eq.${streamer.id}` },
+          (payload) => {
+            console.log('Real-time update received:', payload);
+            setStreamer(payload.new);
+          }
+        )
+        .subscribe();
+      
+      const statsChannel = supabase
+        .channel(`public:subathon_stats:streamer_id=eq.${streamer.id}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'subathon_stats', filter: `streamer_id=eq.${streamer.id}` },
+          () => {
+            fetchStats();
+          }
+        )
+        .subscribe();
+        
+      return () => {
+        supabase.removeChannel(streamerChannel);
+        supabase.removeChannel(statsChannel);
+      };
+    }
+  }, [streamer, fetchStats]);
+
+  useEffect(() => {
+    if (streamer && streamer.id) {
+      setPauvrathonUrl(`${window.location.origin}/streamer/${streamer.id}`);
+      setOverlayUrl(`${window.location.origin}/overlay/${streamer.id}`);
+    }
+  }, [streamer]);
+
+  useEffect(() => {
+    if (!originalStreamerData) return;
+    
+    const currentConfig = {
+      time_mode: timeMode,
+      time_increment: fixedTime,
+      min_random_time: minRandomTime,
+      max_random_time: maxRandomTime,
+      clicks_required: clicksRequired,
+      cooldown_seconds: cooldownTime,
+      initial_duration: (initialHours * 3600) + (initialMinutes * 60),
+      active_minigames: selectedGames.sort(),
+    };
+    
+    const originalConfig = {
+      time_mode: originalStreamerData.time_mode || 'fixed',
+      time_increment: originalStreamerData.time_increment || 30,
+      min_random_time: originalStreamerData.min_random_time || 10,
+      max_random_time: originalStreamerData.max_random_time || 60,
+      clicks_required: originalStreamerData.clicks_required || 100,
+      cooldown_seconds: originalStreamerData.cooldown_seconds || 30,
+      initial_duration: originalStreamerData.initial_duration || 7200,
+      active_minigames: (originalStreamerData.active_minigames || []).sort(),
+    };
+    
+    const hasChanges = JSON.stringify(currentConfig) !== JSON.stringify(originalConfig);
+    setHasUnsavedChanges(hasChanges);
+  }, [timeMode, fixedTime, minRandomTime, maxRandomTime, clicksRequired, cooldownTime, initialHours, initialMinutes, selectedGames, originalStreamerData]);
 
   const handleSaveSettings = async () => {
-    if (!streamer) return;
+    if (!streamer || !isUUID(streamer.id)) {
+      console.error("Sauvegarde impossible: Streamer ID invalide.");
+      toast({
+        title: "Erreur de sauvegarde",
+        description: "ID de streamer invalide.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setSaving(true);
     try {
-      // Calculer initial_duration à partir des heures/minutes
       const calculatedDuration = (initialHours * 3600) + (initialMinutes * 60);
       
       const updatedSettings = {
@@ -298,39 +347,38 @@ export default function AdminPanel() {
         cooldown_seconds: cooldownTime,
         initial_duration: calculatedDuration,
         active_minigames: selectedGames,
-        updated_at: new Date().toISOString() // NOUVEAU : timestamp de mise à jour
+        updated_at: new Date().toISOString()
       };
-
-      console.log('Sauvegarde des paramètres:', updatedSettings); // DEBUG
+      
+      console.log('Données envoyées à Supabase:', updatedSettings);
 
       const { data, error } = await supabase
         .from('streamers')
         .update(updatedSettings)
         .eq('id', streamer.id)
         .select()
-        .single(); // NOUVEAU : récupérer les données mises à jour
+        .single();
 
       if (error) {
-        console.error('Erreur de sauvegarde:', error);
+        console.error('Erreur de sauvegarde Supabase:', error);
         throw error;
       }
 
-      console.log('Données sauvegardées:', data); // DEBUG
+      console.log('Données sauvegardées reçues de Supabase:', data);
 
-      // Mettre à jour l'état local avec les nouvelles données
       setStreamer(data);
-      setOriginalStreamerData(data); // NOUVEAU : mettre à jour les données originales
-      setHasUnsavedChanges(false); // NOUVEAU : plus de changements non sauvegardés
+      setOriginalStreamerData(data);
+      setHasUnsavedChanges(false);
       
       toast({
         title: "Paramètres sauvegardés",
         description: "Les paramètres du Pauvrathon ont été mis à jour avec succès.",
       });
     } catch (error) {
-      console.error('Error saving settings:', error);
+      console.error('Erreur de sauvegarde:', error);
       toast({
         title: "Erreur de sauvegarde",
-        description: `Impossible de sauvegarder les paramètres: ${error.message}`,
+        description: `Impossible de sauvegarder les paramètres: ${error.message || 'Erreur inconnue'}`,
         variant: "destructive",
       });
     } finally {
@@ -338,21 +386,34 @@ export default function AdminPanel() {
     }
   };
 
-  const handleStatusChange = async (newStatus) => {
-    if (!streamer) return;
+  const handleStatusChange = async (newStatus: 'live' | 'paused' | 'ended') => {
+    if (!streamer || !isUUID(streamer.id)) {
+      console.error("Mise à jour du statut impossible: Streamer ID invalide.");
+      return;
+    }
+
+    // **MODIFICATION : Lancer l'action sur le lecteur vidéo**
+    if (videoRef.current) {
+        if (newStatus === 'live') {
+            // Lancer la lecture de la vidéo si elle est en pause
+            videoRef.current.contentWindow?.postMessage('{"event":"command","func":"playVideo","args":""}', '*');
+            setVideoStatus('playing');
+        } else if (newStatus === 'paused') {
+            // Mettre la vidéo en pause
+            videoRef.current.contentWindow?.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
+            setVideoStatus('paused');
+        }
+    }
 
     try {
-      const updateData = { 
+      let updateData: any = { 
         status: newStatus,
         is_live: newStatus === 'live',
         updated_at: new Date().toISOString()
       };
 
-      // Si on démarre, enregistrer le timestamp
       if (newStatus === 'live' && streamer.status !== 'live') {
         updateData.stream_started_at = new Date().toISOString();
-        
-        // Vérifier les mini-jeux
         if (!selectedGames.length) {
           toast({
             title: "Attention",
@@ -362,18 +423,18 @@ export default function AdminPanel() {
         }
       }
 
-      // Si on met en pause, enregistrer le timestamp
       if (newStatus === 'paused') {
         updateData.pause_started_at = new Date().toISOString();
       }
 
-      // Si on termine, remettre à zéro
       if (newStatus === 'ended') {
         updateData.current_clicks = 0;
         updateData.total_time_added = 0;
+        updateData.stream_started_at = null;
+        updateData.pause_started_at = null;
       }
 
-      console.log('Mise à jour du statut:', updateData); // DEBUG
+      console.log('Mise à jour du statut envoyée:', updateData);
 
       const { data, error } = await supabase
         .from('streamers')
@@ -382,48 +443,43 @@ export default function AdminPanel() {
         .select()
         .single();
 
-      if (error) {
-        console.error('Erreur mise à jour statut:', error);
-        throw error;
-      }
-
+      if (error) throw error;
       setStreamer(data);
       
       const statusMessages = {
         live: "Pauvrathon démarré",
         paused: "Pauvrathon en pause", 
-        offline: "Pauvrathon arrêté",
         ended: "Pauvrathon terminé"
       };
 
       toast({
         title: statusMessages[newStatus],
-        description: `Le Pauvrathon est maintenant ${newStatus === 'live' ? 'en direct' : newStatus === 'paused' ? 'en pause' : newStatus === 'ended' ? 'terminé' : 'arrêté'}.`,
+        description: `Le Pauvrathon est maintenant ${newStatus === 'live' ? 'en direct' : newStatus === 'paused' ? 'en pause' : 'terminé'}.`,
       });
       
-      if (newStatus === 'live') {
-        await fetchStreamerData();
-      }
     } catch (error) {
       console.error('Error updating status:', error);
       toast({
         title: "Erreur",
-        description: `Impossible de mettre à jour le statut: ${error.message}`,
+        description: `Impossible de mettre à jour le statut: ${error.message || 'Erreur inconnue'}`,
         variant: "destructive",
       });
     }
   };
-
-  const handleMinigameToggle = (minigameId, checked) => {
-    if (checked) {
-      setSelectedGames(prev => [...prev, minigameId]);
+  
+  const handleMinigameToggle = (minigameId: string, checked: boolean | 'indeterminate') => {
+    if (checked === true) {
+      setSelectedGames(prev => [...new Set([...prev, minigameId])]);
     } else {
       setSelectedGames(prev => prev.filter(id => id !== minigameId));
     }
   };
-
+  
   const handleResetClicks = async () => {
-    if (!streamer) return;
+    if (!streamer || !isUUID(streamer.id)) {
+      console.error("Réinitialisation impossible: Streamer ID invalide.");
+      return;
+    }
 
     try {
       const { data, error } = await supabase
@@ -448,13 +504,13 @@ export default function AdminPanel() {
       console.error('Error resetting clicks:', error);
       toast({
         title: "Erreur",
-        description: `Impossible de remettre à zéro les clics: ${error.message}`,
+        description: `Impossible de remettre à zéro les clics: ${error.message || 'Erreur inconnue'}`,
         variant: "destructive",
       });
     }
   };
 
-  const copyToClipboard = (url, type) => {
+  const copyToClipboard = (url: string, type: string) => {
     navigator.clipboard.writeText(url);
     toast({
       title: "Lien copié",
@@ -469,20 +525,19 @@ export default function AdminPanel() {
   const copyPauvrathonLink = () => {
     copyToClipboard(pauvrathonUrl, 'de la page Pauvrathon');
   };
+  
+  const LoadingSpinner = () => (
+    <div className="flex justify-center items-center py-16">
+      <Loader2 className="h-12 w-12 animate-spin text-primary" />
+    </div>
+  );
 
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
         <Navigation />
         <div className="container mx-auto px-4 py-8">
-          <div className="animate-pulse space-y-4">
-            <div className="h-8 bg-muted rounded w-1/3" />
-            <div className="grid gap-4">
-              {[...Array(3)].map((_, i) => (
-                <div key={i} className="h-64 bg-muted rounded" />
-              ))}
-            </div>
-          </div>
+          <LoadingSpinner />
         </div>
       </div>
     );
@@ -752,6 +807,7 @@ export default function AdminPanel() {
                         {availableMinigames.map((minigame) => (
                           <div 
                             key={minigame.id} 
+                            className="flex items-start space-x-2"
                           >
                             <Checkbox
                               id={`minigame-${minigame.id}`}
@@ -798,10 +854,9 @@ export default function AdminPanel() {
                 </Card>
               </TabsContent>
 
-              {/* NOUVEAU : Onglet Liens & Overlay */}
+              {/* Contenu de l'onglet Liens & Overlay */}
               <TabsContent value="links">
                 <div className="grid gap-6 md:grid-cols-2">
-                  {/* Page Pauvrathon */}
                   <Card>
                     <CardHeader>
                       <CardTitle className="flex items-center">
@@ -822,32 +877,22 @@ export default function AdminPanel() {
                         <Button size="icon" onClick={copyPauvrathonLink}>
                           <Copy className="h-4 w-4" />
                         </Button>
-                      </div>
-                      
-                      <Button 
-                        variant="outline" 
-                        className="w-full"
-                        onClick={() => window.open(pauvrathonUrl, '_blank')}
-                      >
-                        <ExternalLink className="mr-2 h-4 w-4" />
-                        Voir la page
-                      </Button>
-
-                      <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg">
-                        <strong>Usage :</strong> Partagez ce lien avec vos viewers pour qu'ils puissent participer au Pauvrathon.
+                        <Button asChild size="icon" variant="outline">
+                          <a href={pauvrathonUrl} target="_blank" rel="noopener noreferrer">
+                            <ExternalLink className="h-4 w-4" />
+                          </a>
+                        </Button>
                       </div>
                     </CardContent>
                   </Card>
-
-                  {/* Overlay OBS */}
                   <Card>
                     <CardHeader>
                       <CardTitle className="flex items-center">
                         <Monitor className="mr-2 h-5 w-5" />
-                        Overlay OBS
+                        Overlay Twitch
                       </CardTitle>
                       <CardDescription>
-                        Lien de l'overlay pour votre logiciel de streaming
+                        Lien à utiliser comme "Source de navigation" dans OBS/Streamlabs
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -860,70 +905,18 @@ export default function AdminPanel() {
                         <Button size="icon" onClick={copyOverlayLink}>
                           <Copy className="h-4 w-4" />
                         </Button>
-                      </div>
-                      
-                      <Button 
-                        variant="outline" 
-                        className="w-full"
-                        onClick={() => window.open(overlayUrl, '_blank')}
-                      >
-                        <Monitor className="mr-2 h-4 w-4" />
-                        Tester l'overlay
-                      </Button>
-
-                      <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg space-y-2">
-                        <p><strong>Configuration OBS :</strong></p>
-                        <ol className="list-decimal list-inside space-y-1 text-xs">
-                          <li>Ajoutez une source "Navigateur"</li>
-                          <li>Collez l'URL de l'overlay</li>
-                          <li>Définissez la taille : 400x200px</li>
-                          <li>Positionnez où vous voulez</li>
-                        </ol>
+                        <Button asChild size="icon" variant="outline">
+                          <a href={overlayUrl} target="_blank" rel="noopener noreferrer">
+                            <ExternalLink className="h-4 w-4" />
+                          </a>
+                        </Button>
                       </div>
                     </CardContent>
                   </Card>
                 </div>
-
-                {/* Instructions détaillées */}
-                <Card className="mt-6">
-                  <CardHeader>
-                    <CardTitle className="flex items-center">
-                      <HelpCircle className="mr-2 h-5 w-5" />
-                      Guide d'utilisation
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid md:grid-cols-2 gap-6">
-                      <div>
-                        <h4 className="font-medium mb-3 flex items-center">
-                          <Eye className="mr-2 h-4 w-4" />
-                          Page Pauvrathon
-                        </h4>
-                        <ul className="text-sm space-y-2 text-muted-foreground">
-                          <li>• Partagez ce lien avec vos viewers</li>
-                          <li>• Ils peuvent cliquer et jouer aux mini-jeux</li>
-                          <li>• Le timer se met à jour en temps réel</li>
-                          <li>• Compatible mobile et desktop</li>
-                        </ul>
-                      </div>
-                      
-                      <div>
-                        <h4 className="font-medium mb-3 flex items-center">
-                          <Monitor className="mr-2 h-4 w-4" />
-                          Overlay OBS
-                        </h4>
-                        <ul className="text-sm space-y-2 text-muted-foreground">
-                          <li>• Affiche le timer en temps réel</li>
-                          <li>• Progression des clics</li>
-                          <li>• Statut du Pauvrathon</li>
-                          <li>• Design transparent pour stream</li>
-                        </ul>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
               </TabsContent>
-              
+
+              {/* Contenu de l'onglet Statistiques */}
               <TabsContent value="statistics">
                 <Card>
                   <CardHeader>
@@ -932,237 +925,133 @@ export default function AdminPanel() {
                       Statistiques du Pauvrathon
                     </CardTitle>
                     <CardDescription>
-                      Analyse détaillée de l'activité et des performances
+                      Classement des top contributeurs de temps pour ce Pauvrathon
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div className="bg-primary/10 p-4 rounded-lg text-center">
-                        <Users className="mx-auto h-6 w-6 mb-2 text-primary" />
-                        <div className="text-2xl font-bold">{stats.length}</div>
-                        <p className="text-sm text-muted-foreground">Participants</p>
+                  <CardContent>
+                    {stats.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <HelpCircle className="mx-auto h-12 w-12 mb-4 opacity-50" />
+                        <p>Aucune statistique disponible</p>
                       </div>
-                      
-                      <div className="bg-primary/10 p-4 rounded-lg text-center">
-                        <Trophy className="mx-auto h-6 w-6 mb-2 text-primary" />
-                        <div className="text-2xl font-bold">
-                          {stats.reduce((sum, stat) => sum + (stat.games_won || 0), 0)}
-                        </div>
-                        <p className="text-sm text-muted-foreground">Victoires</p>
-                      </div>
-                      
-                      <div className="bg-primary/10 p-4 rounded-lg text-center">
-                        <Check className="mx-auto h-6 w-6 mb-2 text-primary" />
-                        <div className="text-2xl font-bold">
-                          {stats.reduce((sum, stat) => sum + (stat.clicks_contributed || 0), 0)}
-                        </div>
-                        <p className="text-sm text-muted-foreground">Clics totaux</p>
-                      </div>
-                      
-                      <div className="bg-primary/10 p-4 rounded-lg text-center">
-                        <Clock className="mx-auto h-6 w-6 mb-2 text-primary" />
-                        <div className="text-2xl font-bold">
-                          {stats.reduce((sum, stat) => sum + (stat.time_contributed || 0), 0)}s
-                        </div>
-                        <p className="text-sm text-muted-foreground">Temps ajouté</p>
-                      </div>
-                    </div>
-
-                    {/* Top contributors */}
-                    <div className="mt-6">
-                      <h3 className="text-lg font-medium mb-4">Meilleurs contributeurs</h3>
-                      
-                      {stats.length === 0 ? (
-                        <div className="text-center py-8 bg-muted/30 rounded-lg border border-dashed">
-                          <Star className="mx-auto h-10 w-10 text-muted-foreground mb-2" />
-                          <p className="text-muted-foreground">Aucune participation pour le moment</p>
-                        </div>
-                      ) : (
-                        <div className="border rounded-lg overflow-hidden">
-                          <div className="grid grid-cols-5 bg-muted p-3 text-sm font-medium">
-                            <div className="col-span-2">Utilisateur</div>
-                            <div className="text-center">Clics</div>
-                            <div className="text-center">Victoires</div>
-                            <div className="text-center">Temps ajouté</div>
+                    ) : (
+                      <div className="space-y-4">
+                        {stats.slice(0, 10).map((stat, index) => (
+                          <div key={stat.id} className="flex items-center space-x-4 border-b pb-2 last:border-b-0 last:pb-0">
+                            <div className="text-xl font-bold w-6 text-center text-primary">
+                              {index + 1}
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-semibold">{stat.profile_twitch_display_name}</p>
+                              <p className="text-sm text-muted-foreground">
+                                {Math.floor(stat.time_contributed / 60)}m {stat.time_contributed % 60}s
+                              </p>
+                            </div>
+                            <Badge variant="secondary">
+                              <Star className="w-3 h-3 mr-1" />
+                              {stat.clicks_contributed} clics
+                            </Badge>
                           </div>
-                          
-                          <div className="divide-y">
-                            {stats.slice(0, 10).map((stat, index) => (
-                              <div key={index} className="grid grid-cols-5 p-3 items-center hover:bg-muted/30 transition-colors">
-                                <div className="col-span-2 flex items-center gap-2">
-                                  {index < 3 && (
-                                    <div className={`h-5 w-5 rounded-full flex items-center justify-center text-xs font-bold text-white ${
-                                      index === 0 ? 'bg-yellow-500' :
-                                      index === 1 ? 'bg-gray-400' : 'bg-amber-700'
-                                    }`}>
-                                      {index + 1}
-                                    </div>
-                                  )}
-                                  <span className="font-medium">{stat.player_twitch_username || 'Anonyme'}</span>
-                                </div>
-                                <div className="text-center">{stat.clicks_contributed || 0}</div>
-                                <div className="text-center">{stat.games_won || 0}/{stat.games_played || 0}</div>
-                                <div className="text-center">{stat.time_contributed || 0}s</div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                        ))}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </TabsContent>
             </Tabs>
           </div>
-          
-          {/* PARTIE DROITE - Contrôles et Statistiques en direct */}
-          <div className="space-y-6">
-            {/* État du Pauvrathon et timer */}
+
+          {/* PARTIE DROITE - Timer et Contrôles */}
+          <div className="lg:col-span-1 space-y-6">
+            <Card>
+                {/* **MODIFICATION : Ajout du lecteur vidéo** */}
+                <CardHeader>
+                    <CardTitle className="flex items-center">
+                        <Monitor className="mr-2 h-5 w-5" />
+                        Lecteur Vidéo
+                    </CardTitle>
+                    <CardDescription>
+                        Contrôlez le statut de votre stream en direct
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {/* Placeholder pour le lecteur Twitch ou YouTube.
+                    Il est important d'utiliser une URL avec l'API activée pour le contrôle via JavaScript.
+                    La référence `ref={videoRef}` est la clé pour le contrôle du lecteur. */}
+                    <div className="relative w-full aspect-video">
+                        <iframe
+                            ref={videoRef}
+                            id="video-player"
+                            className="absolute top-0 left-0 w-full h-full"
+                            src={`https://www.youtube.com/embed/dQw4w9WgXcQ?enablejsapi=1&autoplay=0`}
+                            frameBorder="0"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                            title="Embedded Video"
+                        ></iframe>
+                    </div>
+                </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
-                <CardTitle>État du Pauvrathon</CardTitle>
+                <CardTitle className="flex items-center">
+                  <Clock className="mr-2 h-5 w-5" />
+                  Timer & Contrôles
+                </CardTitle>
+                <CardDescription>
+                  Contrôlez le statut de votre Pauvrathon
+                </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <PauvrathonTimer 
+              <CardContent>
+                <PauvrathonTimer
                   status={streamer?.status}
-                  startTime={streamer?.stream_started_at} 
-                  initialDuration={streamer?.initial_duration || 7200}
-                  addedTime={streamer?.total_time_added || 0}
+                  startTime={streamer?.stream_started_at}
+                  initialDuration={streamer?.initial_duration}
+                  addedTime={streamer?.total_time_added}
                 />
-                
-                <div className="grid grid-cols-2 gap-2 mt-4">
+              </CardContent>
+              <CardFooter className="flex flex-col space-y-4 pt-0">
+                <div className="flex gap-2 w-full">
                   <Button 
-                    variant={streamer?.status === 'live' ? "default" : "outline"}
-                    onClick={() => handleStatusChange(streamer?.status === 'live' ? 'paused' : 'live')}
-                    disabled={streamer?.status === 'ended'}
-                    className={streamer?.status === 'live' ? "bg-red-500 hover:bg-red-600" : ""}
+                    className="flex-1"
+                    onClick={() => handleStatusChange('live')}
+                    disabled={streamer?.status === 'live'}
                   >
-                    {streamer?.status === 'live' ? (
-                      <>
-                        <Pause className="mr-2 h-4 w-4" />
-                        Pause
-                      </>
-                    ) : (
-                      <>
-                        <Play className="mr-2 h-4 w-4" />
-                        Démarrer
-                      </>
-                    )}
+                    <Play className="mr-2 h-4 w-4" />
+                    Démarrer
                   </Button>
-
                   <Button 
+                    className="flex-1"
+                    variant="outline"
+                    onClick={() => handleStatusChange('paused')}
+                    disabled={streamer?.status === 'paused' || streamer?.status === 'ended'}
+                  >
+                    <Pause className="mr-2 h-4 w-4" />
+                    Pause
+                  </Button>
+                </div>
+                <div className="flex gap-2 w-full">
+                  <Button 
+                    className="flex-1"
                     variant="destructive"
                     onClick={() => handleStatusChange('ended')}
-                    disabled={streamer?.status === 'ended'}
+                    disabled={streamer?.status === 'ended' || streamer?.status === 'offline'}
                   >
                     <Square className="mr-2 h-4 w-4" />
                     Terminer
                   </Button>
-                </div>
-
-                {streamer?.status === 'ended' && (
                   <Button 
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => handleStatusChange('offline')}
-                  >
-                    <RotateCcw className="mr-2 h-4 w-4" />
-                    Nouveau Pauvrathon
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-            
-            {/* Statistiques en direct */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <BarChart3 className="mr-2 h-5 w-5" />
-                  Statistiques en direct
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Statut:</span>
-                    <Badge variant={
-                      streamer?.status === 'live' ? 'default' : 
-                      streamer?.status === 'paused' ? 'secondary' : 
-                      streamer?.status === 'ended' ? 'destructive' : 'outline'
-                    }>
-                      {streamer?.status === 'live' ? 'En direct' : 
-                       streamer?.status === 'paused' ? 'En pause' :
-                       streamer?.status === 'ended' ? 'Terminé' : 'Hors ligne'}
-                    </Badge>
-                  </div>
-                  
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Clics actuels:</span>
-                    <span className="font-bold">{streamer?.current_clicks || 0}</span>
-                  </div>
-                  
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Clics requis:</span>
-                    <span className="font-bold">{streamer?.clicks_required || 0}</span>
-                  </div>
-                  
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Temps ajouté:</span>
-                    <span className="font-bold">{streamer?.total_time_added || 0}s</span>
-                  </div>
-                  
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Temps initial:</span>
-                    <span className="font-bold">
-                      {Math.floor((streamer?.initial_duration || 7200) / 3600)}h
-                      {Math.floor(((streamer?.initial_duration || 7200) % 3600) / 60)}m
-                    </span>
-                  </div>
-                  
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Participants:</span>
-                    <span className="font-bold">{stats?.length || 0}</span>
-                  </div>
-                </div>
-                
-                <div className="mt-4 pt-4 border-t">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="w-full" 
+                    className="flex-1"
+                    variant="secondary"
                     onClick={handleResetClicks}
+                    disabled={saving}
                   >
                     <RotateCcw className="mr-2 h-4 w-4" />
-                    Réinitialiser les clics
+                    Reset Clics
                   </Button>
                 </div>
-              </CardContent>
-            </Card>
-            
-            {/* Aide rapide */}
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center">
-                  <HelpCircle className="h-4 w-4 mr-2" />
-                  Aide rapide
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-sm space-y-2 text-muted-foreground">
-                  <p>
-                    <span className="font-medium text-foreground">Démarrer</span> : Lance le Pauvrathon avec les paramètres configurés.
-                  </p>
-                  <p>
-                    <span className="font-medium text-foreground">Pause</span> : Met en pause le timer mais garde les données.
-                  </p>
-                  <p>
-                    <span className="font-medium text-foreground">Terminer</span> : Arrête définitivement le Pauvrathon actuel.
-                  </p>
-                  <p>
-                    <span className="font-medium text-foreground">Overlay</span> : Ajoutez l'URL dans OBS comme source navigateur.
-                  </p>
-                </div>
-              </CardContent>
+              </CardFooter>
             </Card>
           </div>
         </div>
