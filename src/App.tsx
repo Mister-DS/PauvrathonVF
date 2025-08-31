@@ -7,7 +7,7 @@ import { AuthProvider } from "./contexts/AuthContext";
 import Home from "./pages/Home";
 import Auth from "./pages/Auth";
 import AuthCallback from "./pages/AuthCallback";
-//import Discovery from "./pages/Discovery";
+import Discovery from "./pages/Discovery";
 import Following from "./pages/Following";
 import Profile from "./pages/Profile";
 import StreamerRequest from "./pages/StreamerRequest";
