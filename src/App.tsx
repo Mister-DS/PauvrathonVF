@@ -15,6 +15,7 @@ import StreamerPanel from "./pages/StreamerPanel";
 import AdminPanel from "./pages/AdminPanel";
 import SubathonPage from "./pages/SubathonPage";
 import NotFound from "./pages/NotFound";
+import StreamOverlay from "./pages/StreamOverlay";
 
 const queryClient = new QueryClient();
 
@@ -36,6 +37,7 @@ const App = () => (
             <Route path="/streamer" element={<StreamerPanel />} />
             <Route path="/admin" element={<AdminPanel />} />
             <Route path="/streamer/:id" element={<SubathonPage />} />
+            <Route path="/overlay/:id" element={<StreamOverlay />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

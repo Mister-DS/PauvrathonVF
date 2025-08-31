@@ -4,6 +4,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.56.0'
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 }
 
 Deno.serve(async (req) => {
@@ -12,20 +13,8 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      {
-        global: {
-          headers: { Authorization: req.headers.get('Authorization')! },
-        },
-      }
-    )
+    const { query, language } = await req.json()
 
-    // Get the authenticated user (optional for this function)
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser()
-
-    // Get Twitch access token
     const twitchClientId = Deno.env.get('TWITCH_CLIENT_ID')
     const twitchClientSecret = Deno.env.get('TWITCH_CLIENT_SECRET')
 
@@ -36,7 +25,7 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Get app access token for Twitch API
+    // Get app access token
     const tokenResponse = await fetch('https://id.twitch.tv/oauth2/token', {
       method: 'POST',
       headers: {
@@ -56,154 +45,79 @@ Deno.serve(async (req) => {
       throw new Error('Failed to get Twitch access token')
     }
 
-    // Search for streams containing "subathon" or "pauvrathon" in title
-    // First, get popular streams
-    const streamsResponse = await fetch(
-      `https://api.twitch.tv/helix/streams?first=100&language=fr`,
-      {
-        headers: {
-          'Client-ID': twitchClientId,
-          'Authorization': `Bearer ${accessToken}`,
-        },
-      }
-    )
-
-    if (!streamsResponse.ok) {
-      throw new Error(`Twitch streams API error: ${streamsResponse.status}`)
-    }
-
-    const streamsData = await streamsResponse.json()
-    const allStreams = streamsData.data || []
-
-    // Filter streams that contain subathon/pauvrathon in title (case insensitive)
-    const subathonStreams = allStreams.filter((stream: any) => 
-      stream.title.toLowerCase().includes('subathon') || 
-      stream.title.toLowerCase().includes('pauvrathon') ||
-      stream.title.toLowerCase().includes('sub-a-thon')
-    )
-
-    // Get user info for profile images if we have subathon streams
-    let enrichedStreams = []
+    // Construire l'URL de recherche avec les paramètres de langue
+    let searchUrl = `https://api.twitch.tv/helix/search/channels?query=${encodeURIComponent(query)}&first=20&live_only=true`
     
-    if (subathonStreams.length > 0) {
-      const userIds = subathonStreams.map((stream: any) => stream.user_id)
-      const chunkedUserIds = []
-      
-      // Split into chunks of 100 (API limit)
-      for (let i = 0; i < userIds.length; i += 100) {
-        chunkedUserIds.push(userIds.slice(i, i + 100))
-      }
-
-      const allUsers = []
-      
-      for (const chunk of chunkedUserIds) {
-        const usersResponse = await fetch(
-          `https://api.twitch.tv/helix/users?${chunk.map(id => `id=${id}`).join('&')}`,
-          {
-            headers: {
-              'Client-ID': twitchClientId,
-              'Authorization': `Bearer ${accessToken}`,
-            },
-          }
-        )
-
-        if (usersResponse.ok) {
-          const usersData = await usersResponse.json()
-          allUsers.push(...(usersData.data || []))
-        }
-      }
-
-      // Create user map for quick lookup
-      const userMap = new Map()
-      allUsers.forEach((user: any) => {
-        userMap.set(user.id, user)
-      })
-
-      // Enrich streams with user info
-      enrichedStreams = subathonStreams.map((stream: any) => {
-        const userInfo = userMap.get(stream.user_id)
-        return {
-          id: stream.id,
-          user_id: stream.user_id,
-          user_login: stream.user_login,
-          user_name: stream.user_name,
-          game_id: stream.game_id,
-          game_name: stream.game_name,
-          type: stream.type,
-          title: stream.title,
-          viewer_count: stream.viewer_count,
-          started_at: stream.started_at,
-          language: stream.language,
-          thumbnail_url: stream.thumbnail_url,
-          profile_image_url: userInfo?.profile_image_url || '',
-        }
-      })
+    // Ajouter le filtre de langue si spécifié
+    if (language && language !== 'all') {
+      searchUrl += `&language=${language}`
     }
 
-    // If no subathon streams found, try search API as fallback
-    if (enrichedStreams.length === 0) {
-      const searchResponse = await fetch(
-        `https://api.twitch.tv/helix/search/channels?query=subathon&first=20&live_only=true`,
-        {
-          headers: {
-            'Client-ID': twitchClientId,
-            'Authorization': `Bearer ${accessToken}`,
-          },
-        }
+    // Search for streams
+    const searchResponse = await fetch(searchUrl, {
+      headers: {
+        'Client-ID': twitchClientId,
+        'Authorization': `Bearer ${accessToken}`,
+      },
+    })
+
+    if (!searchResponse.ok) {
+      throw new Error(`Twitch search API error: ${searchResponse.status} - ${await searchResponse.text()}`)
+    }
+
+    const searchData = await searchResponse.json()
+    const channels = searchData.data || []
+
+    if (channels.length === 0) {
+      return new Response(
+        JSON.stringify({ 
+          streams: [],
+          message: `No live streams found for "${query}"${language && language !== 'all' ? ` in ${language}` : ''}`,
+          total: 0
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
-
-      if (searchResponse.ok) {
-        const searchData = await searchResponse.json()
-        const searchResults = searchData.data || []
-        
-        // Get stream info for live channels from search
-        if (searchResults.length > 0) {
-          const liveChannelIds = searchResults
-            .filter((channel: any) => channel.is_live)
-            .map((channel: any) => channel.id)
-
-          if (liveChannelIds.length > 0) {
-            const liveStreamsResponse = await fetch(
-              `https://api.twitch.tv/helix/streams?${liveChannelIds.map(id => `user_id=${id}`).join('&')}`,
-              {
-                headers: {
-                  'Client-ID': twitchClientId,
-                  'Authorization': `Bearer ${accessToken}`,
-                },
-              }
-            )
-
-            if (liveStreamsResponse.ok) {
-              const liveStreamsData = await liveStreamsResponse.json()
-              enrichedStreams = (liveStreamsData.data || []).map((stream: any) => {
-                const channelInfo = searchResults.find((ch: any) => ch.id === stream.user_id)
-                return {
-                  id: stream.id,
-                  user_id: stream.user_id,
-                  user_login: stream.user_login,
-                  user_name: stream.user_name,
-                  game_id: stream.game_id,
-                  game_name: stream.game_name,
-                  type: stream.type,
-                  title: stream.title,
-                  viewer_count: stream.viewer_count,
-                  started_at: stream.started_at,
-                  language: stream.language,
-                  thumbnail_url: stream.thumbnail_url,
-                  profile_image_url: channelInfo?.thumbnail_url || '',
-                }
-              })
-            }
-          }
-        }
-      }
     }
+
+    // Get detailed stream info for the channels found
+    const channelIds = channels.map((channel: any) => channel.id)
+    const streamsUrl = `https://api.twitch.tv/helix/streams?${channelIds.map(id => `user_id=${id}`).join('&')}&first=20`
+
+    const streamsResponse = await fetch(streamsUrl, {
+      headers: {
+        'Client-ID': twitchClientId,
+        'Authorization': `Bearer ${accessToken}`,
+      },
+    })
+
+    let streams = []
+    if (streamsResponse.ok) {
+      const streamsData = await streamsResponse.json()
+      streams = streamsData.data || []
+    }
+
+    // Enrichir avec les informations des channels
+    const enrichedStreams = streams.map((stream: any) => {
+      const channelInfo = channels.find((channel: any) => channel.id === stream.user_id)
+      return {
+        ...stream,
+        display_name: channelInfo?.display_name || stream.user_name,
+        profile_image_url: channelInfo?.thumbnail_url || '',
+        broadcaster_language: channelInfo?.broadcaster_language || stream.language,
+        tags: channelInfo?.tags || []
+      }
+    })
+
+    // Trier par nombre de spectateurs (descendant)
+    enrichedStreams.sort((a: any, b: any) => b.viewer_count - a.viewer_count)
 
     return new Response(
       JSON.stringify({ 
         streams: enrichedStreams,
-        total_found: enrichedStreams.length,
-        searched_terms: ['subathon', 'pauvrathon', 'sub-a-thon']
+        total: enrichedStreams.length,
+        query: query,
+        language: language || 'all',
+        message: `Found ${enrichedStreams.length} live stream(s) for "${query}"${language && language !== 'all' ? ` in ${language}` : ''}`
       }),
       { 
         headers: { 
@@ -218,7 +132,8 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({ 
         streams: [],
-        error: error.message 
+        error: error.message,
+        details: 'Check function logs in Supabase dashboard'
       }),
       { 
         status: 500, 

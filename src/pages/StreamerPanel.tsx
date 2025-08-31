@@ -169,7 +169,7 @@ export default function AdminPanel() {
   // Mettre à jour l'URL quand le streamer est chargé
   useEffect(() => {
     if (streamer) {
-      setPauvrathonUrl(`${window.location.origin}/subathon/${streamer.id}`);
+      setPauvrathonUrl(`${window.location.origin}/streamer/${streamer.id}`);
     }
   }, [streamer]);
 

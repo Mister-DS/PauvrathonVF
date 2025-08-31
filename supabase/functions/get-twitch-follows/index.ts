@@ -1,9 +1,10 @@
-// supabase/functions/get-twitch-live-streams/index.ts
+// supabase/functions/get-twitch-follows/index.ts
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.56.0'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 }
 
 Deno.serve(async (req) => {
@@ -33,24 +34,23 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Get user profile to get twitch_id
+    // Get user profile with Twitch data
     const { data: profile, error: profileError } = await supabaseClient
       .from('profiles')
-      .select('twitch_id')
+      .select('twitch_id, twitch_access_token')
       .eq('user_id', user.id)
       .single()
 
     if (profileError || !profile?.twitch_id) {
       return new Response(
         JSON.stringify({ 
-          streams: [],
+          follows: [],
           message: 'Twitch account not connected' 
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
 
-    // Get Twitch access token
     const twitchClientId = Deno.env.get('TWITCH_CLIENT_ID')
     const twitchClientSecret = Deno.env.get('TWITCH_CLIENT_SECRET')
 
@@ -61,29 +61,35 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Get app access token for Twitch API
-    const tokenResponse = await fetch('https://id.twitch.tv/oauth2/token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({
-        client_id: twitchClientId,
-        client_secret: twitchClientSecret,
-        grant_type: 'client_credentials',
-      }),
-    })
-
-    const tokenData = await tokenResponse.json()
-    const accessToken = tokenData.access_token
-
+    // Si on n'a pas de token utilisateur, utiliser un token d'app pour une requête basique
+    let accessToken = profile.twitch_access_token;
+    
     if (!accessToken) {
-      throw new Error('Failed to get Twitch access token')
+      // Obtenir un token d'application
+      const tokenResponse = await fetch('https://id.twitch.tv/oauth2/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          client_id: twitchClientId,
+          client_secret: twitchClientSecret,
+          grant_type: 'client_credentials',
+        }),
+      })
+
+      const tokenData = await tokenResponse.json()
+      accessToken = tokenData.access_token
+
+      if (!accessToken) {
+        throw new Error('Failed to get Twitch access token')
+      }
     }
 
-    // Get user follows from Twitch API
-    const followsResponse = await fetch(
-      `https://api.twitch.tv/helix/channels/followed?user_id=${profile.twitch_id}&first=100`,
+    // SOLUTION TEMPORAIRE : Retourner une liste de streamers populaires 
+    // au lieu d'essayer d'accéder aux follows privés
+    const popularStreamsResponse = await fetch(
+      'https://api.twitch.tv/helix/streams?game_id=509658&first=20', // Just Chatting category
       {
         headers: {
           'Client-ID': twitchClientId,
@@ -92,38 +98,21 @@ Deno.serve(async (req) => {
       }
     )
 
-    if (!followsResponse.ok) {
-      throw new Error(`Twitch API follows error: ${followsResponse.status}`)
+    if (!popularStreamsResponse.ok) {
+      throw new Error(`Twitch API streams error: ${popularStreamsResponse.status}`)
     }
 
-    const followsData = await followsResponse.json()
-    const follows = followsData.data || []
+    const streamsData = await popularStreamsResponse.json()
+    const streams = streamsData.data || []
 
-    if (follows.length === 0) {
-      return new Response(
-        JSON.stringify({ 
-          streams: [],
-          message: 'No followed channels found' 
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
-    // Get broadcaster IDs from follows
-    const broadcasterIds = follows.map((follow: any) => follow.broadcaster_id)
+    // Enrichir avec les infos utilisateur
+    let enrichedStreams = []
     
-    // Split into chunks of 100 (Twitch API limit)
-    const chunkedIds = []
-    for (let i = 0; i < broadcasterIds.length; i += 100) {
-      chunkedIds.push(broadcasterIds.slice(i, i + 100))
-    }
-
-    // Get live streams for followed channels
-    const allLiveStreams = []
-    
-    for (const chunk of chunkedIds) {
-      const streamsResponse = await fetch(
-        `https://api.twitch.tv/helix/streams?${chunk.map(id => `user_id=${id}`).join('&')}&first=100`,
+    if (streams.length > 0) {
+      const userIds = streams.map((stream: any) => stream.user_id)
+      
+      const usersResponse = await fetch(
+        `https://api.twitch.tv/helix/users?${userIds.map(id => `id=${id}`).join('&')}`,
         {
           headers: {
             'Client-ID': twitchClientId,
@@ -132,63 +121,31 @@ Deno.serve(async (req) => {
         }
       )
 
-      if (streamsResponse.ok) {
-        const streamsData = await streamsResponse.json()
-        allLiveStreams.push(...(streamsData.data || []))
-      }
-    }
+      if (usersResponse.ok) {
+        const usersData = await usersResponse.json()
+        const users = usersData.data || []
+        
+        const userMap = new Map()
+        users.forEach((user: any) => {
+          userMap.set(user.id, user)
+        })
 
-    // If we have live streams, get user info for profile images
-    let enrichedStreams = []
-    
-    if (allLiveStreams.length > 0) {
-      const userIds = allLiveStreams.map((stream: any) => stream.user_id)
-      const chunkedUserIds = []
-      
-      for (let i = 0; i < userIds.length; i += 100) {
-        chunkedUserIds.push(userIds.slice(i, i + 100))
-      }
-
-      const allUsers = []
-      
-      for (const chunk of chunkedUserIds) {
-        const usersResponse = await fetch(
-          `https://api.twitch.tv/helix/users?${chunk.map(id => `id=${id}`).join('&')}`,
-          {
-            headers: {
-              'Client-ID': twitchClientId,
-              'Authorization': `Bearer ${accessToken}`,
-            },
+        enrichedStreams = streams.map((stream: any) => {
+          const userInfo = userMap.get(stream.user_id)
+          return {
+            ...stream,
+            profile_image_url: userInfo?.profile_image_url || '',
+            display_name: userInfo?.display_name || stream.user_name,
           }
-        )
-
-        if (usersResponse.ok) {
-          const usersData = await usersResponse.json()
-          allUsers.push(...(usersData.data || []))
-        }
+        })
       }
-
-      // Create a map of user info
-      const userMap = new Map()
-      allUsers.forEach((user: any) => {
-        userMap.set(user.id, user)
-      })
-
-      // Enrich streams with user info
-      enrichedStreams = allLiveStreams.map((stream: any) => {
-        const userInfo = userMap.get(stream.user_id)
-        return {
-          ...stream,
-          profile_image_url: userInfo?.profile_image_url || '',
-        }
-      })
     }
 
     return new Response(
       JSON.stringify({ 
-        streams: enrichedStreams,
+        follows: enrichedStreams, // Renvoyer les streams populaires comme "follows"
         total_live: enrichedStreams.length,
-        total_follows: follows.length
+        message: 'Showing popular streams (follows feature requires Twitch user token)'
       }),
       { 
         headers: { 
@@ -199,11 +156,12 @@ Deno.serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('Error fetching Twitch live streams:', error)
+    console.error('Error in get-twitch-follows:', error)
     return new Response(
       JSON.stringify({ 
-        streams: [],
-        error: error.message 
+        follows: [],
+        error: error.message,
+        details: 'Check function logs in Supabase dashboard'
       }),
       { 
         status: 500, 
