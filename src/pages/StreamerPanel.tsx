@@ -1,6 +1,4 @@
-// src/pages/StreamerPannel.tsx
-
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Navigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,42 +15,52 @@ import { Navigation } from '@/components/Navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
-import { 
-  Settings, 
-  Clock, 
-  Timer, 
-  Gamepad2, 
-  Trophy,
-  Users,
-  Star,
-  Save,
+import {
+  Settings,
+  Clock,
+  Timer,
+  Gamepad2,
+  Broadcast,
   Play,
   Pause,
   RotateCcw,
-  Dice1,
   Square,
   Eye,
   BarChart3,
-  ArrowRight,
   Link,
   ExternalLink,
-  HelpCircle,
-  Clock4,
   ClipboardCheck,
-  Check,
-  Monitor,
   Copy,
-  Loader2
+  Loader2,
+  Star,
+  Monitor,
+  AlertCircle
 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 
-// Utility function to validate UUID format
-const isUUID = (uuid: string): boolean => {
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  return uuidRegex.test(uuid);
-};
+// Interface pour les paramètres du streamer
+interface StreamerSettings {
+  id: string;
+  user_id: string;
+  stream_title: string;
+  twitch_id: string;
+  time_mode: 'fixed' | 'random';
+  time_increment: number;
+  min_random_time: number;
+  max_random_time: number;
+  clicks_required: number;
+  cooldown_seconds: number;
+  initial_duration: number;
+  active_minigames: string[];
+  status: 'offline' | 'live' | 'paused' | 'ended';
+  is_live: boolean;
+  total_time_added: number;
+  current_clicks: number;
+  stream_started_at: string | null;
+  pause_started_at: string | null;
+}
 
-// Composant pour le timer de pauvrathon (pas de changements)
+// Fonction utilitaire pour le timer du pauvrathon (pas de changements)
 const PauvrathonTimer = ({ status, startTime, initialDuration, addedTime }) => {
   const [timeRemaining, setTimeRemaining] = useState(initialDuration);
   const [elapsedPercent, setElapsedPercent] = useState(100);
@@ -121,10 +129,69 @@ const PauvrathonTimer = ({ status, startTime, initialDuration, addedTime }) => {
   );
 };
 
-export default function AdminPanel() {
+// **MODIFICATION : Lecteur vidéo Twitch**
+const TwitchPlayer = ({ twitchUsername }: { twitchUsername: string | undefined }) => {
+  useEffect(() => {
+    if (!twitchUsername) return;
+
+    // S'assure que le script de l'API Twitch est chargé
+    if (!(window as any).Twitch) {
+      const script = document.createElement('script');
+      script.src = 'https://embed.twitch.tv/embed/v1.js';
+      script.async = true;
+      document.body.appendChild(script);
+
+      script.onload = () => {
+        // Initialise le lecteur une fois le script chargé
+        new (window as any).Twitch.Embed("twitch-embed", {
+          width: '100%',
+          height: '400',
+          channel: twitchUsername,
+          layout: 'video',
+          autoplay: true,
+          muted: false,
+          theme: 'dark'
+        });
+      };
+    } else {
+        // Si le script est déjà là, initialise le lecteur directement
+        new (window as any).Twitch.Embed("twitch-embed", {
+          width: '100%',
+          height: '400',
+          channel: twitchUsername,
+          layout: 'video',
+          autoplay: true,
+          muted: false,
+          theme: 'dark'
+        });
+    }
+
+    return () => {
+      // Nettoyage si nécessaire
+      document.body.removeChild(document.querySelector('script[src="https://embed.twitch.tv/embed/v1.js"]') as Node);
+    };
+  }, [twitchUsername]);
+
+  if (!twitchUsername) {
+    return (
+      <div className="flex items-center justify-center h-full text-muted-foreground p-8">
+        <AlertCircle className="mr-2 h-5 w-5" />
+        Nom d'utilisateur Twitch non trouvé. Assurez-vous d'avoir lié votre compte Twitch.
+      </div>
+    );
+  }
+
+  return (
+    <div className="aspect-video w-full rounded-lg overflow-hidden shadow-lg neon-border p-2">
+      <div id="twitch-embed" className="w-full h-full"></div>
+    </div>
+  );
+};
+
+export default function StreamerPanel() {
   const { user, profile } = useAuth();
-  const [streamer, setStreamer] = useState<any>(null);
-  const [originalStreamerData, setOriginalStreamerData] = useState<any>(null);
+  const [streamer, setStreamer] = useState<StreamerSettings | null>(null);
+  const [originalStreamerData, setOriginalStreamerData] = useState<StreamerSettings | null>(null);
   const [availableMinigames, setAvailableMinigames] = useState<any[]>([]);
   const [stats, setStats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -146,17 +213,10 @@ export default function AdminPanel() {
   const [pauvrathonUrl, setPauvrathonUrl] = useState('');
   const [overlayUrl, setOverlayUrl] = useState('');
   
-  // **MODIFICATION : État pour le player vidéo et sa référence**
-  const videoRef = useRef<HTMLIFrameElement>(null);
-  const [videoStatus, setVideoStatus] = useState<'paused' | 'playing' | 'loading'>('paused');
-  
-  if (!user) {
+  if (!user || profile?.role !== 'streamer') {
     return <Navigate to="/" replace />;
   }
-  if (profile && profile.role !== 'admin') {
-    return <Navigate to="/" replace />;
-  }
-  
+
   const fetchStreamerData = useCallback(async () => {
     if (!user) return;
     
@@ -164,32 +224,15 @@ export default function AdminPanel() {
     try {
       const { data, error } = await supabase
         .from('streamers')
-        .select(`
-          id,
-          user_id,
-          time_mode,
-          time_increment,
-          min_random_time,
-          max_random_time,
-          clicks_required,
-          cooldown_seconds,
-          initial_duration,
-          active_minigames,
-          status,
-          is_live,
-          total_time_added,
-          current_clicks,
-          stream_started_at,
-          pause_started_at
-        `)
+        .select('*')
         .eq('user_id', user.id)
         .single();
 
       if (error && error.code !== 'PGRST116') throw error;
 
       if (data) {
-        setStreamer(data);
-        setOriginalStreamerData(data);
+        setStreamer(data as StreamerSettings);
+        setOriginalStreamerData(data as StreamerSettings);
         
         setInitialHours(Math.floor((data.initial_duration || 7200) / 3600));
         setInitialMinutes(Math.floor(((data.initial_duration || 7200) % 3600) / 60));
@@ -201,11 +244,11 @@ export default function AdminPanel() {
         setCooldownTime(data.cooldown_seconds || 30);
         setSelectedGames(data.active_minigames || []);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching streamer data:', error);
       toast({
         title: "Erreur",
-        description: "Impossible de charger les données du streamer.",
+        description: error.message || "Impossible de charger les données du streamer.",
         variant: "destructive",
       });
     } finally {
@@ -223,14 +266,14 @@ export default function AdminPanel() {
       if (error) throw error;
       
       setAvailableMinigames(data || []);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching minigames:', error);
     }
   }, []);
 
   const fetchStats = useCallback(async () => {
-    if (!streamer || !isUUID(streamer.id)) {
-      console.error("Invalid streamer ID for fetching stats.");
+    if (!streamer || !streamer.id) {
+      console.error("ID de streamer invalide pour les statistiques.");
       return;
     }
 
@@ -244,7 +287,7 @@ export default function AdminPanel() {
       if (error) throw error;
       
       setStats(data || []);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching stats:', error);
     }
   }, [streamer]);
@@ -263,8 +306,8 @@ export default function AdminPanel() {
           'postgres_changes',
           { event: 'UPDATE', schema: 'public', table: 'streamers', filter: `id=eq.${streamer.id}` },
           (payload) => {
-            console.log('Real-time update received:', payload);
-            setStreamer(payload.new);
+            console.log('Mise à jour en temps réel reçue:', payload);
+            setStreamer(payload.new as StreamerSettings);
           }
         )
         .subscribe();
@@ -298,6 +341,7 @@ export default function AdminPanel() {
     if (!originalStreamerData) return;
     
     const currentConfig = {
+      stream_title: streamer?.stream_title,
       time_mode: timeMode,
       time_increment: fixedTime,
       min_random_time: minRandomTime,
@@ -309,6 +353,7 @@ export default function AdminPanel() {
     };
     
     const originalConfig = {
+      stream_title: originalStreamerData.stream_title,
       time_mode: originalStreamerData.time_mode || 'fixed',
       time_increment: originalStreamerData.time_increment || 30,
       min_random_time: originalStreamerData.min_random_time || 10,
@@ -321,10 +366,10 @@ export default function AdminPanel() {
     
     const hasChanges = JSON.stringify(currentConfig) !== JSON.stringify(originalConfig);
     setHasUnsavedChanges(hasChanges);
-  }, [timeMode, fixedTime, minRandomTime, maxRandomTime, clicksRequired, cooldownTime, initialHours, initialMinutes, selectedGames, originalStreamerData]);
+  }, [timeMode, fixedTime, minRandomTime, maxRandomTime, clicksRequired, cooldownTime, initialHours, initialMinutes, selectedGames, streamer, originalStreamerData]);
 
   const handleSaveSettings = async () => {
-    if (!streamer || !isUUID(streamer.id)) {
+    if (!streamer || !streamer.id) {
       console.error("Sauvegarde impossible: Streamer ID invalide.");
       toast({
         title: "Erreur de sauvegarde",
@@ -339,6 +384,7 @@ export default function AdminPanel() {
       const calculatedDuration = (initialHours * 3600) + (initialMinutes * 60);
       
       const updatedSettings = {
+        stream_title: streamer.stream_title,
         time_mode: timeMode,
         time_increment: fixedTime,
         min_random_time: minRandomTime,
@@ -350,8 +396,6 @@ export default function AdminPanel() {
         updated_at: new Date().toISOString()
       };
       
-      console.log('Données envoyées à Supabase:', updatedSettings);
-
       const { data, error } = await supabase
         .from('streamers')
         .update(updatedSettings)
@@ -364,17 +408,15 @@ export default function AdminPanel() {
         throw error;
       }
 
-      console.log('Données sauvegardées reçues de Supabase:', data);
-
-      setStreamer(data);
-      setOriginalStreamerData(data);
+      setStreamer(data as StreamerSettings);
+      setOriginalStreamerData(data as StreamerSettings);
       setHasUnsavedChanges(false);
       
       toast({
         title: "Paramètres sauvegardés",
         description: "Les paramètres du Pauvrathon ont été mis à jour avec succès.",
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erreur de sauvegarde:', error);
       toast({
         title: "Erreur de sauvegarde",
@@ -386,23 +428,10 @@ export default function AdminPanel() {
     }
   };
 
-  const handleStatusChange = async (newStatus: 'live' | 'paused' | 'ended') => {
-    if (!streamer || !isUUID(streamer.id)) {
+  const handleStatusChange = async (newStatus: 'live' | 'paused' | 'ended' | 'offline') => {
+    if (!streamer || !streamer.id) {
       console.error("Mise à jour du statut impossible: Streamer ID invalide.");
       return;
-    }
-
-    // **MODIFICATION : Lancer l'action sur le lecteur vidéo**
-    if (videoRef.current) {
-        if (newStatus === 'live') {
-            // Lancer la lecture de la vidéo si elle est en pause
-            videoRef.current.contentWindow?.postMessage('{"event":"command","func":"playVideo","args":""}', '*');
-            setVideoStatus('playing');
-        } else if (newStatus === 'paused') {
-            // Mettre la vidéo en pause
-            videoRef.current.contentWindow?.postMessage('{"event":"command","func":"pauseVideo","args":""}', '*');
-            setVideoStatus('paused');
-        }
     }
 
     try {
@@ -427,14 +456,12 @@ export default function AdminPanel() {
         updateData.pause_started_at = new Date().toISOString();
       }
 
-      if (newStatus === 'ended') {
+      if (newStatus === 'ended' || newStatus === 'offline') {
         updateData.current_clicks = 0;
         updateData.total_time_added = 0;
         updateData.stream_started_at = null;
         updateData.pause_started_at = null;
       }
-
-      console.log('Mise à jour du statut envoyée:', updateData);
 
       const { data, error } = await supabase
         .from('streamers')
@@ -444,12 +471,13 @@ export default function AdminPanel() {
         .single();
 
       if (error) throw error;
-      setStreamer(data);
+      setStreamer(data as StreamerSettings);
       
       const statusMessages = {
         live: "Pauvrathon démarré",
         paused: "Pauvrathon en pause", 
-        ended: "Pauvrathon terminé"
+        ended: "Pauvrathon terminé",
+        offline: "Pauvrathon arrêté"
       };
 
       toast({
@@ -457,7 +485,7 @@ export default function AdminPanel() {
         description: `Le Pauvrathon est maintenant ${newStatus === 'live' ? 'en direct' : newStatus === 'paused' ? 'en pause' : 'terminé'}.`,
       });
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating status:', error);
       toast({
         title: "Erreur",
@@ -476,7 +504,7 @@ export default function AdminPanel() {
   };
   
   const handleResetClicks = async () => {
-    if (!streamer || !isUUID(streamer.id)) {
+    if (!streamer || !streamer.id) {
       console.error("Réinitialisation impossible: Streamer ID invalide.");
       return;
     }
@@ -494,13 +522,13 @@ export default function AdminPanel() {
 
       if (error) throw error;
 
-      setStreamer(data);
+      setStreamer(data as StreamerSettings);
       
       toast({
         title: "Clics remis à zéro",
         description: "Le compteur de clics a été réinitialisé.",
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error resetting clicks:', error);
       toast({
         title: "Erreur",
@@ -519,11 +547,11 @@ export default function AdminPanel() {
   };
 
   const copyOverlayLink = () => {
-    copyToClipboard(overlayUrl, 'de l\'overlay');
+    copyToClipboard(overlayUrl, "de l'overlay");
   };
 
   const copyPauvrathonLink = () => {
-    copyToClipboard(pauvrathonUrl, 'de la page Pauvrathon');
+    copyToClipboard(pauvrathonUrl, "de la page Pauvrathon");
   };
   
   const LoadingSpinner = () => (
@@ -532,7 +560,7 @@ export default function AdminPanel() {
     </div>
   );
 
-  if (loading) {
+  if (loading || !streamer) {
     return (
       <div className="min-h-screen bg-background">
         <Navigation />
@@ -550,10 +578,10 @@ export default function AdminPanel() {
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-purple-600 to-pink-600 text-transparent bg-clip-text">
-            Panneau d'Administration Pauvrathon
+            Panneau de Streamer Pauvrathon
           </h1>
           <p className="text-muted-foreground">
-            Configurez et gérez le Pauvrathon en temps réel
+            Configurez et gérez votre Pauvrathon en temps réel
           </p>
         </div>
 
@@ -633,7 +661,7 @@ export default function AdminPanel() {
                     {/* Configuration du temps ajouté */}
                     <div className="space-y-4">
                       <div className="flex items-center">
-                        <Clock4 className="h-5 w-5 mr-2 text-muted-foreground" />
+                        <Clock className="h-5 w-5 mr-2 text-muted-foreground" />
                         <h3 className="text-lg font-medium">Temps ajouté par victoire</h3>
                       </div>
                       
@@ -656,7 +684,7 @@ export default function AdminPanel() {
                           <RadioGroupItem value="random" id="random" />
                           <Label htmlFor="random" className="flex-1 cursor-pointer">
                             <div className="flex items-center">
-                              <Dice1 className="mr-2 h-4 w-4" />
+                              <Gamepad2 className="mr-2 h-4 w-4" />
                               Temps aléatoire
                             </div>
                           </Label>
@@ -783,6 +811,15 @@ export default function AdminPanel() {
                       </div>
                     </div>
                   </CardContent>
+                  <CardFooter className="flex justify-end pt-6">
+                    <Button 
+                      onClick={handleSaveSettings} 
+                      disabled={saving || !hasUnsavedChanges}
+                      variant={hasUnsavedChanges ? "default" : "outline"}
+                    >
+                      Sauvegarder les paramètres
+                    </Button>
+                  </CardFooter>
                 </Card>
                 
                 <Card className="mt-6">
@@ -800,7 +837,6 @@ export default function AdminPanel() {
                       <div className="text-center py-8 text-muted-foreground">
                         <Gamepad2 className="mx-auto h-12 w-12 mb-4 opacity-50" />
                         <p>Aucun mini-jeu disponible</p>
-                        <p className="text-sm mt-2">Ajoutez des mini-jeux via la section de gestion des mini-jeux</p>
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -811,9 +847,9 @@ export default function AdminPanel() {
                           >
                             <Checkbox
                               id={`minigame-${minigame.id}`}
-                              checked={selectedGames.includes(minigame.id)}
+                              checked={selectedGames.includes(minigame.name)}
                               onCheckedChange={(checked) => 
-                                handleMinigameToggle(minigame.id, checked)
+                                handleMinigameToggle(minigame.name, checked)
                               }
                               className="mt-1"
                             />
@@ -838,17 +874,13 @@ export default function AdminPanel() {
                       </div>
                     )}
                   </CardContent>
-                  <CardFooter className="flex justify-between border-t pt-6">
-                    <div className="text-sm text-muted-foreground">
-                      <span className="font-medium">{selectedGames.length}</span> mini-jeux sélectionnés sur {availableMinigames.length} disponibles
-                    </div>
+                  <CardFooter className="flex justify-end border-t pt-6">
                     <Button 
                       onClick={handleSaveSettings} 
                       disabled={saving || !hasUnsavedChanges}
                       variant={hasUnsavedChanges ? "default" : "outline"}
                     >
-                      <Save className="mr-2 h-4 w-4" />
-                      {saving ? 'Sauvegarde...' : hasUnsavedChanges ? 'Sauvegarder les changements' : 'Paramètres sauvegardés'}
+                      Sauvegarder les jeux
                     </Button>
                   </CardFooter>
                 </Card>
@@ -931,7 +963,7 @@ export default function AdminPanel() {
                   <CardContent>
                     {stats.length === 0 ? (
                       <div className="text-center py-8 text-muted-foreground">
-                        <HelpCircle className="mx-auto h-12 w-12 mb-4 opacity-50" />
+                        <Star className="mx-auto h-12 w-12 mb-4 opacity-50" />
                         <p>Aucune statistique disponible</p>
                       </div>
                     ) : (
@@ -964,32 +996,17 @@ export default function AdminPanel() {
           {/* PARTIE DROITE - Timer et Contrôles */}
           <div className="lg:col-span-1 space-y-6">
             <Card>
-                {/* **MODIFICATION : Ajout du lecteur vidéo** */}
                 <CardHeader>
                     <CardTitle className="flex items-center">
                         <Monitor className="mr-2 h-5 w-5" />
                         Lecteur Vidéo
                     </CardTitle>
                     <CardDescription>
-                        Contrôlez le statut de votre stream en direct
+                        Aperçu de votre stream Twitch en direct.
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {/* Placeholder pour le lecteur Twitch ou YouTube.
-                    Il est important d'utiliser une URL avec l'API activée pour le contrôle via JavaScript.
-                    La référence `ref={videoRef}` est la clé pour le contrôle du lecteur. */}
-                    <div className="relative w-full aspect-video">
-                        <iframe
-                            ref={videoRef}
-                            id="video-player"
-                            className="absolute top-0 left-0 w-full h-full"
-                            src={`https://www.youtube.com/embed/dQw4w9WgXcQ?enablejsapi=1&autoplay=0`}
-                            frameBorder="0"
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                            allowFullScreen
-                            title="Embedded Video"
-                        ></iframe>
-                    </div>
+                    <TwitchPlayer twitchUsername={profile?.twitch_username} />
                 </CardContent>
             </Card>
 

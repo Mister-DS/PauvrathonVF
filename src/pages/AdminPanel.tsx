@@ -1,3 +1,5 @@
+// src/pages/AdminPanel.tsx
+
 import { useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,29 +27,43 @@ import {
   XCircle,
   AlertCircle,
   Crown,
-  UserMinus
+  UserMinus,
+  ArrowUpRight,
+  Filter,
+  Loader2,
+  AlertTriangle
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 
-// Liste des mini-jeux fiables, gérée en dur dans le code
-// Chaque jeu a un nom unique (id), un nom affiché, et une description
+// Interfaces pour un typage plus précis
+interface DetailedStreamerRequest extends StreamerRequest {
+  profiles?: {
+    twitch_display_name?: string;
+    avatar_url?: string;
+    twitch_username?: string;
+  };
+}
+
 const predefinedGames = [
   { id: 'guess_number', name: 'Devine le nombre', description: 'Les viewers doivent deviner le nombre mystère.' },
   { id: 'click_race', name: 'Course aux clics', description: 'Le premier à cliquer 100 fois l\'emporte.' },
   { id: 'random_emote', name: 'Émote aléatoire', description: 'Le premier à poster l\'émote du jour gagne.' },
-  // Ajoutez vos futurs mini-jeux ici après les avoir codés
 ];
 
 export default function AdminPanel() {
   const { user, profile } = useAuth();
-  const [requests, setRequests] = useState<StreamerRequest[]>([]);
+  const [requests, setRequests] = useState<DetailedStreamerRequest[]>([]);
   const [streamers, setStreamers] = useState<Streamer[]>([]);
   const [minigames, setMinigames] = useState<Minigame[]>([]);
   const [loading, setLoading] = useState(true);
   const [newMinigameName, setNewMinigameName] = useState('');
   const [newMinigameDescription, setNewMinigameDescription] = useState('');
+  const [showAllRequests, setShowAllRequests] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [showRejectionDialog, setShowRejectionDialog] = useState(false);
+  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
 
-  // Redirect if not admin
   if (!user || profile?.role !== 'admin') {
     return <Navigate to="/" replace />;
   }
@@ -64,13 +80,13 @@ export default function AdminPanel() {
         .from('streamer_requests')
         .select(`
           *,
-          profiles(twitch_display_name, avatar_url)
+          profiles(twitch_display_name, avatar_url, twitch_username)
         `)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
 
-      setRequests((data || []) as StreamerRequest[]);
+      setRequests((data || []) as DetailedStreamerRequest[]);
     } catch (error) {
       console.error('Error fetching requests:', error);
       toast({
@@ -121,16 +137,15 @@ export default function AdminPanel() {
     }
   };
 
-  const handleRequestAction = async (requestId: string, action: 'approved' | 'rejected') => {
+  const handleApproveRequest = async (requestId: string) => {
     try {
       const request = requests.find(r => r.id === requestId);
       if (!request) return;
 
-      // Update request status
       const { error: updateError } = await supabase
         .from('streamer_requests')
         .update({
-          status: action,
+          status: 'approved',
           reviewed_at: new Date().toISOString(),
           reviewed_by: user.id
         })
@@ -138,29 +153,25 @@ export default function AdminPanel() {
 
       if (updateError) throw updateError;
 
-      if (action === 'approved') {
-        // Create streamer record
-        const { error: streamerError } = await supabase
-          .from('streamers')
-          .insert({
-            user_id: request.user_id,
-            twitch_id: request.twitch_username, // This should be improved with real Twitch ID
-          });
+      const { error: streamerError } = await supabase
+        .from('streamers')
+        .insert({
+          user_id: request.user_id,
+          twitch_id: request.twitch_username,
+        });
 
-        if (streamerError) throw streamerError;
+      if (streamerError) throw streamerError;
 
-        // Update user profile role
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .update({ role: 'streamer' })
-          .eq('user_id', request.user_id);
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({ role: 'streamer' })
+        .eq('user_id', request.user_id);
 
-        if (profileError) throw profileError;
-      }
+      if (profileError) throw profileError;
 
       toast({
-        title: action === 'approved' ? "Demande approuvée" : "Demande rejetée",
-        description: `La demande de ${request.twitch_username} a été ${action === 'approved' ? 'approuvée' : 'rejetée'}.`,
+        title: "Demande approuvée",
+        description: `La demande de ${request.twitch_username} a été approuvée.`,
       });
 
       fetchRequests();
@@ -175,9 +186,54 @@ export default function AdminPanel() {
     }
   };
 
+  const handleRejectRequest = async () => {
+    if (!selectedRequestId || !rejectionReason.trim()) {
+      toast({
+        title: "Raison manquante",
+        description: "Veuillez fournir une raison pour le rejet.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const request = requests.find(r => r.id === selectedRequestId);
+      if (!request) return;
+
+      const { error: updateError } = await supabase
+        .from('streamer_requests')
+        .update({
+          status: 'rejected',
+          rejection_reason: rejectionReason, // Ajout de la raison
+          reviewed_at: new Date().toISOString(),
+          reviewed_by: user.id
+        })
+        .eq('id', selectedRequestId);
+
+      if (updateError) throw updateError;
+
+      toast({
+        title: "Demande rejetée",
+        description: `La demande de ${request.twitch_username} a été rejetée.`,
+      });
+
+      setShowRejectionDialog(false);
+      setRejectionReason('');
+      setSelectedRequestId(null);
+      fetchRequests();
+      fetchStreamers();
+    } catch (error: any) {
+      console.error('Error rejecting request:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de rejeter la demande.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleRemoveStreamer = async (streamerId: string, userId: string) => {
     try {
-      // Remove from streamers table
       const { error: streamerError } = await supabase
         .from('streamers')
         .delete()
@@ -185,7 +241,6 @@ export default function AdminPanel() {
 
       if (streamerError) throw streamerError;
 
-      // Update profile role back to viewer
       const { error: profileError } = await supabase
         .from('profiles')
         .update({ role: 'viewer' })
@@ -213,40 +268,38 @@ export default function AdminPanel() {
     if (!newMinigameName) {
       toast({
         title: "Erreur",
-        description: "Veuillez sélectionner un mini-jeu.",
+        description: "Veuillez entrer le nom du mini-jeu.",
         variant: "destructive",
       });
       return;
     }
 
     try {
-      // Vérifier si le mini-jeu existe déjà
-      const existingGame = minigames.find(g => g.name === newMinigameName);
+      const { data: existingGame, error: existingError } = await supabase
+        .from('minigames')
+        .select('id')
+        .eq('name', newMinigameName)
+        .single();
+
       if (existingGame) {
         toast({
           title: "Mini-jeu déjà existant",
-          description: "Ce mini-jeu a déjà été ajouté.",
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      const gameToAdd = predefinedGames.find(g => g.id === newMinigameName);
-      if (!gameToAdd) {
-        toast({
-          title: "Erreur",
-          description: "Le mini-jeu sélectionné n'est pas valide.",
+          description: `Un mini-jeu avec le nom "${newMinigameName}" a déjà été ajouté.`,
           variant: "destructive",
         });
         return;
       }
 
+      if (existingError && existingError.code !== 'PGRST116') {
+        throw existingError;
+      }
+
       const { error } = await supabase
         .from('minigames')
         .insert({
-          name: gameToAdd.id, // On stocke l'ID unique du jeu
-          description: gameToAdd.description,
-          is_active: true,  // Jeu actif par défaut
+          name: newMinigameName,
+          description: newMinigameDescription,
+          is_active: true,
           created_by: user.id
         });
 
@@ -254,10 +307,11 @@ export default function AdminPanel() {
 
       toast({
         title: "Mini-jeu ajouté",
-        description: `Le mini-jeu "${gameToAdd.name}" a été ajouté avec succès et est maintenant disponible.`,
+        description: `Le mini-jeu "${newMinigameName}" a été ajouté avec succès et est maintenant disponible.`,
       });
 
       setNewMinigameName('');
+      setNewMinigameDescription('');
       fetchMinigames();
     } catch (error: any) {
       console.error('Error adding minigame:', error);
@@ -335,9 +389,18 @@ export default function AdminPanel() {
   }
 
   const pendingRequests = requests.filter(r => r.status === 'pending');
-  const totalStreamers = streamers.length;
-  const totalActiveGames = minigames.filter(m => m.is_active).length;
-  const gamesNotInDb = predefinedGames.filter(g => !minigames.some(dbGame => dbGame.name === g.id));
+  const allRequests = requests.filter(r => r.status !== 'pending' || showAllRequests);
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'approved':
+        return <Badge className="bg-green-500 text-white">Approuvé</Badge>;
+      case 'rejected':
+        return <Badge className="bg-red-500 text-white">Rejeté</Badge>;
+      default:
+        return <Badge variant="outline">En attente</Badge>;
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -352,8 +415,6 @@ export default function AdminPanel() {
           <p className="text-muted-foreground mb-4">
             Gérez les utilisateurs, streamers et mini-jeux de la plateforme
           </p>
-
-          {/* Admin Quick Actions */}
           <div className="flex gap-4">
             <Button
               onClick={handleCreateAdminStreamerProfile}
@@ -383,7 +444,7 @@ export default function AdminPanel() {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-2xl font-bold text-primary">{totalStreamers}</p>
+                  <p className="text-2xl font-bold text-primary">{streamers.length}</p>
                   <p className="text-xs text-muted-foreground">Streamers actifs</p>
                 </div>
                 <Users className="h-6 w-6 text-primary" />
@@ -395,15 +456,18 @@ export default function AdminPanel() {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-2xl font-bold text-accent">{totalActiveGames}</p>
-                  <p className="text-xs text-muted-foreground">Mini-jeux actifs</p>
+                  <p className="text-2xl font-bold text-accent">{minigames.length}</p>
+                  <p className="text-xs text-muted-foreground">Mini-jeux</p>
                 </div>
                 <Gamepad2 className="h-6 w-6 text-accent" />
               </div>
             </CardContent>
           </Card>
 
-          <Card className="glass-effect">
+          <Card
+            className="glass-effect cursor-pointer transition-transform duration-200 hover:scale-105"
+            onClick={() => setShowAllRequests(true)}
+          >
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -441,11 +505,11 @@ export default function AdminPanel() {
                             <Avatar>
                               <AvatarImage src={request.profiles?.avatar_url} />
                               <AvatarFallback>
-                                {request.twitch_username.charAt(0).toUpperCase()}
+                                {request.profiles?.twitch_username?.charAt(0).toUpperCase() || 'S'}
                               </AvatarFallback>
                             </Avatar>
                             <div>
-                              <h3 className="font-medium">{request.twitch_username}</h3>
+                              <h3 className="font-medium">{request.profiles?.twitch_display_name || request.profiles?.twitch_username}</h3>
                               <p className="text-sm text-muted-foreground">
                                 {new Date(request.created_at).toLocaleDateString('fr-FR')}
                               </p>
@@ -476,7 +540,7 @@ export default function AdminPanel() {
                         <div className="flex space-x-2">
                           <Button
                             size="sm"
-                            onClick={() => handleRequestAction(request.id, 'approved')}
+                            onClick={() => handleApproveRequest(request.id)}
                             className="flex-1 neon-glow"
                           >
                             <CheckCircle className="mr-1 h-4 w-4" />
@@ -485,7 +549,10 @@ export default function AdminPanel() {
                           <Button
                             size="sm"
                             variant="destructive"
-                            onClick={() => handleRequestAction(request.id, 'rejected')}
+                            onClick={() => {
+                              setSelectedRequestId(request.id);
+                              setShowRejectionDialog(true);
+                            }}
                             className="flex-1"
                           >
                             <XCircle className="mr-1 h-4 w-4" />
@@ -504,7 +571,7 @@ export default function AdminPanel() {
               <CardHeader>
                 <CardTitle className="flex items-center">
                   <Crown className="mr-2 h-5 w-5" />
-                  Streamers Actifs ({totalStreamers})
+                  Streamers Actifs ({streamers.length})
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -564,26 +631,24 @@ export default function AdminPanel() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
-                  <Label htmlFor="game-select">Sélectionner un jeu</Label>
-                  <Select onValueChange={setNewMinigameName} value={newMinigameName}>
-                    <SelectTrigger id="game-select">
-                      <SelectValue placeholder="Choisissez un mini-jeu" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {gamesNotInDb.length === 0 ? (
-                        <SelectItem disabled value="">Tous les jeux sont déjà ajoutés</SelectItem>
-                      ) : (
-                        gamesNotInDb.map(game => (
-                          <SelectItem key={game.id} value={game.id}>
-                            {game.name}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="game-id">Nom interne du jeu</Label>
+                  <Input
+                    id="game-id"
+                    placeholder="Entrez le nom du jeu (ex: guess_number)"
+                    value={newMinigameName}
+                    onChange={(e) => setNewMinigameName(e.target.value)}
+                  />
                 </div>
-
-                <Button onClick={handleAddMinigame} className="w-full neon-glow" disabled={!newMinigameName || gamesNotInDb.length === 0}>
+                <div>
+                  <Label htmlFor="game-description">Description</Label>
+                  <Textarea
+                    id="game-description"
+                    placeholder="Entrez une brève description du jeu."
+                    value={newMinigameDescription}
+                    onChange={(e) => setNewMinigameDescription(e.target.value)}
+                  />
+                </div>
+                <Button onClick={handleAddMinigame} className="w-full neon-glow" disabled={!newMinigameName}>
                   <Plus className="mr-2 h-4 w-4" />
                   Ajouter le Mini-jeu
                 </Button>
@@ -633,6 +698,95 @@ export default function AdminPanel() {
             </Card>
           </div>
         </div>
+
+        {/* Dialog for All Requests */}
+        <Dialog open={showAllRequests} onOpenChange={setShowAllRequests}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle className="flex items-center">
+                <Clock className="mr-2 h-5 w-5" />
+                Historique des Demandes de Streamer ({requests.length})
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-4">
+              {requests.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <AlertTriangle className="mx-auto h-12 w-12 mb-4" />
+                  <p>Aucune demande enregistrée</p>
+                </div>
+              ) : (
+                requests.map((request) => (
+                  <Card key={request.id} className="p-4">
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center space-x-3">
+                        <Avatar>
+                          <AvatarImage src={request.profiles?.avatar_url} />
+                          <AvatarFallback>
+                            {request.profiles?.twitch_username?.charAt(0).toUpperCase() || 'S'}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <h3 className="font-medium">{request.profiles?.twitch_display_name || request.profiles?.twitch_username}</h3>
+                          <p className="text-sm text-muted-foreground">
+                            {new Date(request.created_at).toLocaleDateString('fr-FR')}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end">
+                        {getStatusBadge(request.status)}
+                        <span className="text-xs text-muted-foreground mt-1">
+                          {new Date(request.reviewed_at).toLocaleDateString('fr-FR')}
+                        </span>
+                      </div>
+                    </div>
+                    {request.status === 'rejected' && request.rejection_reason && (
+                      <div className="mt-2 p-3 text-sm rounded bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300">
+                        <p className="font-medium mb-1 flex items-center">
+                          <AlertTriangle className="mr-2 w-4 h-4" /> Raison du rejet
+                        </p>
+                        <p>{request.rejection_reason}</p>
+                      </div>
+                    )}
+                  </Card>
+                ))
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Dialog for Rejection Reason */}
+        <Dialog open={showRejectionDialog} onOpenChange={setShowRejectionDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle className="flex items-center">
+                <AlertTriangle className="mr-2 h-5 w-5 text-red-500" />
+                Rejeter la demande
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Veuillez fournir une raison pour le rejet de cette demande de streamer.
+              </p>
+              <div>
+                <Label htmlFor="rejection-reason">Raison du rejet</Label>
+                <Textarea
+                  id="rejection-reason"
+                  placeholder="Ex: Le profil Twitch n'existe pas ou ne correspond pas."
+                  value={rejectionReason}
+                  onChange={(e) => setRejectionReason(e.target.value)}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowRejectionDialog(false)}>
+                Annuler
+              </Button>
+              <Button variant="destructive" onClick={handleRejectRequest} disabled={!rejectionReason.trim()}>
+                Confirmer le rejet
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
