@@ -41,12 +41,14 @@ export default function Profile() {
     
     setIsDeleting(true);
     try {
-      // Supprimer toutes les données utilisateur en cascade
-      const { error } = await supabase.rpc('delete_user_cascade', {
-        user_id: user.id
-      });
+      // Pour l'instant, on peut seulement supprimer les données dans notre base
+      // La suppression du compte auth devra être faite côté client
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('user_id', user.id);
 
-      if (error) throw error;
+      if (profileError) throw profileError;
 
       toast({
         title: "Compte supprimé",

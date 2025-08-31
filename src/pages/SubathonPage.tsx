@@ -97,7 +97,7 @@ const SubathonPage = () => {
     let timer: NodeJS.Timeout;
     if (countdown > 0) {
       timer = setTimeout(() => setCountdown(countdown - 1), 1000);
-    } else if (countdown === 0 && !showMinigame && failedAttempts > 0 && failedAttempts < 3) {
+    } else if (countdown === 0 && !showMinigame && failedAttempts > 0 && failedAttempts < 12) {
       setShowMinigame(true);
     }
     return () => clearTimeout(timer);
@@ -453,15 +453,45 @@ const SubathonPage = () => {
     setGameWon(false);
   };
 
-  const handleGameWin = async () => {
+  const handleGameWin = async (score: number = 1) => {
     if (!streamer) return;
     setGameWon(true);
     setShowVictoryButton(true);
     setShowMinigame(false);
+    
+    // Calculer le temps à ajouter basé sur le score
+    const baseTime = streamer.time_increment || 30;
+    const randomBonus = Math.floor(Math.random() * score * 10); // Plus de score = plus de bonus potentiel
+    const timeToAdd = baseTime + randomBonus;
+    
     toast({
       title: "Félicitations !",
-      description: `Vous avez réussi le mini-jeu ! Cliquez sur le bouton de victoire pour ajouter du temps.`,
+      description: `Score: ${score}! Temps à ajouter: ${timeToAdd}s (base: ${baseTime}s + bonus: ${randomBonus}s)`,
     });
+    
+    // Enregistrer immédiatement le temps
+    try {
+      const newTotalTime = (streamer.total_time_added || 0) + timeToAdd;
+      const { error } = await supabase
+        .from('streamers')
+        .update({ total_time_added: newTotalTime })
+        .eq('id', streamer.id);
+
+      if (error) throw error;
+      
+      // Réinitialiser pour permettre de rejouer
+      setFailedAttempts(0);
+      setShowVictoryButton(false);
+      setGameWon(false);
+      
+    } catch (error) {
+      console.error('Error adding time:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible d'ajouter le temps.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleVictoryClick = async () => {
@@ -503,20 +533,20 @@ const SubathonPage = () => {
     setFailedAttempts(newFailedAttempts);
     setShowMinigame(false);
 
-    if (newFailedAttempts >= 3) {
+    if (newFailedAttempts >= 12) { // Changé de 3 à 12
       toast({
         title: "Échec total",
-        description: "3 échecs ! Vous devez recommencer à cliquer.",
+        description: "12 échecs ! Vous devez recommencer à cliquer.",
         variant: "destructive",
       });
       setFailedAttempts(0);
     } else {
       toast({
-        title: `Échec ${newFailedAttempts}/3`,
-        description: "Nouvelle tentative dans 5 secondes...",
+        title: `Échec ${newFailedAttempts}/12`,
+        description: "Nouvelle tentative dans 3 secondes...",
         variant: "destructive",
       });
-      setCountdown(5);
+      setCountdown(3); // Réduit le délai à 3 secondes
     }
   };
 
@@ -841,7 +871,7 @@ const SubathonPage = () => {
                     <CardTitle className="flex items-center justify-between">
                       {currentGame === 'guessNumber' ? 'Devine le chiffre' : 'Jeu du pendu'}
                       <span className="text-sm font-normal text-muted-foreground">
-                        Échecs: {failedAttempts}/3
+                        Échecs: {failedAttempts}/12
                       </span>
                     </CardTitle>
                   </CardHeader>
@@ -851,7 +881,7 @@ const SubathonPage = () => {
                         onWin={handleGameWin}
                         onLose={handleGameLose}
                         attempts={failedAttempts}
-                        maxAttempts={3}
+                        maxAttempts={12}
                       />
                     )}
                     {currentGame === 'hangman' && (
@@ -859,7 +889,7 @@ const SubathonPage = () => {
                         onWin={handleGameWin}
                         onLose={handleGameLose}
                         attempts={failedAttempts}
-                        maxAttempts={3}
+                        maxAttempts={12}
                       />
                     )}
                   </CardContent>

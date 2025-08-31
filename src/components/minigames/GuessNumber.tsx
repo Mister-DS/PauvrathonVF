@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 interface GuessNumberProps {
-  onWin: () => void;
+  onWin: (score: number) => void;
   onLose: () => void;
   attempts: number;
   maxAttempts: number;
@@ -36,7 +36,9 @@ export function GuessNumber({ onWin, onLose, attempts, maxAttempts }: GuessNumbe
     if (guessNumber === targetNumber) {
       setMessage('Félicitations ! Vous avez trouvé le nombre !');
       setGameHistory(prev => [...prev, { guess: guessNumber, result: '🎉 Correct !' }]);
-      setTimeout(() => onWin(), 1500);
+      // Calculer le score basé sur la performance (moins d'essais = meilleur score)
+      const score = Math.max(1, maxAttempts - currentAttempts + 1);
+      setTimeout(() => onWin(score), 1500);
     } else if (newAttempts >= maxAttempts) {
       setMessage(`Perdu ! Le nombre était ${targetNumber}`);
       setGameHistory(prev => [...prev, { guess: guessNumber, result: `❌ ${guessNumber < targetNumber ? 'Trop petit' : 'Trop grand'}` }]);
