@@ -1,4 +1,4 @@
-// src/hooks/useStreamers.tsx
+// src/hooks/useStreamers.ts
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
@@ -13,82 +13,47 @@ export function useStreamers() {
     try {
       setLoading(true);
 
-      // CORRECTION 1: Récupérer TOUS les streamers, pas seulement ceux en live
+      // Correction : Utilisation d'une jointure pour récupérer directement les profils des streamers en direct
       const { data: streamersData, error: streamersError } = await supabase
         .from('streamers')
         .select(`
-          id,
-          user_id,
-          is_live,
-          status,
-          stream_title,
-          current_clicks,
-          clicks_required,
-          total_time_added,
-          initial_duration
+          *,
+          profiles (
+            id,
+            twitch_display_name,
+            twitch_username,
+            avatar_url
+          )
         `)
-        .order('is_live', { ascending: false }) // Live streamers en premier
-        .order('current_clicks', { ascending: false }); // Puis par nombre de clics
+        .eq('status', 'live') // Filtre principal: seuls les Pauvrathons en direct
+        .order('current_clicks', { ascending: false }); // Trie par clics pour les plus actifs
 
       if (streamersError) {
         throw streamersError;
       }
 
       if (!streamersData || streamersData.length === 0) {
-        console.log('Aucun streamer trouvé');
+        console.log('Aucun streamer Pauvrathon en direct trouvé');
         setStreamers([]);
         return;
       }
 
-      // CORRECTION 2: Récupérer les profils séparément
-      const userIds = streamersData.map(s => s.user_id).filter(Boolean);
-      
-      let profilesData = [];
-      if (userIds.length > 0) {
-        const { data: profiles, error: profilesError } = await supabase
-          .from('profiles')
-          .select('user_id, avatar_url, twitch_display_name, twitch_username')
-          .in('user_id', userIds);
-
-        if (profilesError) {
-          console.warn('Erreur lors de la récupération des profils:', profilesError);
-        } else {
-          profilesData = profiles || [];
-        }
-      }
-
-      // CORRECTION 3: Transformation simplifiée des données
-      const transformedData = streamersData.map(streamer => {
-        const profile = profilesData.find(p => p.user_id === streamer.user_id);
-        
+      // La jointure de Supabase ramène les données de profil sous l'objet `profiles`.
+      // Nous les transformons pour qu'elles correspondent à l'interface Streamer.
+      const transformedData = streamersData.map(s => {
+        const profile = s.profiles as any; // Type assertion pour accéder aux propriétés
         return {
-          id: streamer.id,
-          user_id: streamer.user_id,
-          is_live: streamer.is_live,
-          status: streamer.status || 'offline',
-          stream_title: streamer.stream_title,
-          current_clicks: streamer.current_clicks || 0,
-          clicks_required: streamer.clicks_required || 100,
-          total_time_added: streamer.total_time_added || 0,
-          initial_duration: streamer.initial_duration || 7200,
-          
-          // Profil du streamer
+          ...s,
           profile: profile ? {
             avatar_url: profile.avatar_url,
             twitch_display_name: profile.twitch_display_name,
             twitch_username: profile.twitch_username
           } : null,
-
-          // Alias pour compatibilité (si votre interface l'exige)
-          profiles: profile ? {
-            avatar_url: profile.avatar_url,
-            twitch_display_name: profile.twitch_display_name,
-            twitch_username: profile.twitch_username
-          } : null
+          is_live: s.status === 'live', // S'assurer que le flag is_live est correct
         };
       });
 
-      console.log('Streamers chargés:', transformedData.length);
+      console.log('Streamers Pauvrathon en direct chargés:', transformedData.length);
       setStreamers(transformedData as Streamer[]);
 
     } catch (error) {
