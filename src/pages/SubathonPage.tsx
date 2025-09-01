@@ -19,7 +19,7 @@ import { toast } from '@/hooks/use-toast';
 import { Streamer, Minigame } from '@/types';
 import {
   Maximize, Minimize, Trophy, RotateCcw, AlertTriangle,
-  Wifi, Play, Pause, Square, Clock, Settings, Gamepad2, Plus, Loader2, Zap // Ajout de Zap ici
+  Wifi, Play, Pause, Square, Clock, Settings, Gamepad2, Plus, Loader2, Zap
 } from 'lucide-react';
 
 const SubathonPage = () => {
@@ -30,6 +30,7 @@ const SubathonPage = () => {
   const [loading, setLoading] = useState(true);
   const [isStreamerOwner, setIsStreamerOwner] = useState(false);
   const [isMinigameModalOpen, setIsMinigameModalOpen] = useState(false);
+  const [isClicking, setIsClicking] = useState(false);
 
   const [minigameState, setMinigameState] = useState<{
     component: React.ComponentType<any> | null;
@@ -79,6 +80,58 @@ const SubathonPage = () => {
     }
   };
 
+  // Fonction pour gérer les clics des viewers
+  const handleViewerClick = async () => {
+    if (!streamer || !user || isClicking) return;
+    
+    setIsClicking(true);
+    
+    try {
+      // Incrémenter le compteur de clics
+      const { data: updatedStreamer, error } = await supabase
+        .from('streamers')
+        .update({ 
+          current_clicks: (streamer.current_clicks || 0) + 1,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', streamer.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Vérifier si on a atteint le seuil pour déclencher un mini-jeu
+      const newClickCount = updatedStreamer.current_clicks;
+      if (newClickCount >= streamer.clicks_required) {
+        await launchRandomMinigame();
+        
+        // Remettre les clics à zéro après avoir déclenché le jeu
+        await supabase
+          .from('streamers')
+          .update({ 
+            current_clicks: 0,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', streamer.id);
+      }
+
+      toast({
+        title: "Clic enregistré !",
+        description: `${streamer.clicks_required - newClickCount} clics restants pour déclencher un mini-jeu.`,
+      });
+
+    } catch (error) {
+      console.error('Error handling click:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible d'enregistrer votre clic.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsClicking(false);
+    }
+  };
+
   const launchRandomMinigame = async () => {
     if (!streamer || !streamer.active_minigames || streamer.active_minigames.length === 0) {
       toast({
@@ -89,13 +142,16 @@ const SubathonPage = () => {
       return;
     }
   
-    const randomGameId = streamer.active_minigames[Math.floor(Math.random() * streamer.active_minigames.length)];
+    // Sélectionner un mini-jeu aléatoire parmi ceux disponibles
+    const randomGameCode = streamer.active_minigames[Math.floor(Math.random() * streamer.active_minigames.length)];
     
+    // Récupérer les détails du mini-jeu depuis la base de données
     const { data: minigameData, error: minigameError } = await supabase
-        .from('minigames')
-        .select('*')
-        .eq('id', randomGameId)
-        .single();
+      .from('minigames')
+      .select('*')
+      .eq('component_code', randomGameCode)
+      .single();
+      
     if (minigameError || !minigameData) {
       toast({
         title: "Erreur",
@@ -107,6 +163,7 @@ const SubathonPage = () => {
 
     const { name, component_code } = minigameData;
 
+    // Charger le composant du mini-jeu
     const gameComponent = minigameComponents[component_code];
     if (gameComponent) {
       setMinigameState({
@@ -114,6 +171,23 @@ const SubathonPage = () => {
         name: name,
         props: {
           streamerId: streamer.id,
+          onGameEnd: (victory: boolean) => {
+            setIsMinigameModalOpen(false);
+            setMinigameState({ component: null, props: {}, name: '' });
+            
+            if (victory) {
+              toast({
+                title: "Victoire !",
+                description: "Du temps a été ajouté au compteur !",
+              });
+            } else {
+              toast({
+                title: "Défaite !",
+                description: "Continuez à cliquer pour déclencher un nouveau jeu !",
+                variant: "destructive",
+              });
+            }
+          },
         },
       });
       setIsMinigameModalOpen(true);
@@ -125,7 +199,6 @@ const SubathonPage = () => {
       });
     }
   };
-  
 
   useEffect(() => {
     if (id) {
@@ -148,6 +221,13 @@ const SubathonPage = () => {
               return;
             }
             setStreamer(updatedStreamer);
+            
+            // Auto-déclencher un mini-jeu si les clics requis sont atteints
+            if (updatedStreamer.current_clicks >= updatedStreamer.clicks_required && 
+                updatedStreamer.status === 'live' && 
+                !minigameState.component) {
+              launchRandomMinigame();
+            }
           }
         )
         .subscribe();
@@ -156,7 +236,7 @@ const SubathonPage = () => {
         supabase.removeChannel(channel);
       };
     }
-  }, [id, navigate, user]);
+  }, [id, navigate, user, minigameState.component]);
 
   if (loading) {
     return (
@@ -207,6 +287,9 @@ const SubathonPage = () => {
                   <div className="text-center p-4 bg-muted rounded-lg">
                     <p className="text-sm text-muted-foreground">
                       Aucun mini-jeu en cours pour le moment.
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Cliquez sur le bouton "Cliquer pour le streamer" pour contribuer !
                     </p>
                     {isStreamerOwner && (
                       <Button onClick={launchRandomMinigame} className="mt-4">
@@ -273,11 +356,23 @@ const SubathonPage = () => {
                   totalElapsedTime={streamer.total_elapsed_time || 0}
                 />
                 
-                {streamer.status === 'live' && (
-                  <Button className="w-full mt-4">
+                {streamer.status === 'live' && user && (
+                  <Button 
+                    className="w-full mt-4" 
+                    onClick={handleViewerClick}
+                    disabled={isClicking}
+                  >
                     <Zap className="mr-2 h-4 w-4" />
-                    Cliquer pour le streamer
+                    {isClicking ? 'Clic en cours...' : 'Cliquer pour le streamer'}
                   </Button>
+                )}
+                
+                {!user && (
+                  <div className="mt-4 p-3 bg-muted rounded-lg">
+                    <p className="text-sm text-muted-foreground">
+                      Connectez-vous pour participer au Pauvrathon !
+                    </p>
+                  </div>
                 )}
                 
                 {isStreamerOwner && (
@@ -301,8 +396,12 @@ const SubathonPage = () => {
                   <p className="text-sm text-muted-foreground">
                     Un mini-jeu se lancera automatiquement dès que les clics requis seront atteints.
                   </p>
+                  <div className="text-xs text-muted-foreground">
+                    <p>Mini-jeux actifs : {streamer.active_minigames?.length || 0}</p>
+                    <p>Clics requis : {streamer.clicks_required}</p>
+                  </div>
                   {isStreamerOwner && (
-                    <Button onClick={launchRandomMinigame} className="mt-4">
+                    <Button onClick={launchRandomMinigame} className="mt-4" size="sm">
                       <Plus className="mr-2 h-4 w-4" />
                       Lancer un jeu aléatoire (admin)
                     </Button>
@@ -329,6 +428,23 @@ const SubathonPage = () => {
           </div>
         </div>
       </div>
+
+      {/* Modal pour les mini-jeux */}
+      <Dialog open={isMinigameModalOpen} onOpenChange={setIsMinigameModalOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center">
+              <Gamepad2 className="mr-2 h-5 w-5" />
+              {minigameState.name}
+            </DialogTitle>
+          </DialogHeader>
+          {minigameState.component && (
+            <div className="p-4">
+              <minigameState.component {...minigameState.props} />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

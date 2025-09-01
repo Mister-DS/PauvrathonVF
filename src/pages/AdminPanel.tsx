@@ -64,6 +64,7 @@ export default function AdminPanel() {
   const [rejectionReason, setRejectionReason] = useState('');
   const [showRejectionDialog, setShowRejectionDialog] = useState(false);
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
+  const [processingRequest, setProcessingRequest] = useState<string | null>(null);
 
   if (!user || profile?.role !== 'admin') {
     return <Navigate to="/" replace />;
@@ -81,7 +82,7 @@ export default function AdminPanel() {
         .from('streamer_requests')
         .select(`
           *,
-          profiles(twitch_display_name, avatar_url, twitch_username)
+          profiles!streamer_requests_user_id_fkey(twitch_display_name, avatar_url, twitch_username)
         `)
         .order('created_at', { ascending: false });
 
@@ -104,7 +105,7 @@ export default function AdminPanel() {
         .from('streamers')
         .select(`
           *,
-          profiles!inner(twitch_display_name, avatar_url, twitch_username)
+          profiles!streamers_user_id_profiles_fkey(twitch_display_name, avatar_url, twitch_username)
         `)
         .order('created_at', { ascending: false });
 
@@ -139,11 +140,44 @@ export default function AdminPanel() {
   };
 
   const handleApproveRequest = async (requestId: string) => {
+    if (processingRequest) return;
+    
+    setProcessingRequest(requestId);
+    
     try {
       const request = requests.find(r => r.id === requestId);
-      if (!request || !request.user_id) return;
+      if (!request || !request.user_id) {
+        throw new Error('Demande ou user_id manquant');
+      }
 
-      // Étape 1: Mettre à jour le statut de la demande de streamer
+      console.log('Processing request:', request);
+
+      // Étape 1: Vérifier que l'utilisateur existe dans profiles (utiliser user_id, pas id)
+      const { data: userProfile, error: profileCheckError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('user_id', request.user_id)
+        .single();
+
+      if (profileCheckError) {
+        console.error('Error checking user profile:', profileCheckError);
+        throw new Error(`Utilisateur non trouvé: ${profileCheckError.message}`);
+      }
+
+      console.log('User profile found:', userProfile);
+
+      // Étape 2: Extraire le twitch_id depuis le stream_link ou utiliser des données par défaut
+      let extractedTwitchId = null;
+      try {
+        const twitchUrlMatch = request.stream_link.match(/twitch\.tv\/([a-zA-Z0-9_]+)/);
+        if (twitchUrlMatch) {
+          extractedTwitchId = twitchUrlMatch[1];
+        }
+      } catch (e) {
+        console.warn('Could not extract Twitch ID from stream link');
+      }
+
+      // Étape 3: Mettre à jour le statut de la demande
       const { error: updateRequestError } = await supabase
         .from('streamer_requests')
         .update({
@@ -153,59 +187,85 @@ export default function AdminPanel() {
         })
         .eq('id', requestId);
 
-      if (updateRequestError) throw updateRequestError;
+      if (updateRequestError) {
+        console.error('Error updating request:', updateRequestError);
+        throw new Error(`Erreur de mise à jour de la demande: ${updateRequestError.message}`);
+      }
 
-      // Étape 2: Insérer l'utilisateur dans la table des streamers avec toutes les valeurs par défaut
-      const { error: streamerInsertError } = await supabase
+      console.log('Request status updated successfully');
+
+      // Étape 4: Créer l'entrée streamer avec des valeurs basées sur votre schéma DB
+      const streamerData = {
+        user_id: request.user_id,
+        twitch_id: extractedTwitchId || userProfile.twitch_id || request.twitch_username || 'unknown',
+        stream_title: `Pauvrathon de ${userProfile.twitch_display_name || request.twitch_username || 'Streamer'}`,
+        time_increment: 30,
+        clicks_required: 100,
+        cooldown_seconds: 300,
+        active_minigames: ['guess_number', 'hangman'],
+        current_clicks: 0,
+        total_time_added: 0,
+        is_live: false,
+        time_mode: 'fixed',
+        max_random_time: 60,
+        status: 'offline',
+        stream_started_at: null,
+        pause_started_at: null,
+        total_paused_duration: 0,
+        initial_duration: 7200,
+        min_random_time: null,
+        total_elapsed_time: 0,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      console.log('Creating streamer with data:', streamerData);
+
+      const { data: newStreamer, error: streamerInsertError } = await supabase
         .from('streamers')
-        .insert({
-          user_id: request.user_id,
-          twitch_id: request.twitch_id,
-          twitch_login: request.profiles?.twitch_username,
-          twitch_display_name: request.profiles?.twitch_display_name,
-          stream_title: `Pauvrathon de ${request.profiles?.twitch_display_name || 'Streamer'}`,
-          clicks_required: 100,
-          total_time_added: 0,
-          is_live: false,
-          status: 'offline',
-          current_clicks: 0,
-          initial_duration: 7200, // 2 heures par défaut
-          total_elapsed_time: 0,
-          total_paused_duration: 0,
-          pause_started_at: null,
-          stream_started_at: null,
-          time_mode: 'fixed',
-          time_increment: 30,
-          min_random_time: 10,
-          max_random_time: 60,
-          cooldown_seconds: 30,
-          active_minigames: [],
-        });
+        .insert(streamerData)
+        .select()
+        .single();
 
-      if (streamerInsertError) throw streamerInsertError;
+      if (streamerInsertError) {
+        console.error('Error inserting streamer:', streamerInsertError);
+        throw new Error(`Erreur de création du streamer: ${streamerInsertError.message}`);
+      }
 
-      // Étape 3: Mettre à jour le rôle de l'utilisateur dans la table des profils
+      console.log('Streamer created successfully:', newStreamer);
+
+      // Étape 5: Mettre à jour le rôle utilisateur
       const { error: profileUpdateError } = await supabase
         .from('profiles')
-        .update({ role: 'streamer' })
-        .eq('id', request.user_id);
+        .update({ 
+          role: 'streamer',
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', request.user_id);
 
-      if (profileUpdateError) throw profileUpdateError;
+      if (profileUpdateError) {
+        console.error('Error updating profile role:', profileUpdateError);
+        console.warn('Profile role update failed, but streamer was created successfully');
+      } else {
+        console.log('Profile role updated successfully');
+      }
 
       toast({
         title: "Demande approuvée",
-        description: `La demande de ${request.profiles?.twitch_username} a été approuvée.`,
+        description: `La demande de ${request.twitch_username} a été approuvée avec succès.`,
       });
 
-      fetchRequests();
-      fetchStreamers();
+      await Promise.all([fetchRequests(), fetchStreamers()]);
+
     } catch (error: any) {
-      console.error('Error handling request:', error);
+      console.error('Error in handleApproveRequest:', error);
       toast({
         title: "Erreur",
-        description: "Impossible de traiter la demande.",
+        description: error.message || "Impossible de traiter la demande. Vérifiez la console pour plus de détails.",
         variant: "destructive",
       });
+    } finally {
+      setProcessingRequest(null);
     }
   };
 
@@ -227,7 +287,7 @@ export default function AdminPanel() {
         .from('streamer_requests')
         .update({
           status: 'rejected',
-          rejection_reason: rejectionReason, // Ajout de la raison
+          rejection_reason: rejectionReason,
           reviewed_at: new Date().toISOString(),
           reviewed_by: user.id
         })
@@ -237,7 +297,7 @@ export default function AdminPanel() {
 
       toast({
         title: "Demande rejetée",
-        description: `La demande de ${request.profiles?.twitch_username} a été rejetée.`,
+        description: `La demande de ${request.twitch_username} a été rejetée.`,
       });
 
       setShowRejectionDialog(false);
@@ -322,7 +382,7 @@ export default function AdminPanel() {
         .insert({
           name: newMinigameName,
           description: newMinigameDescription,
-          code: `// Code pour ${newMinigameName}\nconst game = {\n  name: '${newMinigameName}',\n  description: '${newMinigameDescription}'\n};\n\nexport default game;`,
+          component_code: newMinigameName.toLowerCase().replace(/\s+/g, '_'),
           is_active: true,
           created_by: user.id
         });
@@ -413,7 +473,6 @@ export default function AdminPanel() {
   }
 
   const pendingRequests = requests.filter(r => r.status === 'pending');
-  const allRequests = requests.filter(r => r.status !== 'pending' || showAllRequests);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -529,11 +588,11 @@ export default function AdminPanel() {
                             <Avatar>
                               <AvatarImage src={request.profiles?.avatar_url} />
                               <AvatarFallback>
-                                {request.profiles?.twitch_username?.charAt(0).toUpperCase() || 'S'}
+                                {request.twitch_username?.charAt(0).toUpperCase() || 'S'}
                               </AvatarFallback>
                             </Avatar>
                             <div>
-                              <h3 className="font-medium">{request.profiles?.twitch_display_name || request.profiles?.twitch_username}</h3>
+                              <h3 className="font-medium">{request.profiles?.twitch_display_name || request.twitch_username}</h3>
                               <p className="text-sm text-muted-foreground">
                                 {new Date(request.created_at).toLocaleDateString('fr-FR')}
                               </p>
@@ -565,10 +624,20 @@ export default function AdminPanel() {
                           <Button
                             size="sm"
                             onClick={() => handleApproveRequest(request.id)}
+                            disabled={processingRequest === request.id}
                             className="flex-1 neon-glow"
                           >
-                            <CheckCircle className="mr-1 h-4 w-4" />
-                            Approuver
+                            {processingRequest === request.id ? (
+                              <>
+                                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                                Traitement...
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle className="mr-1 h-4 w-4" />
+                                Approuver
+                              </>
+                            )}
                           </Button>
                           <Button
                             size="sm"
@@ -577,6 +646,7 @@ export default function AdminPanel() {
                               setSelectedRequestId(request.id);
                               setShowRejectionDialog(true);
                             }}
+                            disabled={processingRequest === request.id}
                             className="flex-1"
                           >
                             <XCircle className="mr-1 h-4 w-4" />
@@ -746,11 +816,11 @@ export default function AdminPanel() {
                         <Avatar>
                           <AvatarImage src={request.profiles?.avatar_url} />
                           <AvatarFallback>
-                            {request.profiles?.twitch_username?.charAt(0).toUpperCase() || 'S'}
+                            {request.twitch_username?.charAt(0).toUpperCase() || 'S'}
                           </AvatarFallback>
                         </Avatar>
                         <div>
-                          <h3 className="font-medium">{request.profiles?.twitch_display_name || request.profiles?.twitch_username}</h3>
+                          <h3 className="font-medium">{request.profiles?.twitch_display_name || request.twitch_username}</h3>
                           <p className="text-sm text-muted-foreground">
                             {new Date(request.created_at).toLocaleDateString('fr-FR')}
                           </p>

@@ -844,6 +844,322 @@ export default function StreamerPanel() {
                 </Card>
               </TabsContent>
 
+              {/* Contenu de l'onglet Statistiques ENRICHI */}
+              <TabsContent value="statistics">
+                <div className="space-y-6">
+                  {/* Statistiques générales */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center space-x-2">
+                          <Clock className="h-5 w-5 text-blue-500" />
+                          <div>
+                            <p className="text-sm font-medium text-muted-foreground">Temps total ajouté</p>
+                            <p className="text-2xl font-bold text-blue-500">
+                              {formatTime(streamer?.total_time_added || 0)}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center space-x-2">
+                          <Star className="h-5 w-5 text-yellow-500" />
+                          <div>
+                            <p className="text-sm font-medium text-muted-foreground">Clics actuels</p>
+                            <p className="text-2xl font-bold text-yellow-500">
+                              {streamer?.current_clicks || 0}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center space-x-2">
+                          <Trophy className="h-5 w-5 text-green-500" />
+                          <div>
+                            <p className="text-sm font-medium text-muted-foreground">Total contributeurs</p>
+                            <p className="text-2xl font-bold text-green-500">
+                              {stats.length}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center space-x-2">
+                          <Gamepad2 className="h-5 w-5 text-purple-500" />
+                          <div>
+                            <p className="text-sm font-medium text-muted-foreground">Total clics</p>
+                            <p className="text-2xl font-bold text-purple-500">
+                              {stats.reduce((total, stat) => total + (stat.clicks_contributed || 0), 0)}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Progression vers le prochain jeu */}
+                  {streamer?.status === 'live' && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center">
+                          <Progress className="mr-2 h-5 w-5" />
+                          Progression vers le prochain mini-jeu
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2">
+                          <div className="flex justify-between text-sm">
+                            <span>Clics actuels</span>
+                            <span>{streamer?.current_clicks || 0} / {streamer?.clicks_required || 100}</span>
+                          </div>
+                          <Progress 
+                            value={((streamer?.current_clicks || 0) / (streamer?.clicks_required || 100)) * 100} 
+                            className="h-3"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            {Math.max(0, (streamer?.clicks_required || 100) - (streamer?.current_clicks || 0))} clics restants
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Top contributeurs */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center">
+                        <BarChart3 className="mr-2 h-5 w-5" />
+                        Top 10 Contributeurs
+                      </CardTitle>
+                      <CardDescription>
+                        Classement des joueurs ayant contribué le plus de temps au Pauvrathon
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {stats.length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <Star className="mx-auto h-12 w-12 mb-4 opacity-50" />
+                          <p>Aucune statistique disponible</p>
+                          <p className="text-sm">Les statistiques apparaîtront une fois que les viewers commenceront à jouer</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {stats.slice(0, 10).map((stat, index) => {
+                            const timeInMinutes = Math.floor(stat.time_contributed / 60);
+                            const timeInSeconds = stat.time_contributed % 60;
+                            const maxTimeContributed = Math.max(...stats.map(s => s.time_contributed));
+                            const progressPercentage = maxTimeContributed > 0 ? (stat.time_contributed / maxTimeContributed) * 100 : 0;
+                            
+                            return (
+                              <div key={stat.id} className="relative">
+                                <div className="flex items-center space-x-4 relative z-10 bg-background p-3 rounded-lg border">
+                                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 border-2 border-primary/20">
+                                    {index < 3 ? (
+                                      <Trophy className={`w-4 h-4 ${
+                                        index === 0 ? 'text-yellow-500' : 
+                                        index === 1 ? 'text-gray-400' : 
+                                        'text-orange-600'
+                                      }`} />
+                                    ) : (
+                                      <span className="text-sm font-bold text-primary">{index + 1}</span>
+                                    )}
+                                  </div>
+                                  
+                                  <div className="flex-1 min-w-0">
+                                    <p className="font-semibold truncate">{stat.profile_twitch_display_name}</p>
+                                    <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+                                      <span className="flex items-center">
+                                        <Clock className="w-3 h-3 mr-1" />
+                                        {timeInMinutes}m {timeInSeconds}s
+                                      </span>
+                                      <span className="flex items-center">
+                                        <Star className="w-3 h-3 mr-1" />
+                                        {stat.clicks_contributed || 0} clics
+                                      </span>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="text-right">
+                                    <Badge variant={index < 3 ? "default" : "secondary"} className="mb-1">
+                                      #{index + 1}
+                                    </Badge>
+                                    <p className="text-xs text-muted-foreground">
+                                      {((stat.time_contributed / Math.max(1, stats.reduce((total, s) => total + s.time_contributed, 0))) * 100).toFixed(1)}%
+                                    </p>
+                                  </div>
+                                </div>
+                                
+                                {/* Barre de progression en arrière-plan */}
+                                <div 
+                                  className="absolute top-0 left-0 h-full bg-primary/5 rounded-lg transition-all duration-300"
+                                  style={{ width: `${progressPercentage}%` }}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Statistiques détaillées */}
+                  {stats.length > 0 && (
+                    <div className="grid md:grid-cols-2 gap-6">
+                      {/* Répartition du temps */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="flex items-center">
+                            <Clock className="mr-2 h-5 w-5" />
+                            Répartition du temps ajouté
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-4">
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm">Temps moyen par contributeur</span>
+                              <span className="font-medium">
+                                {formatTime(Math.round(stats.reduce((total, stat) => total + stat.time_contributed, 0) / stats.length))}
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm">Meilleure contribution</span>
+                              <span className="font-medium text-green-600">
+                                {formatTime(Math.max(...stats.map(s => s.time_contributed)))}
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm">Plus faible contribution</span>
+                              <span className="font-medium text-orange-600">
+                                {formatTime(Math.min(...stats.map(s => s.time_contributed)))}
+                              </span>
+                            </div>
+                            <Separator />
+                            <div className="flex justify-between items-center font-medium">
+                              <span>Total du temps ajouté</span>
+                              <span className="text-primary">
+                                {formatTime(stats.reduce((total, stat) => total + stat.time_contributed, 0))}
+                              </span>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+
+                      {/* Statistiques des clics */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="flex items-center">
+                            <Star className="mr-2 h-5 w-5" />
+                            Statistiques des clics
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-4">
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm">Clics moyens par contributeur</span>
+                              <span className="font-medium">
+                                {Math.round(stats.reduce((total, stat) => total + (stat.clicks_contributed || 0), 0) / stats.length)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm">Meilleur cliqueur</span>
+                              <span className="font-medium text-green-600">
+                                {Math.max(...stats.map(s => s.clicks_contributed || 0))} clics
+                              </span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm">Ratio clics/temps (moy.)</span>
+                              <span className="font-medium">
+                                {(stats.reduce((total, stat) => total + (stat.clicks_contributed || 0), 0) / 
+                                  Math.max(1, stats.reduce((total, stat) => total + stat.time_contributed, 0))).toFixed(2)} clics/sec
+                              </span>
+                            </div>
+                            <Separator />
+                            <div className="flex justify-between items-center font-medium">
+                              <span>Total des clics</span>
+                              <span className="text-primary">
+                                {stats.reduce((total, stat) => total + (stat.clicks_contributed || 0), 0)}
+                              </span>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  )}
+
+                  {/* Informations sur le stream actuel */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center">
+                        <Radio className="mr-2 h-5 w-5" />
+                        Informations du stream
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid md:grid-cols-3 gap-4">
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium text-muted-foreground">Statut actuel</p>
+                          <Badge variant={
+                            streamer?.status === 'live' ? 'default' :
+                            streamer?.status === 'paused' ? 'secondary' :
+                            streamer?.status === 'ended' ? 'destructive' : 'outline'
+                          }>
+                            {streamer?.status === 'live' ? '🔴 En direct' :
+                             streamer?.status === 'paused' ? '⏸️ En pause' :
+                             streamer?.status === 'ended' ? '🏁 Terminé' : '⚫ Hors ligne'}
+                          </Badge>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium text-muted-foreground">Durée initiale configurée</p>
+                          <p className="font-medium">{formatTime(streamer?.initial_duration || 0)}</p>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium text-muted-foreground">Mini-jeux actifs</p>
+                          <p className="font-medium">{streamer?.active_minigames?.length || 0} jeu(x)</p>
+                        </div>
+                        
+                        {streamer?.stream_started_at && (
+                          <div className="space-y-2">
+                            <p className="text-sm font-medium text-muted-foreground">Démarré le</p>
+                            <p className="font-medium">
+                              {new Date(streamer.stream_started_at).toLocaleDateString('fr-FR', {
+                                day: 'numeric',
+                                month: 'long',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </p>
+                          </div>
+                        )}
+                        
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium text-muted-foreground">Mode de temps</p>
+                          <Badge variant="outline">
+                            {streamer?.time_mode === 'fixed' ? `Fixe (${streamer.time_increment}s)` : 
+                             `Aléatoire (${streamer.time_increment || 10}-${streamer.max_random_time}s)`}
+                          </Badge>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium text-muted-foreground">Clics requis</p>
+                          <p className="font-medium">{streamer?.clicks_required || 100} clics</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </TabsContent>
+
               {/* Contenu de l'onglet Liens & Overlay */}
               <TabsContent value="links">
                 <div className="grid gap-6 md:grid-cols-2">
@@ -904,49 +1220,6 @@ export default function StreamerPanel() {
                     </CardContent>
                   </Card>
                 </div>
-              </TabsContent>
-
-              {/* Contenu de l'onglet Statistiques */}
-              <TabsContent value="statistics">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center">
-                      <BarChart3 className="mr-2 h-5 w-5" />
-                      Statistiques du Pauvrathon
-                    </CardTitle>
-                    <CardDescription>
-                      Classement des top contributeurs de temps pour ce Pauvrathon
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {stats.length === 0 ? (
-                      <div className="text-center py-8 text-muted-foreground">
-                        <Star className="mx-auto h-12 w-12 mb-4 opacity-50" />
-                        <p>Aucune statistique disponible</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        {stats.slice(0, 10).map((stat, index) => (
-                          <div key={stat.id} className="flex items-center space-x-4 border-b pb-2 last:border-b-0 last:pb-0">
-                            <div className="text-xl font-bold w-6 text-center text-primary">
-                              {index + 1}
-                            </div>
-                            <div className="flex-1">
-                              <p className="font-semibold">{stat.profile_twitch_display_name}</p>
-                              <p className="text-sm text-muted-foreground">
-                                {Math.floor(stat.time_contributed / 60)}m {stat.time_contributed % 60}s
-                              </p>
-                            </div>
-                            <Badge variant="secondary">
-                              <Star className="w-3 h-3 mr-1" />
-                              {stat.clicks_contributed} clics
-                            </Badge>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
               </TabsContent>
             </Tabs>
           </div>
