@@ -213,9 +213,9 @@ export default function StreamerPanel() {
   const [pauvrathonUrl, setPauvrathonUrl] = useState('');
   const [overlayUrl, setOverlayUrl] = useState('');
   
-  if (!user || profile?.role !== 'streamer') {
-    return <Navigate to="/" replace />;
-  }
+  if (!user || (profile?.role !== 'streamer' && profile?.role !== 'admin')) {
+  return <Navigate to="/" replace />;
+}
 
   const fetchStreamerData = useCallback(async () => {
     if (!user) return;
