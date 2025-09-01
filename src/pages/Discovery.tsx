@@ -130,7 +130,7 @@ const getStreamerDisplayName = (streamer: PauvrathonStreamer) => {
 export default function Discovery() {
   const { user } = useAuth();
   const { streamers, loading: loadingPauvrathon, refetch } = useStreamers();
-  const [filter, setFilter] = useState<'all' | 'live'>('all');
+  const [filter, setFilter] = useState<'all' | 'live'>('live'); // Ligne de correction 1 : Utilisation d'un seul `useState` avec la valeur par défaut `live`
   const [twitchStreamers, setTwitchStreamers] = useState<TwitchStream[]>([]);
   const [loadingTwitch, setLoadingTwitch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');

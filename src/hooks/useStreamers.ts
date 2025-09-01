@@ -14,7 +14,7 @@ interface SupabaseStreamer {
   current_clicks: number;
   clicks_required: number;
   total_time_added: number;
-  status: 'live' | 'offline';
+  status: 'live' | 'offline' | 'paused'; // Correction ici : ajout de l'état 'paused'
   profiles: {
     avatar_url?: string;
     twitch_display_name?: string;
@@ -36,14 +36,15 @@ export function useStreamers() {
   .from('streamers')
   .select(`
     *,
-    profiles!inner ( 
+    profiles!inner ( // Gardez 'profiles' au pluriel pour correspondre à votre table
       id,
       twitch_display_name,
       twitch_username,
       avatar_url
     )
   `)
-  .order('current_clicks', { ascending: false });
+  .order('current_clicks', { ascending: false })
+  .returns<SupabaseStreamer[]>(); // Utilisation du type défini pour la réponse
 
       if (streamersError) {
         throw streamersError;
@@ -54,25 +55,19 @@ export function useStreamers() {
         setStreamers([]);
         return;
       }
-      
-      // LOGS POUR DIAGNOSTIC - NE PAS SUPPRIMER
-      console.log('Données brutes de Supabase:', streamersData);
 
       // Transforme les données pour correspondre à l'interface Streamer
       const transformedData = streamersData.map(s => {
-        const profile = s.profiles as any;
+        const profile = s.profiles; // Remplacement de `s.profiles as any` par `s.profiles`
         return {
-          id: s.id,
-          is_live: s.status === 'live',
-          stream_title: s.stream_title,
-          current_clicks: s.current_clicks,
-          clicks_required: s.clicks_required,
-          total_time_added: s.total_time_added,
+          ...s,
           profile: profile ? {
             avatar_url: profile.avatar_url,
             twitch_display_name: profile.twitch_display_name,
             twitch_username: profile.twitch_username
           } : null,
+          // Correction ici : le streamer est considéré en live s'il est 'live' ou 'paused'
+          is_live: s.status === 'live' || s.status === 'paused', 
         };
       });
 
