@@ -1,3 +1,5 @@
+[file name]: Discovery.tsx
+[file content begin]
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -6,7 +8,6 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Navigation } from '@/components/Navigation';
 import { FollowButton } from '@/components/FollowButton';
 import { useAuth } from '@/contexts/AuthContext';
-// Import du hook useStreamers corrigé.
 import { useStreamers } from '@/hooks/useStreamers';
 import { supabase } from '@/integrations/supabase/client';
 import {
@@ -21,7 +22,7 @@ import {
   ArrowUpRight,
   Filter,
   Globe,
-  Loader2 // Ajout du Loader2 pour un spinner
+  Loader2
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -38,7 +39,7 @@ interface PauvrathonStreamer {
   current_clicks: number;
   clicks_required: number;
   total_time_added: number;
-  profile: {
+  profiles: {
     avatar_url?: string;
     twitch_display_name?: string;
     twitch_username?: string;
@@ -77,7 +78,6 @@ const LANGUAGES = [
 
 export default function Discovery() {
   const { user } = useAuth();
-  // Le hook useStreamers gère désormais son propre état de chargement.
   const { streamers, loading: loadingPauvrathon, refetch } = useStreamers();
   const [filter, setFilter] = useState<'all' | 'live'>('all');
   const [twitchStreamers, setTwitchStreamers] = useState<TwitchStream[]>([]);
@@ -86,7 +86,6 @@ export default function Discovery() {
   const [selectedLanguage, setSelectedLanguage] = useState('all');
   const [searchTerm, setSearchTerm] = useState('subathon');
 
-  // Utilisation de useCallback pour mémoïser la fonction et éviter les recréations inutiles.
   const searchTwitchStreamers = useCallback(
     async (searchTermOverride?: string, languageOverride?: string) => {
       setLoadingTwitch(true);
@@ -94,7 +93,6 @@ export default function Discovery() {
         const termToSearch = searchTermOverride || searchTerm;
         const languageToSearch = languageOverride || selectedLanguage;
 
-        // Appel de la fonction Edge
         const { data, error } = await supabase.functions.invoke('search-twitch-streams', {
           body: {
             query: termToSearch,
@@ -104,7 +102,6 @@ export default function Discovery() {
 
         if (error) throw error;
 
-        // Vérification de la structure de la réponse
         if (data && data.streams) {
           setTwitchStreamers(data.streams as TwitchStream[]);
           toast({
@@ -128,18 +125,15 @@ export default function Discovery() {
     [searchTerm, selectedLanguage]
   );
 
-  // Utilisation de useEffect pour le chargement initial.
   useEffect(() => {
     searchTwitchStreamers();
-  }, [searchTwitchStreamers]); // Dépendance sur searchTwitchStreamers
+  }, [searchTwitchStreamers]);
 
-  // Fonction pour actualiser toutes les données.
   const handleRefresh = () => {
-    refetch(); // Rafraîchit les streamers de la base de données
-    searchTwitchStreamers(); // Rafraîchit les streams Twitch
+    refetch();
+    searchTwitchStreamers();
   };
 
-  // Gérer la recherche personnalisée.
   const handleCustomSearch = () => {
     if (!searchQuery.trim()) {
       toast({
@@ -153,42 +147,38 @@ export default function Discovery() {
     searchTwitchStreamers(searchQuery, selectedLanguage);
   };
 
-  // Gérer le changement de langue.
   const handleLanguageChange = (newLanguage: string) => {
     setSelectedLanguage(newLanguage);
     searchTwitchStreamers(searchTerm, newLanguage);
   };
 
-  // Filtrer les streamers locaux (Pauvrathon).
   const filteredStreamers = streamers.filter(streamer => {
     if (filter === 'live') return streamer.is_live;
     return true;
   });
 
   // Fonction pour obtenir l'URL de l'avatar d'un streamer.
- // Fonction pour obtenir l'URL de l'avatar d'un streamer.
-const getStreamerAvatar = (streamer: PauvrathonStreamer) => {
-  const displayName =
-    streamer.profile?.twitch_display_name ||
-    streamer.profile?.twitch_username ||
-    'Streamer';
+  const getStreamerAvatar = (streamer: PauvrathonStreamer) => {
+    const displayName =
+      streamer.profiles?.twitch_display_name ||
+      streamer.profiles?.twitch_username ||
+      'Streamer';
 
-  return (
-    streamer.profile?.avatar_url ||
-    `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName)}`
-  );
-};
+    return (
+      streamer.profiles?.avatar_url ||
+      `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName)}`
+    );
+  };
 
-// Fonction pour obtenir le nom d'affichage d'un streamer.
-const getStreamerDisplayName = (streamer: PauvrathonStreamer) => {
-  return (
-    streamer.profile?.twitch_display_name ||
-    streamer.profile?.twitch_username ||
-    'Streamer inconnu'
-  );
-};
+  // Fonction pour obtenir le nom d'affichage d'un streamer.
+  const getStreamerDisplayName = (streamer: PauvrathonStreamer) => {
+    return (
+      streamer.profiles?.twitch_display_name ||
+      streamer.profiles?.twitch_username ||
+      'Streamer inconnu'
+    );
+  };
 
-  // Fonction pour formater la durée de stream.
   const formatStreamDuration = (startedAt: string) => {
     const start = new Date(startedAt);
     const now = new Date();
@@ -202,19 +192,12 @@ const getStreamerDisplayName = (streamer: PauvrathonStreamer) => {
     return `${diffMinutes}m`;
   };
 
-  // Rendu conditionnel du loader global pour l'initialisation complète.
-  // Cela n'est plus nécessaire car chaque onglet a son propre loader.
-  // if (loadingPauvrathon || loadingTwitch) { ... }
-  // La logique de chargement est désormais gérée par onglet pour une meilleure UX.
-
-  // Composant Loader
   const LoadingSpinner = () => (
     <div className="flex justify-center items-center py-16">
       <Loader2 className="h-12 w-12 animate-spin text-primary" />
     </div>
   );
 
-  // Composant EmptyState
   const EmptyState = ({ title, description }: { title: string; description: string }) => (
     <Card className="text-center py-8">
       <CardContent>
@@ -252,9 +235,7 @@ const getStreamerDisplayName = (streamer: PauvrathonStreamer) => {
             </Button>
           </div>
 
-          {/* Section Streamers Pauvrathon */}
           <TabsContent value="pauvrathon">
-            {/* Filters */}
             <div className="flex justify-between items-center mb-6">
               <div className="flex space-x-2">
                 <Button variant={filter === 'all' ? 'default' : 'outline'} onClick={() => setFilter('all')} size="sm">
@@ -272,7 +253,6 @@ const getStreamerDisplayName = (streamer: PauvrathonStreamer) => {
               </div>
             </div>
 
-            {/* Streamers Pauvrathon Grid */}
             {loadingPauvrathon ? (
               <LoadingSpinner />
             ) : filteredStreamers.length === 0 ? (
@@ -292,7 +272,6 @@ const getStreamerDisplayName = (streamer: PauvrathonStreamer) => {
                     className="overflow-hidden hover:shadow-lg transition-shadow border-2 border-primary/20"
                   >
                     <CardContent className="p-6">
-                      {/* Header with Avatar and Status */}
                       <div className="flex items-center space-x-3 mb-4">
                         <Avatar className="h-12 w-12">
                           <AvatarImage src={getStreamerAvatar(streamer)} alt={getStreamerDisplayName(streamer)} />
@@ -322,12 +301,10 @@ const getStreamerDisplayName = (streamer: PauvrathonStreamer) => {
                         </div>
                       </div>
 
-                      {/* Stream Title */}
                       {streamer.stream_title && (
                         <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{streamer.stream_title}</p>
                       )}
 
-                      {/* Stats */}
                       <div className="space-y-2 mb-4">
                         <div className="flex items-center justify-between text-sm">
                           <span className="flex items-center">
@@ -350,7 +327,6 @@ const getStreamerDisplayName = (streamer: PauvrathonStreamer) => {
                         </div>
                       </div>
 
-                      {/* Actions */}
                       <div className="flex space-x-2">
                         {user && <FollowButton streamerId={streamer.id} />}
                         <Button asChild variant="outline" className="flex-1">
@@ -367,11 +343,8 @@ const getStreamerDisplayName = (streamer: PauvrathonStreamer) => {
             )}
           </TabsContent>
 
-          {/* Section Streamers Twitch avec Subathon */}
           <TabsContent value="twitch">
-            {/* Filtres et recherche */}
             <div className="space-y-4 mb-6">
-              {/* Barre de recherche personnalisée */}
               <div className="flex gap-2">
                 <Input
                   placeholder="Rechercher des streams (ex: subathon, marathon, 24h...)"
@@ -386,7 +359,6 @@ const getStreamerDisplayName = (streamer: PauvrathonStreamer) => {
                 </Button>
               </div>
 
-              {/* Filtres rapides et langue */}
               <div className="flex flex-wrap gap-2 items-center">
                 <span className="text-sm font-medium text-muted-foreground flex items-center">
                   <Filter className="w-4 h-4 mr-1" />
@@ -410,7 +382,6 @@ const getStreamerDisplayName = (streamer: PauvrathonStreamer) => {
 
                 <Separator orientation="vertical" className="h-6" />
 
-                {/* Sélecteur de langue */}
                 <div className="flex items-center gap-2">
                   <Globe className="w-4 h-4 text-muted-foreground" />
                   <Select value={selectedLanguage} onValueChange={handleLanguageChange}>
@@ -436,7 +407,6 @@ const getStreamerDisplayName = (streamer: PauvrathonStreamer) => {
                 </div>
               </div>
 
-              {/* Indicateur de recherche actuelle */}
               <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg">
                 Recherche actuelle: <span className="font-medium">"{searchTerm}"</span>
                 {selectedLanguage !== 'all' && (
@@ -448,7 +418,6 @@ const getStreamerDisplayName = (streamer: PauvrathonStreamer) => {
               </div>
             </div>
 
-            {/* Twitch Streamers Grid */}
             {loadingTwitch ? (
               <LoadingSpinner />
             ) : twitchStreamers.length === 0 ? (
@@ -463,7 +432,6 @@ const getStreamerDisplayName = (streamer: PauvrathonStreamer) => {
                 {twitchStreamers.map(stream => (
                   <Card key={stream.id} className="overflow-hidden hover:shadow-lg transition-shadow">
                     <CardContent className="p-0">
-                      {/* Thumbnail */}
                       <div className="relative">
                         <img
                           src={stream.thumbnail_url.replace('{width}', '440').replace('{height}', '248')}
@@ -496,7 +464,6 @@ const getStreamerDisplayName = (streamer: PauvrathonStreamer) => {
                       </div>
 
                       <div className="p-4">
-                        {/* Header with Avatar and Name */}
                         <div className="flex items-center space-x-3 mb-3">
                           <Avatar className="h-10 w-10">
                             <AvatarImage src={stream.thumbnail_url?.replace('{width}', '100').replace('{height}', '100')} alt={stream.user_name} />
@@ -508,10 +475,8 @@ const getStreamerDisplayName = (streamer: PauvrathonStreamer) => {
                           </div>
                         </div>
 
-                        {/* Stream Title */}
                         <p className="text-sm line-clamp-2 mb-4 leading-relaxed">{stream.title}</p>
 
-                        {/* Tags si disponibles */}
                         {stream.tags && stream.tags.length > 0 && (
                           <div className="flex flex-wrap gap-1 mb-4">
                             {stream.tags.slice(0, 3).map((tag: string, index: number) => (
@@ -527,7 +492,6 @@ const getStreamerDisplayName = (streamer: PauvrathonStreamer) => {
                           </div>
                         )}
 
-                        {/* Actions */}
                         <Button asChild variant="outline" className="w-full">
                           <a href={`https://twitch.tv/${stream.user_login}`} target="_blank" rel="noopener noreferrer">
                             <ArrowUpRight className="w-4 h-4 mr-2" />

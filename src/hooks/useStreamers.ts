@@ -14,11 +14,11 @@ export function useStreamers() {
       setLoading(true);
 
       // Récupère TOUS les streamers (pas de filtre status='live')
-      const { data: streamersData, error: streamersError } = await supabase
+  const { data: streamersData, error: streamersError } = await supabase
   .from('streamers')
   .select(`
     *,
-    profile:profiles!streamers_user_id_profiles_fkey (
+    profiles!inner ( // Gardez 'profiles' au pluriel pour correspondre à votre table
       id,
       twitch_display_name,
       twitch_username,
