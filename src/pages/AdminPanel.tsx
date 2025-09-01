@@ -152,21 +152,58 @@ export default function AdminPanel() {
 
       console.log('Processing request:', request);
 
-      // Étape 1: Vérifier que l'utilisateur existe dans profiles (utiliser user_id, pas id)
-      const { data: userProfile, error: profileCheckError } = await supabase
+      // Étape 1: Vérifier si l'utilisateur existe dans profiles, sinon le créer
+      let userProfile;
+      const { data: existingProfile, error: profileCheckError } = await supabase
         .from('profiles')
         .select('*')
         .eq('user_id', request.user_id)
         .single();
 
-      if (profileCheckError) {
+      if (profileCheckError && profileCheckError.code === 'PGRST116') {
+        // L'utilisateur n'existe pas dans profiles, créons-le
+        console.log('Profile not found, creating new profile for user:', request.user_id);
+        
+        // Extraire les informations Twitch depuis la demande
+        let extractedTwitchId = null;
+        try {
+          const twitchUrlMatch = request.stream_link.match(/twitch\.tv\/([a-zA-Z0-9_]+)/);
+          if (twitchUrlMatch) {
+            extractedTwitchId = twitchUrlMatch[1];
+          }
+        } catch (e) {
+          console.warn('Could not extract Twitch ID from stream link');
+        }
+
+        const { data: newProfile, error: createProfileError } = await supabase
+          .from('profiles')
+          .insert({
+            user_id: request.user_id,
+            twitch_username: request.twitch_username,
+            twitch_display_name: request.twitch_username,
+            twitch_id: extractedTwitchId,
+            role: 'viewer' // Sera mis à jour plus tard
+          })
+          .select()
+          .single();
+
+        if (createProfileError) {
+          console.error('Error creating profile:', createProfileError);
+          throw new Error(`Impossible de créer le profil utilisateur: ${createProfileError.message}`);
+        }
+
+        userProfile = newProfile;
+        console.log('Profile created successfully:', userProfile);
+      } else if (profileCheckError) {
+        // Autre erreur que "not found"
         console.error('Error checking user profile:', profileCheckError);
-        throw new Error(`Utilisateur non trouvé: ${profileCheckError.message}`);
+        throw new Error(`Erreur lors de la vérification du profil: ${profileCheckError.message}`);
+      } else {
+        userProfile = existingProfile;
+        console.log('User profile found:', userProfile);
       }
 
-      console.log('User profile found:', userProfile);
-
-      // Étape 2: Extraire le twitch_id depuis le stream_link ou utiliser des données par défaut
+      // Étape 2: Extraire le twitch_id depuis le stream_link
       let extractedTwitchId = null;
       try {
         const twitchUrlMatch = request.stream_link.match(/twitch\.tv\/([a-zA-Z0-9_]+)/);
@@ -194,7 +231,7 @@ export default function AdminPanel() {
 
       console.log('Request status updated successfully');
 
-      // Étape 4: Créer l'entrée streamer avec des valeurs basées sur votre schéma DB
+      // Étape 4: Créer l'entrée streamer
       const streamerData = {
         user_id: request.user_id,
         twitch_id: extractedTwitchId || userProfile.twitch_id || request.twitch_username || 'unknown',
@@ -382,9 +419,8 @@ export default function AdminPanel() {
       const { error } = await supabase
         .from('minigames')
         .insert({
-          name: newMinigameName,
-          description: newMinigameDescription,
           component_code: componentCode,
+          description: newMinigameDescription || `Mini-jeu ${newMinigameName}`,
           is_active: true,
           created_by: user.id
         });
@@ -393,7 +429,7 @@ export default function AdminPanel() {
 
       toast({
         title: "Mini-jeu ajouté",
-        description: `Le mini-jeu "${newMinigameName}" a été ajouté avec succès et est maintenant disponible.`,
+        description: `Le mini-jeu "${newMinigameName}" (${componentCode}) a été ajouté avec succès.`,
       });
 
       setNewMinigameName('');
@@ -769,7 +805,7 @@ export default function AdminPanel() {
                     {minigames.map((minigame) => (
                       <div key={minigame.id} className="flex items-center justify-between p-3 border border-border rounded neon-border">
                         <div>
-                          <p className="font-medium">{minigame.name}</p>
+                          <p className="font-medium">{minigame.component_code}</p>
                           <p className="text-sm text-muted-foreground">
                             {minigame.description || 'Pas de description'}
                           </p>
