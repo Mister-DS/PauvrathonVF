@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/Auth/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
@@ -87,43 +87,21 @@ const SubathonPage = () => {
     setIsClicking(true);
     
     try {
-      // Incrémenter le compteur de clics
-      const newClickCount = (streamer.current_clicks || 0) + 1;
-      
       const { error } = await supabase
         .from('streamers')
-        .update({ 
-          current_clicks: newClickCount,
+        .update({
+          current_clicks: (streamer.current_clicks || 0) + 1,
           updated_at: new Date().toISOString()
         })
         .eq('id', streamer.id);
 
       if (error) throw error;
-
-      // Vérifier si on a atteint le seuil pour déclencher un mini-jeu
-      if (newClickCount >= streamer.clicks_required) {
-        toast({
-          title: "Mini-jeu déclenché !",
-          description: "Un mini-jeu va se lancer !",
-        });
-        
-        // Lancer le mini-jeu
-        await launchRandomMinigame();
-        
-        // Remettre les clics à zéro après avoir déclenché le jeu
-        await supabase
-          .from('streamers')
-          .update({ 
-            current_clicks: 0,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', streamer.id);
-      } else {
-        toast({
-          title: "Clic enregistré !",
-          description: `${streamer.clicks_required - newClickCount} clics restants pour déclencher un mini-jeu.`,
-        });
-      }
+      
+      // La mise à jour de l'état se fera via l'écoute en temps réel (useEffect)
+      toast({
+        title: "Clic enregistré !",
+        description: `Votre clic a été enregistré.`,
+      });
 
     } catch (error) {
       console.error('Error handling click:', error);
@@ -190,7 +168,7 @@ const SubathonPage = () => {
         name: component_code, // Utiliser component_code comme nom d'affichage
         props: {
           streamerId: streamer.id,
-          onGameEnd: (victory: boolean) => {
+          onGameEnd: async (victory: boolean) => {
             setIsMinigameModalOpen(false);
             setMinigameState({ component: null, props: {}, name: '' });
             
@@ -206,6 +184,16 @@ const SubathonPage = () => {
                 variant: "destructive",
               });
             }
+            
+            // Remettre les clics à zéro après avoir déclenché le jeu
+            // On le fait ici pour éviter le risque de double-déclenchement
+            await supabase
+              .from('streamers')
+              .update({ 
+                current_clicks: 0,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', streamer.id);
           },
         },
       });
@@ -215,7 +203,7 @@ const SubathonPage = () => {
       console.log('📋 Composants disponibles:', Object.keys(minigameComponents));
       toast({
         title: "Erreur",
-        description: `Le composant du mini-jeu '${component_code}' est introuvable. Composants disponibles: ${Object.keys(minigameComponents).join(', ')}`,
+        description: `Le composant du mini-jeu '${component_code}' est introuvable.`,
         variant: "destructive",
       });
     }
