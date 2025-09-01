@@ -805,9 +805,9 @@ export default function StreamerPanel() {
                           >
                             <Checkbox
                               id={`minigame-${minigame.id}`}
-                              checked={selectedGames.includes(minigame.name)}
+                              checked={selectedGames.includes(minigame.component_code)}
                               onCheckedChange={(checked) => 
-                                handleMinigameToggle(minigame.name, checked)
+                                handleMinigameToggle(minigame.component_code, checked)
                               }
                               className="mt-1"
                             />
@@ -816,7 +816,7 @@ export default function StreamerPanel() {
                                 htmlFor={`minigame-${minigame.id}`} 
                                 className="cursor-pointer font-medium block mb-1"
                               >
-                                {minigame.name}
+                                {minigame.component_code}
                                 {!minigame.is_active && (
                                   <Badge variant="outline" className="ml-2 text-xs">Inactif</Badge>
                                 )}
