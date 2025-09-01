@@ -31,20 +31,19 @@ export function useStreamers() {
     try {
       setLoading(true);
 
-      // Récupère TOUS les streamers avec les profils associés
-      const { data: streamersData, error: streamersError } = await supabase
-        .from('streamers')
-        .select(`
-          *,
-          profiles!inner ( 
-            id,
-            twitch_display_name,
-            twitch_username,
-            avatar_url
-          )
-        `)
-        .order('current_clicks', { ascending: false })
-        .returns<SupabaseStreamer[]>(); // Utilisation du type défini pour la réponse
+      // Récupère TOUS les streamers (pas de filtre status='live')
+  const { data: streamersData, error: streamersError } = await supabase
+  .from('streamers')
+  .select(`
+    *,
+    profiles!inner ( 
+      id,
+      twitch_display_name,
+      twitch_username,
+      avatar_url
+    )
+  `)
+  .order('current_clicks', { ascending: false });
 
       if (streamersError) {
         throw streamersError;
@@ -55,11 +54,13 @@ export function useStreamers() {
         setStreamers([]);
         return;
       }
+      
+      // LOGS POUR DIAGNOSTIC - NE PAS SUPPRIMER
+      console.log('Données brutes de Supabase:', streamersData);
 
-      // Transforme les données brutes de Supabase en un format Streamer
-      const transformedData: Streamer[] = streamersData.map(s => {
-        // Le `profiles` de la réponse Supabase peut être null ou indéfini
-        const profile = s.profiles;
+      // Transforme les données pour correspondre à l'interface Streamer
+      const transformedData = streamersData.map(s => {
+        const profile = s.profiles as any;
         return {
           id: s.id,
           is_live: s.status === 'live',
@@ -71,12 +72,12 @@ export function useStreamers() {
             avatar_url: profile.avatar_url,
             twitch_display_name: profile.twitch_display_name,
             twitch_username: profile.twitch_username
-          } : null, // Assure que 'profile' peut être null si la donnée n'existe pas
+          } : null,
         };
       });
 
       console.log('Streamers Pauvrathon chargés:', transformedData);
-      setStreamers(transformedData);
+      setStreamers(transformedData as Streamer[]);
 
     } catch (error) {
       console.error('Erreur lors du chargement des streamers:', error);
@@ -103,13 +104,12 @@ export function useStreamers() {
         { event: '*', schema: 'public', table: 'streamers' },
         (payload) => {
           console.log('Mise à jour temps réel streamers:', payload);
-          fetchStreamers(); // Recharge toutes les données pour synchronisation
+          fetchStreamers();
         }
       )
       .subscribe();
 
     return () => {
-      // Nettoyage de la souscription lors du démontage du composant
       supabase.removeChannel(subscription);
     };
   }, [fetchStreamers]);
