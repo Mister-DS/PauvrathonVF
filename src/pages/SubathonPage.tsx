@@ -15,7 +15,7 @@ import { UniversalTimer } from '@/components/UniversalTimer';
 import { toast } from '@/hooks/use-toast';
 import { Streamer } from '@/types';
 import {
-  Trophy, AlertTriangle, Clock, Settings, Gamepad2, Plus, Loader2, Zap, Hourglass, CheckCircle,
+  Trophy, AlertTriangle, Clock, Settings, Gamepad2, Plus, Loader2, Zap, Hourglass, CheckCircle, Users, Eye
 } from 'lucide-react';
 
 const SubathonPage = () => {
@@ -298,20 +298,36 @@ const SubathonPage = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Section principale : Infos stream & Player */}
           <div className="lg:col-span-2 space-y-8">
+            {/* 1. Zone avec les infos du stream */}
+            <Card>
+              <CardHeader className="flex flex-row items-center space-x-4">
+                <Avatar className="h-16 w-16">
+                  <AvatarImage src={streamer.profile?.avatar_url} />
+                  <AvatarFallback>{streamer.profile?.twitch_display_name?.substring(0, 2)}</AvatarFallback>
+                </Avatar>
+                <div className="flex-1">
+                  <CardTitle className="text-2xl">{streamer.profile?.twitch_display_name}</CardTitle>
+                  <p className="text-muted-foreground">{streamer.stream_title || 'Titre du stream non défini'}</p>
+                  <div className="flex items-center space-x-4 mt-2">
+                    <div className="flex items-center text-sm">
+                      <Users className="h-4 w-4 mr-1" />
+                      <span>{streamer.viewer_count || 0} viewers</span>
+                    </div>
+                    <div className="flex items-center text-sm">
+                      <Eye className="h-4 w-4 mr-1" />
+                      <span>{streamer.total_clicks || 0} clics totaux</span>
+                    </div>
+                  </div>
+                </div>
+              </CardHeader>
+            </Card>
+
+            {/* 2. Zone avec aperçu du stream en direct */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <Avatar>
-                    <AvatarImage src={streamer.profile?.avatar_url} />
-                    <AvatarFallback>{streamer.profile?.twitch_display_name?.substring(0, 2)}</AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1">
-                    <h2 className="text-xl font-bold">{streamer.profile?.twitch_display_name}</h2>
-                    <p className="text-sm text-muted-foreground">{streamer.stream_title || 'Titre du stream non défini'}</p>
-                  </div>
-                </CardTitle>
+                <CardTitle>Stream en direct</CardTitle>
               </CardHeader>
-              <CardContent className="p-4">
+              <CardContent className="p-0">
                 <TwitchPlayer twitchUsername={streamer.profile?.twitch_username} />
               </CardContent>
             </Card>
@@ -319,22 +335,42 @@ const SubathonPage = () => {
           
           {/* Section latérale : Stats & Actions */}
           <div className="lg:col-span-1 space-y-8">
+            {/* 3. Zone avec les stats en direct */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
                   <Clock className="mr-2 h-5 w-5" />
-                  Temps restant
+                  Statistiques en direct
                 </CardTitle>
               </CardHeader>
-              <CardContent className="text-center">
-                <UniversalTimer
-                  status={streamer.status}
-                  streamStartedAt={streamer.stream_started_at}
-                  pauseStartedAt={streamer.pause_started_at}
-                  initialDuration={streamer.initial_duration || 7200}
-                  totalTimeAdded={streamer.total_time_added || 0}
-                  totalElapsedTime={streamer.total_elapsed_time || 0}
-                />
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <p className="text-sm text-muted-foreground">Temps restant</p>
+                    <UniversalTimer
+                      status={streamer.status}
+                      streamStartedAt={streamer.stream_started_at}
+                      pauseStartedAt={streamer.pause_started_at}
+                      initialDuration={streamer.initial_duration || 7200}
+                      totalTimeAdded={streamer.total_time_added || 0}
+                      totalElapsedTime={streamer.total_elapsed_time || 0}
+                    />
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <p className="text-sm text-muted-foreground">Temps ajouté</p>
+                    <span className="text-sm font-semibold">
+                      {Math.floor((streamer.total_time_added || 0) / 60)} minutes
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <p className="text-sm text-muted-foreground">Clics actuels</p>
+                    <span className="text-sm font-semibold">{streamer.current_clicks || 0}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <p className="text-sm text-muted-foreground">Clics requis</p>
+                    <span className="text-sm font-semibold">{streamer.clicks_required || 0}</span>
+                  </div>
+                </div>
                 
                 {isStreamerOwner && (
                   <Button className="w-full mt-4" variant="outline" onClick={() => navigate('/streamer/panel')}>
@@ -345,55 +381,39 @@ const SubathonPage = () => {
               </CardContent>
             </Card>
             
-            {/* Zone de progression et de jeu - Visible sur tous les écrans */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Gamepad2 className="mr-2 h-5 w-5" />
-                  {isGameActive ? 'Mini-jeu en cours' : (showValidateTimeButton ? 'Victoire !' : 'Progression')}
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {isGameActive && minigameState.component ? (
-                  <div className="minigame-container">
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Tentative {minigameAttempts + 1} sur 12. Chance {3 - minigameChances + 1} sur 3.
-                    </p>
-                    <minigameState.component {...minigameState.props} />
-                  </div>
-                ) : showValidateTimeButton ? (
-                  <div className="flex flex-col items-center justify-center p-8 text-center bg-green-500/10 border-2 border-green-500 rounded-lg">
-                    <Trophy className="h-12 w-12 text-green-500 mb-4" />
-                    <h3 className="text-xl font-bold mb-2">Bravo !</h3>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Vous avez réussi le mini-jeu. Cliquez sur le bouton ci-dessous pour ajouter du temps au compteur du Pauvrathon.
-                    </p>
-                    <Button onClick={handleValidateTime}>
-                      <CheckCircle className="mr-2 h-4 w-4" />
-                      Valider le temps
-                    </Button>
-                  </div>
-                ) : (
+            {/* 4. Zone clicable avec barre de progression */}
+            {!isGameActive && !showValidateTimeButton && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <Zap className="mr-2 h-5 w-5" />
+                    Progression vers le mini-jeu
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
                   <div className="space-y-2">
                     <div className="flex justify-between items-center">
                       <Label htmlFor="progression" className="font-semibold">
-                        Progression vers le prochain mini-jeu
+                        {streamer.current_clicks} / {streamer.clicks_required} clics
                       </Label>
                       <span className="text-sm text-muted-foreground">
-                        {streamer.current_clicks} / {streamer.clicks_required} clics
+                        {Math.round(progress)}%
                       </span>
                     </div>
                     <Progress value={progress} id="progression" className="h-4" />
+                    
                     {streamer.status === 'live' && user && (
                       <Button 
                         className="w-full mt-4" 
                         onClick={handleViewerClick}
-                        disabled={isClicking || isGameActive}
+                        disabled={isClicking}
+                        size="lg"
                       >
                         <Zap className="mr-2 h-4 w-4" />
                         {isClicking ? 'Clic en cours...' : 'Cliquer pour le streamer'}
                       </Button>
                     )}
+                    
                     {!user && (
                       <div className="mt-4 p-3 bg-muted rounded-lg text-center">
                         <p className="text-sm text-muted-foreground">
@@ -402,10 +422,34 @@ const SubathonPage = () => {
                       </div>
                     )}
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            )}
 
+            {/* Zone de victoire après le jeu */}
+            {showValidateTimeButton && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center text-green-600">
+                    <Trophy className="mr-2 h-5 w-5" />
+                    Victoire !
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex flex-col items-center justify-center p-4 text-center bg-green-500/10 border-2 border-green-500 rounded-lg">
+                    <p className="text-sm mb-4">
+                      Vous avez réussi le mini-jeu. Cliquez pour ajouter 10 minutes au compteur !
+                    </p>
+                    <Button onClick={handleValidateTime} className="w-full">
+                      <CheckCircle className="mr-2 h-4 w-4" />
+                      Valider le temps
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Informations sur les chances */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
@@ -423,22 +467,16 @@ const SubathonPage = () => {
                   </div>
                   <div className="flex justify-between items-center">
                     <p className="text-sm text-muted-foreground">
-                      Clics requis :
-                    </p>
-                    <span className="text-sm font-semibold">{streamer.clicks_required}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <p className="text-sm text-muted-foreground">
                       Chances restantes :
                     </p>
                     <span className="text-sm font-semibold">{minigameChances} sur 3</span>
                   </div>
-                  {isStreamerOwner && (
-                    <Button onClick={launchRandomMinigame} className="mt-4" size="sm">
-                      <Plus className="mr-2 h-4 w-4" />
-                      Lancer un jeu aléatoire (admin)
-                    </Button>
-                  )}
+                  <div className="flex justify-between items-center">
+                    <p className="text-sm text-muted-foreground">
+                      Essais actuels :
+                    </p>
+                    <span className="text-sm font-semibold">{minigameAttempts} sur 12</span>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -446,16 +484,16 @@ const SubathonPage = () => {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
-                  <AlertTriangle className="mr-2 h-5 w-5 text-red-500" />
+                  <AlertTriangle className="mr-2 h-5 w-5 text-yellow-500" />
                   Règles du Pauvrathon
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2 text-sm text-muted-foreground">
-                <p>1. Le stream s'arrête si le compteur arrive à zéro.</p>
-                <p>2. Chaque clic fait avancer une barre de progression.</p>
-                <p>3. Une fois la barre pleine, un mini-jeu se déclenche.</p>
-                <p>4. Réussir le mini-jeu ajoute du temps au compteur.</p>
-                <p>5. Échouer au mini-jeu réinitialise la barre de clics.</p>
+                <p>• Chaque clic fait avancer la barre de progression</p>
+                <p>• À 100%, un mini-jeu se déclenche</p>
+                <p>• Réussir le jeu ajoute 10 minutes au compteur</p>
+                <p>• Vous avez 12 essais par chance et 3 chances maximum</p>
+                <p>• Si vous échouez, la barre se réinitialise</p>
               </CardContent>
             </Card>
           </div>
@@ -468,11 +506,16 @@ const SubathonPage = () => {
           <DialogHeader>
             <DialogTitle className="flex items-center">
               <Gamepad2 className="mr-2 h-5 w-5" />
-              {minigameState.name}
+              Mini-jeu: {minigameState.name}
             </DialogTitle>
           </DialogHeader>
           {minigameState.component && (
             <div className="p-4">
+              <div className="mb-4 text-center">
+                <p className="text-sm text-muted-foreground">
+                  Tentative {minigameAttempts + 1} sur 12 • Chance {4 - minigameChances} sur 3
+                </p>
+              </div>
               <minigameState.component {...minigameState.props} />
             </div>
           )}
