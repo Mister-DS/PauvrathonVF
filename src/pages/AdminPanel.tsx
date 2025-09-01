@@ -140,28 +140,59 @@ export default function AdminPanel() {
   };
 
   const handleApproveRequest = async (requestId: string) => {
-    if (processingRequest) return;
-    
-    setProcessingRequest(requestId);
-    
-    try {
-      const request = requests.find(r => r.id === requestId);
-      if (!request || !request.user_id) {
-        throw new Error('Demande ou user_id manquant');
+  if (processingRequest) return;
+  
+  setProcessingRequest(requestId);
+  
+  try {
+    const request = requests.find(r => r.id === requestId);
+    if (!request || !request.user_id) {
+      throw new Error('Demande ou user_id manquant');
+    }
+
+    console.log('Processing request:', request);
+
+    // Étape 1: Tenter de trouver le profil de l'utilisateur pour vérifier son rôle actuel
+    const { data: userProfile, error: profileCheckError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('user_id', request.user_id)
+      .single();
+
+    if (profileCheckError && profileCheckError.code !== 'PGRST116') {
+      // Gérer toutes les erreurs de profil sauf "non trouvé"
+      console.error('Error checking user profile:', profileCheckError);
+      throw new Error(`Erreur lors de la vérification du profil: ${profileCheckError.message}`);
+    }
+
+    // Étape 2: Si un profil existe et que le rôle est déjà 'streamer', marquer la demande comme approuvée et sortir
+    if (userProfile && userProfile.role === 'streamer') {
+      console.log('User already has a streamer profile. Updating request status.');
+      const { error: updateRequestError } = await supabase
+        .from('streamer_requests')
+        .update({
+          status: 'approved',
+          reviewed_at: new Date().toISOString(),
+          reviewed_by: user.id
+        })
+        .eq('id', requestId);
+      
+      if (updateRequestError) {
+        throw updateRequestError;
       }
+      
+      toast({
+        title: "Demande approuvée",
+        description: `La demande de ${request.twitch_username} a été approuvée, mais le profil streamer existait déjà.`,
+      });
+      await Promise.all([fetchRequests(), fetchStreamers()]);
+      return;
+    }
 
-      console.log('Processing request:', request);
+    // Si le profil n'existe pas, nous devons le créer.
+    let newProfileData = userProfile;
 
-      // Étape 1: Vérifier si l'utilisateur a déjà un profil ou en créer un
-      let userProfile;
-      const { data: existingProfile, error: profileCheckError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('user_id', request.user_id)
-        .single();
-
-      if (profileCheckError && profileCheckError.code === 'PGRST116') {
-        // L'utilisateur n'a pas de profil, essayons d'en créer un
+    if (!newProfileData) {
         console.log('Profile not found, creating new profile for user:', request.user_id);
         
         let extractedTwitchId = null;
@@ -189,9 +220,7 @@ export default function AdminPanel() {
         if (createProfileError) {
           console.error('Error creating profile:', createProfileError);
           
-          // Si l'erreur est liée à une contrainte de clé étrangère, l'utilisateur n'existe pas
           if (createProfileError.code === '23503') {
-            // Marquer la demande comme rejetée
             await supabase
               .from('streamer_requests')
               .update({
@@ -208,118 +237,111 @@ export default function AdminPanel() {
           throw new Error(`Impossible de créer le profil utilisateur: ${createProfileError.message}`);
         }
 
-        userProfile = newProfile;
-        console.log('Profile created successfully:', userProfile);
-      } else if (profileCheckError) {
-        console.error('Error checking user profile:', profileCheckError);
-        throw new Error(`Erreur lors de la vérification du profil: ${profileCheckError.message}`);
-      } else {
-        userProfile = existingProfile;
-        console.log('User profile found:', userProfile);
-      }
-
-      // Étape 2: Mettre à jour le statut de la demande
-      const { error: updateRequestError } = await supabase
-        .from('streamer_requests')
-        .update({
-          status: 'approved',
-          reviewed_at: new Date().toISOString(),
-          reviewed_by: user.id
-        })
-        .eq('id', requestId);
-
-      if (updateRequestError) {
-        console.error('Error updating request:', updateRequestError);
-        throw new Error(`Erreur de mise à jour de la demande: ${updateRequestError.message}`);
-      }
-
-      console.log('Request status updated successfully');
-
-      // Étape 3: Extraire le twitch_id depuis le stream_link
-      let extractedTwitchId = null;
-      try {
-        const twitchUrlMatch = request.stream_link.match(/twitch\.tv\/([a-zA-Z0-9_]+)/);
-        if (twitchUrlMatch) {
-          extractedTwitchId = twitchUrlMatch[1];
-        }
-      } catch (e) {
-        console.warn('Could not extract Twitch ID from stream link');
-      }
-
-      // Étape 4: Créer l'entrée streamer
-      const streamerData = {
-        user_id: request.user_id,
-        twitch_id: extractedTwitchId || userProfile.twitch_id || request.twitch_username || 'unknown',
-        stream_title: `Pauvrathon de ${userProfile.twitch_display_name || request.twitch_username || 'Streamer'}`,
-        time_increment: 30,
-        clicks_required: 100,
-        cooldown_seconds: 300,
-        active_minigames: ['guess_number', 'hangman'],
-        current_clicks: 0,
-        total_time_added: 0,
-        is_live: false,
-        time_mode: 'fixed',
-        max_random_time: 60,
-        status: 'offline',
-        stream_started_at: null,
-        pause_started_at: null,
-        total_paused_duration: 0,
-        initial_duration: 7200,
-        min_random_time: null,
-        total_elapsed_time: 0,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
-
-      console.log('Creating streamer with data:', streamerData);
-
-      const { data: newStreamer, error: streamerInsertError } = await supabase
-        .from('streamers')
-        .insert(streamerData)
-        .select()
-        .single();
-
-      if (streamerInsertError) {
-        console.error('Error inserting streamer:', streamerInsertError);
-        throw new Error(`Erreur de création du streamer: ${streamerInsertError.message}`);
-      }
-
-      console.log('Streamer created successfully:', newStreamer);
-
-      // Étape 5: Mettre à jour le rôle utilisateur
-      const { error: profileUpdateError } = await supabase
-        .from('profiles')
-        .update({ 
-          role: 'streamer',
-          updated_at: new Date().toISOString()
-        })
-        .eq('user_id', request.user_id);
-
-      if (profileUpdateError) {
-        console.error('Error updating profile role:', profileUpdateError);
-        console.warn('Profile role update failed, but streamer was created successfully');
-      } else {
-        console.log('Profile role updated successfully');
-      }
-
-      toast({
-        title: "Demande approuvée",
-        description: `La demande de ${request.twitch_username} a été approuvée avec succès.`,
-      });
-
-      await Promise.all([fetchRequests(), fetchStreamers()]);
-
-    } catch (error: any) {
-      console.error('Error in handleApproveRequest:', error);
-      toast({
-        title: "Erreur",
-        description: error.message || "Impossible de traiter la demande. Vérifiez la console pour plus de détails.",
-        variant: "destructive",
-      });
-    } finally {
-      setProcessingRequest(null);
+        newProfileData = newProfile;
+        console.log('Profile created successfully:', newProfileData);
     }
-  };
+
+
+    // Étape 3: Mettre à jour le statut de la demande et le rôle de l'utilisateur
+    const { error: updateRequestError } = await supabase
+      .from('streamer_requests')
+      .update({
+        status: 'approved',
+        reviewed_at: new Date().toISOString(),
+        reviewed_by: user.id
+      })
+      .eq('id', requestId);
+
+    if (updateRequestError) {
+      console.error('Error updating request:', updateRequestError);
+      throw new Error(`Erreur de mise à jour de la demande: ${updateRequestError.message}`);
+    }
+
+    console.log('Request status updated successfully');
+
+    const { error: profileUpdateError } = await supabase
+      .from('profiles')
+      .update({ 
+        role: 'streamer',
+        updated_at: new Date().toISOString()
+      })
+      .eq('user_id', request.user_id);
+
+    if (profileUpdateError) {
+      console.error('Error updating profile role:', profileUpdateError);
+      throw new Error(`Erreur de mise à jour du rôle: ${profileUpdateError.message}`);
+    } else {
+      console.log('Profile role updated successfully');
+    }
+
+    // Étape 4: Extraire le twitch_id depuis le stream_link et créer l'entrée streamer
+    let extractedTwitchId = null;
+    try {
+      const twitchUrlMatch = request.stream_link.match(/twitch\.tv\/([a-zA-Z0-9_]+)/);
+      if (twitchUrlMatch) {
+        extractedTwitchId = twitchUrlMatch[1];
+      }
+    } catch (e) {
+      console.warn('Could not extract Twitch ID from stream link');
+    }
+
+    const streamerData = {
+      user_id: request.user_id,
+      twitch_id: extractedTwitchId || newProfileData.twitch_id || request.twitch_username || 'unknown',
+      stream_title: `Pauvrathon de ${newProfileData.twitch_display_name || request.twitch_username || 'Streamer'}`,
+      time_increment: 30,
+      clicks_required: 100,
+      cooldown_seconds: 300,
+      active_minigames: ['guess_number', 'hangman'],
+      current_clicks: 0,
+      total_time_added: 0,
+      is_live: false,
+      time_mode: 'fixed',
+      max_random_time: 60,
+      status: 'offline',
+      stream_started_at: null,
+      pause_started_at: null,
+      total_paused_duration: 0,
+      initial_duration: 7200,
+      min_random_time: null,
+      total_elapsed_time: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    console.log('Creating streamer with data:', streamerData);
+
+    const { data: newStreamer, error: streamerInsertError } = await supabase
+      .from('streamers')
+      .insert(streamerData)
+      .select()
+      .single();
+
+    if (streamerInsertError) {
+      console.error('Error inserting streamer:', streamerInsertError);
+      throw new Error(`Erreur de création du streamer: ${streamerInsertError.message}`);
+    }
+
+    console.log('Streamer created successfully:', newStreamer);
+
+    toast({
+      title: "Demande approuvée",
+      description: `La demande de ${request.twitch_username} a été approuvée avec succès.`,
+    });
+
+    await Promise.all([fetchRequests(), fetchStreamers()]);
+
+  } catch (error: any) {
+    console.error('Error in handleApproveRequest:', error);
+    toast({
+      title: "Erreur",
+      description: error.message || "Impossible de traiter la demande. Vérifiez la console pour plus de détails.",
+      variant: "destructive",
+    });
+  } finally {
+    setProcessingRequest(null);
+  }
+};
 
   const handleRejectRequest = async () => {
     if (!selectedRequestId || !rejectionReason.trim()) {
