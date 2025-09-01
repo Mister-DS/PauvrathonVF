@@ -28,6 +28,7 @@ import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
+import { useDebounce } from 'use-debounce'; // Hook pour le "debounce"
 
 // Interfaces pour un typage plus précis
 interface PauvrathonStreamer {
@@ -74,6 +75,58 @@ const LANGUAGES = [
   { code: 'zh', name: '中文', flag: '🇨🇳' }
 ];
 
+// Composants de Rendu pour la lisibilité
+const LoadingSpinner = () => (
+  <div className="flex justify-center items-center py-16">
+    <Loader2 className="h-12 w-12 animate-spin text-primary" />
+  </div>
+);
+
+const EmptyState = ({ title, description }: { title: string; description: string }) => (
+  <Card className="text-center py-8">
+    <CardContent>
+      <AlertCircle className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+      <h3 className="text-lg font-medium mb-2">{title}</h3>
+      <p className="text-muted-foreground">{description}</p>
+    </CardContent>
+  </Card>
+);
+
+const formatStreamDuration = (startedAt: string) => {
+  const start = new Date(startedAt);
+  const now = new Date();
+  const diffMs = now.getTime() - start.getTime();
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+  if (diffHours > 0) {
+    return `${diffHours}h ${diffMinutes}m`;
+  }
+  return `${diffMinutes}m`;
+};
+
+// Fonction pour obtenir l'URL de l'avatar d'un streamer.
+const getStreamerAvatar = (streamer: PauvrathonStreamer) => {
+  const displayName =
+    streamer.profiles?.twitch_display_name ||
+    streamer.profiles?.twitch_username ||
+    'Streamer';
+
+  return (
+    streamer.profiles?.avatar_url ||
+    `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName)}`
+  );
+};
+
+// Fonction pour obtenir le nom d'affichage d'un streamer.
+const getStreamerDisplayName = (streamer: PauvrathonStreamer) => {
+  return (
+    streamer.profiles?.twitch_display_name ||
+    streamer.profiles?.twitch_username ||
+    'Streamer inconnu'
+  );
+};
+
 export default function Discovery() {
   const { user } = useAuth();
   const { streamers, loading: loadingPauvrathon, refetch } = useStreamers();
@@ -84,12 +137,23 @@ export default function Discovery() {
   const [selectedLanguage, setSelectedLanguage] = useState('all');
   const [searchTerm, setSearchTerm] = useState('subathon');
 
+  // Utilisation d'un debounce pour éviter les requêtes à chaque frappe
+  const [debouncedSearchQuery] = useDebounce(searchQuery, 500);
+  const [debouncedSelectedLanguage] = useDebounce(selectedLanguage, 500);
+  const [debouncedSearchTerm] = useDebounce(searchTerm, 500);
+
   const searchTwitchStreamers = useCallback(
-    async (searchTermOverride?: string, languageOverride?: string) => {
+    async () => {
       setLoadingTwitch(true);
       try {
-        const termToSearch = searchTermOverride || searchTerm;
-        const languageToSearch = languageOverride || selectedLanguage;
+        // Correction ici: utilisez les valeurs débenchées pour la recherche
+        const termToSearch = debouncedSearchQuery || debouncedSearchTerm;
+        const languageToSearch = debouncedSelectedLanguage;
+
+        if (!termToSearch.trim()) {
+          setTwitchStreamers([]);
+          return;
+        }
 
         const { data, error } = await supabase.functions.invoke('search-twitch-streams', {
           body: {
@@ -120,10 +184,12 @@ export default function Discovery() {
         setLoadingTwitch(false);
       }
     },
-    [searchTerm, selectedLanguage]
+    [debouncedSearchQuery, debouncedSearchTerm, debouncedSelectedLanguage]
   );
 
   useEffect(() => {
+    // Lance la recherche à chaque fois que le terme ou la langue change
+    // grâce aux valeurs "debounced"
     searchTwitchStreamers();
   }, [searchTwitchStreamers]);
 
@@ -141,70 +207,19 @@ export default function Discovery() {
       });
       return;
     }
+    // Mettre à jour searchTerm déclenche la recherche via useEffect
     setSearchTerm(searchQuery);
-    searchTwitchStreamers(searchQuery, selectedLanguage);
   };
 
   const handleLanguageChange = (newLanguage: string) => {
     setSelectedLanguage(newLanguage);
-    searchTwitchStreamers(searchTerm, newLanguage);
+    // Mettre à jour selectedLanguage déclenche la recherche via useEffect
   };
 
   const filteredStreamers = streamers.filter(streamer => {
     if (filter === 'live') return streamer.is_live;
     return true;
   });
-
-  // Fonction pour obtenir l'URL de l'avatar d'un streamer.
-  const getStreamerAvatar = (streamer: PauvrathonStreamer) => {
-    const displayName =
-      streamer.profiles?.twitch_display_name ||
-      streamer.profiles?.twitch_username ||
-      'Streamer';
-
-    return (
-      streamer.profiles?.avatar_url ||
-      `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName)}`
-    );
-  };
-
-  // Fonction pour obtenir le nom d'affichage d'un streamer.
-  const getStreamerDisplayName = (streamer: PauvrathonStreamer) => {
-    return (
-      streamer.profiles?.twitch_display_name ||
-      streamer.profiles?.twitch_username ||
-      'Streamer inconnu'
-    );
-  };
-
-  const formatStreamDuration = (startedAt: string) => {
-    const start = new Date(startedAt);
-    const now = new Date();
-    const diffMs = now.getTime() - start.getTime();
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    const diffMinutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-
-    if (diffHours > 0) {
-      return `${diffHours}h ${diffMinutes}m`;
-    }
-    return `${diffMinutes}m`;
-  };
-
-  const LoadingSpinner = () => (
-    <div className="flex justify-center items-center py-16">
-      <Loader2 className="h-12 w-12 animate-spin text-primary" />
-    </div>
-  );
-
-  const EmptyState = ({ title, description }: { title: string; description: string }) => (
-    <Card className="text-center py-8">
-      <CardContent>
-        <AlertCircle className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-        <h3 className="text-lg font-medium mb-2">{title}</h3>
-        <p className="text-muted-foreground">{description}</p>
-      </CardContent>
-    </Card>
-  );
 
   return (
     <div className="min-h-screen bg-background">
@@ -371,7 +386,7 @@ export default function Discovery() {
                     onClick={() => {
                       setSearchTerm(term);
                       setSearchQuery(term);
-                      searchTwitchStreamers(term, selectedLanguage);
+                      // La recherche est déclenchée par l'effet de bord, pas besoin de l'appeler ici
                     }}
                   >
                     {term}
@@ -436,9 +451,9 @@ export default function Discovery() {
                           alt={stream.title}
                           className="w-full h-auto"
                           onError={e => {
+                            // Si l'image de la vignette ne charge pas, utilisez une image par défaut
                             const target = e.target as HTMLImageElement;
-                            target.src =
-                              'https://via.placeholder.com/440x248/667eea/ffffff?text=Stream+Live';
+                            target.src = 'https://via.placeholder.com/440x248/667eea/ffffff?text=Stream+Live';
                           }}
                         />
                         <div className="absolute top-2 left-2 flex gap-2">
@@ -464,7 +479,8 @@ export default function Discovery() {
                       <div className="p-4">
                         <div className="flex items-center space-x-3 mb-3">
                           <Avatar className="h-10 w-10">
-                            <AvatarImage src={stream.thumbnail_url?.replace('{width}', '100').replace('{height}', '100')} alt={stream.user_name} />
+                            {/* L'API Twitch ne renvoie pas d'URL d'avatar dans cet endpoint. Utilisation d'une image générique. */}
+                            <AvatarImage src={`https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(stream.user_name)}`} alt={stream.user_name} />
                             <AvatarFallback>{stream.user_name.charAt(0).toUpperCase()}</AvatarFallback>
                           </Avatar>
                           <div className="flex-1">
