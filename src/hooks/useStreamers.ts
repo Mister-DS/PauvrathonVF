@@ -13,7 +13,7 @@ export function useStreamers() {
     try {
       setLoading(true);
 
-      // Correction : Utilisation d'une jointure pour récupérer directement les profils des streamers en direct
+      // Récupère TOUS les streamers (pas de filtre status='live')
       const { data: streamersData, error: streamersError } = await supabase
         .from('streamers')
         .select(`
@@ -25,23 +25,21 @@ export function useStreamers() {
             avatar_url
           )
         `)
-        .eq('status', 'live') // Filtre principal: seuls les Pauvrathons en direct
-        .order('current_clicks', { ascending: false }); // Trie par clics pour les plus actifs
+        .order('current_clicks', { ascending: false });
 
       if (streamersError) {
         throw streamersError;
       }
 
       if (!streamersData || streamersData.length === 0) {
-        console.log('Aucun streamer Pauvrathon en direct trouvé');
+        console.log('Aucun streamer Pauvrathon trouvé');
         setStreamers([]);
         return;
       }
 
-      // La jointure de Supabase ramène les données de profil sous l'objet `profiles`.
-      // Nous les transformons pour qu'elles correspondent à l'interface Streamer.
+      // Transforme les données pour correspondre à l'interface Streamer
       const transformedData = streamersData.map(s => {
-        const profile = s.profiles as any; // Type assertion pour accéder aux propriétés
+        const profile = s.profiles as any;
         return {
           ...s,
           profile: profile ? {
@@ -49,11 +47,11 @@ export function useStreamers() {
             twitch_display_name: profile.twitch_display_name,
             twitch_username: profile.twitch_username
           } : null,
-          is_live: s.status === 'live', // S'assurer que le flag is_live est correct
+          is_live: s.status === 'live', // Détermine si le streamer est en live
         };
       });
 
-      console.log('Streamers Pauvrathon en direct chargés:', transformedData.length);
+      console.log('Streamers Pauvrathon chargés:', transformedData);
       setStreamers(transformedData as Streamer[]);
 
     } catch (error) {
