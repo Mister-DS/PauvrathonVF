@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { UniversalTimer } from '@/components/UniversalTimer';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,11 +35,11 @@ import {
   Loader2,
   Star,
   Monitor,
-  AlertCircle
+  AlertCircle,
+  Trophy
 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 
-// Interface pour les paramètres du streamer
 interface StreamerSettings {
   id: string;
   user_id: string;
@@ -59,106 +59,14 @@ interface StreamerSettings {
   current_clicks: number;
   stream_started_at: string | null;
   pause_started_at: string | null;
-  total_elapsed_time?: number;
+  total_elapsed_time: number;
+  total_paused_duration: number;
 }
 
-// Fonction utilitaire pour le timer du pauvrathon avec gestion correcte des pauses
-const PauvrathonTimer = ({ status, startTime, initialDuration, addedTime, pauseStartedAt, totalTimeElapsed = 0 }) => {
-  const [timeRemaining, setTimeRemaining] = useState(initialDuration);
-  const [elapsedPercent, setElapsedPercent] = useState(100);
-
-  useEffect(() => {
-    if (status !== 'live') return;
-    
-    const interval = setInterval(() => {
-      if (!startTime) return;
-      
-      const now = new Date().getTime();
-      let totalElapsedSeconds = 0;
-      
-      // CORRECTION : Calcul correct du temps écoulé avec gestion des pauses
-      if (status === 'live') {
-        const streamStart = new Date(startTime).getTime();
-        
-        // Si on a un temps total déjà écoulé (stocké en base), on l'utilise
-        if (totalTimeElapsed > 0) {
-          // Temps déjà écoulé + temps depuis la reprise
-          totalElapsedSeconds = totalTimeElapsed + Math.floor((now - streamStart) / 1000);
-        } else {
-          // Premier démarrage, calcul normal
-          totalElapsedSeconds = Math.floor((now - streamStart) / 1000);
-        }
-      }
-      
-      const totalDuration = initialDuration + addedTime;
-      const remaining = Math.max(0, totalDuration - totalElapsedSeconds);
-      
-      setTimeRemaining(remaining);
-      setElapsedPercent(Math.min(100, Math.max(0, (remaining / totalDuration) * 100)));
-      
-      if (remaining <= 0) {
-        clearInterval(interval);
-      }
-    }, 1000);
-    
-    return () => clearInterval(interval);
-  }, [status, startTime, initialDuration, addedTime, totalTimeElapsed]);
-
-  // Pour le statut en pause, calculer le temps restant basé sur le temps écoulé avant la pause
-  useEffect(() => {
-    if (status === 'paused' && pauseStartedAt && startTime) {
-      const streamStart = new Date(startTime).getTime();
-      const pauseStart = new Date(pauseStartedAt).getTime();
-      
-      // Temps écoulé jusqu'à la pause
-      const elapsedUntilPause = Math.floor((pauseStart - streamStart) / 1000);
-      const totalDuration = initialDuration + addedTime;
-      const remaining = Math.max(0, totalDuration - (totalTimeElapsed + elapsedUntilPause));
-      
-      setTimeRemaining(remaining);
-      setElapsedPercent(Math.min(100, Math.max(0, (remaining / totalDuration) * 100)));
-    }
-  }, [status, pauseStartedAt, startTime, initialDuration, addedTime, totalTimeElapsed]);
-
-  const formatTime = (seconds) => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  if (status !== 'live' && status !== 'paused') {
-    return (
-      <div className="text-center p-4 bg-muted rounded-lg">
-        <Clock className="mx-auto h-10 w-10 text-muted-foreground mb-2" />
-        <p className="text-muted-foreground">Pauvrathon non démarré</p>
-      </div>
-    );
-  }
-
-  const statusColor = status === 'paused' ? 'bg-yellow-500' : 'bg-green-500';
-
-  return (
-    <div className="text-center p-4 bg-card rounded-lg border-2 border-primary/20">
-      <div className="flex items-center justify-center mb-2">
-        <div className={`w-3 h-3 ${statusColor} rounded-full animate-pulse mr-2`}></div>
-        <span className="font-semibold">{status === 'paused' ? 'EN PAUSE' : 'EN DIRECT'}</span>
-      </div>
-      
-      <div className="text-3xl font-mono font-bold text-primary mb-2">
-        {formatTime(timeRemaining)}
-      </div>
-      
-      <Progress value={elapsedPercent} className="h-2 mb-1" />
-      
-      <div className="flex justify-between text-xs text-muted-foreground">
-        <span>{formatTime(initialDuration + addedTime)}</span>
-        <span>Temps restant</span>
-        <span>00:00:00</span>
-      </div>
-    </div>
-  );
+const formatTime = (seconds: number) => {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}m ${secs}s`;
 };
 
 // Lecteur vidéo Twitch
@@ -244,7 +152,8 @@ export default function StreamerPanel() {
   // URLs
   const [pauvrathonUrl, setPauvrathonUrl] = useState('');
   const [overlayUrl, setOverlayUrl] = useState('');
-  
+  const navigate = useNavigate();
+
   if (!user || (profile?.role !== 'streamer' && profile?.role !== 'admin')) {
     return <Navigate to="/" replace />;
   }
@@ -338,7 +247,6 @@ export default function StreamerPanel() {
           'postgres_changes',
           { event: 'UPDATE', schema: 'public', table: 'streamers', filter: `id=eq.${streamer.id}` },
           (payload) => {
-            console.log('Mise à jour en temps réel reçue:', payload);
             setStreamer(payload.new as StreamerSettings);
           }
         )
@@ -472,57 +380,43 @@ export default function StreamerPanel() {
         updated_at: new Date().toISOString()
       };
 
-      // GESTION DES DIFFÉRENTS CHANGEMENTS DE STATUT
       if (newStatus === 'live') {
         if (streamer.status === 'paused') {
-          // REPRISE APRÈS PAUSE : Calculer le temps écoulé total
-          if (streamer.stream_started_at && streamer.pause_started_at) {
-            const streamStart = new Date(streamer.stream_started_at).getTime();
-            const pauseStart = new Date(streamer.pause_started_at).getTime();
-            const elapsedBeforePause = Math.floor((pauseStart - streamStart) / 1000);
-            
-            // Ajouter ce temps au temps total déjà écoulé
-            const totalElapsed = (streamer.total_elapsed_time || 0) + elapsedBeforePause;
-            
-            updateData.total_elapsed_time = totalElapsed;
-            updateData.stream_started_at = new Date().toISOString(); // Nouveau départ pour calculer le temps depuis la reprise
-            updateData.pause_started_at = null;
-          }
+            const pauseDuration = Math.floor((new Date().getTime() - new Date(streamer.pause_started_at!).getTime()) / 1000);
+            updateData = {
+                ...updateData,
+                total_paused_duration: streamer.total_paused_duration + pauseDuration,
+                pause_started_at: null
+            };
         } else {
-          // PREMIER DÉMARRAGE
-          updateData.stream_started_at = new Date().toISOString();
-          updateData.total_elapsed_time = 0;
-          
-          if (!selectedGames.length) {
+            updateData.stream_started_at = new Date().toISOString();
+            updateData.total_elapsed_time = 0;
+            updateData.total_paused_duration = 0;
+        }
+
+        if (!selectedGames.length) {
             toast({
-              title: "Attention",
-              description: "Aucun mini-jeu n'a été sélectionné. Les viewers ne pourront pas jouer.",
-              variant: "destructive",
+                title: "Attention",
+                description: "Aucun mini-jeu n'a été sélectionné. Les viewers ne pourront pas jouer.",
+                variant: "destructive",
             });
+        }
+      } else if (newStatus === 'paused') {
+          if (streamer.stream_started_at) {
+              const elapsedTimeBeforePause = Math.floor(
+                  (new Date().getTime() - new Date(streamer.stream_started_at!).getTime()) / 1000
+              );
+              updateData = {
+                  ...updateData,
+                  pause_started_at: new Date().toISOString(),
+                  total_elapsed_time: streamer.total_elapsed_time + elapsedTimeBeforePause,
+              };
           }
-        }
-      }
-
-      if (newStatus === 'paused') {
-        // MISE EN PAUSE : Calculer et stocker le temps écoulé
-        if (streamer.stream_started_at) {
-          const streamStart = new Date(streamer.stream_started_at).getTime();
-          const now = new Date().getTime();
-          const elapsedSinceStart = Math.floor((now - streamStart) / 1000);
-          
-          // Ajouter ce temps au temps total déjà écoulé
-          const totalElapsed = (streamer.total_elapsed_time || 0) + elapsedSinceStart;
-          
-          updateData.total_elapsed_time = totalElapsed;
-          updateData.pause_started_at = new Date().toISOString();
-        }
-      }
-
-      if (newStatus === 'ended' || newStatus === 'offline') {
-        // ARRÊT COMPLET : Remettre à zéro
+      } else if (newStatus === 'ended' || newStatus === 'offline') {
         updateData.current_clicks = 0;
         updateData.total_time_added = 0;
         updateData.total_elapsed_time = 0;
+        updateData.total_paused_duration = 0;
         updateData.stream_started_at = null;
         updateData.pause_started_at = null;
       }
@@ -1086,16 +980,16 @@ export default function StreamerPanel() {
               </CardHeader>
               <CardContent>
                 <UniversalTimer
-  status={streamer?.status}
-  streamStartedAt={streamer?.stream_started_at}
-  pauseStartedAt={streamer?.pause_started_at}
-  initialDuration={streamer?.initial_duration}
-  totalTimeAdded={streamer?.total_time_added}
-  totalElapsedTime={streamer?.total_elapsed_time || 0}
-  formatStyle="colon"
-  showStatus={true}
-  className="text-3xl font-mono font-bold text-primary mb-2"
-/>
+                    status={streamer?.status}
+                    streamStartedAt={streamer?.stream_started_at}
+                    pauseStartedAt={streamer?.pause_started_at}
+                    initialDuration={streamer?.initial_duration}
+                    totalTimeAdded={streamer?.total_time_added}
+                    totalElapsedTime={streamer?.total_elapsed_time || 0}
+                    formatStyle="colon"
+                    showStatus={true}
+                    className="text-3xl font-mono font-bold text-primary mb-2"
+                />
               </CardContent>
               <CardFooter className="flex flex-col space-y-4 pt-0">
                 <div className="flex gap-2 w-full">

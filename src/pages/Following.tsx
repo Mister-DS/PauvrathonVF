@@ -10,17 +10,14 @@ import { Navigation } from '@/components/Navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
-import { 
-  Radio, 
-  Eye, 
-  Clock, 
-  Trophy, 
+import {
+  Radio,
+  Clock,
+  Trophy,
   RefreshCw,
   AlertCircle,
   Square,
-  ArrowUpRight,
   Heart,
-  ExternalLink,
   Loader2,
   Play
 } from 'lucide-react';
@@ -44,25 +41,10 @@ interface PauvrathonStreamer {
   };
 }
 
-interface TwitchStream {
-  id: string;
-  user_id: string;
-  user_login: string;
-  user_name: string;
-  title: string;
-  viewer_count: number;
-  started_at: string;
-  game_name: string;
-  thumbnail_url: string;
-  profile_image_url: string;
-}
-
 const Following = () => {
   const { user, loading: authLoading } = useAuth();
   const [pauvrathonFollows, setPauvrathonFollows] = useState<PauvrathonStreamer[]>([]);
-  const [twitchFollows, setTwitchFollows] = useState<TwitchStream[]>([]);
   const [loadingPauvrathon, setLoadingPauvrathon] = useState(true);
-  const [loadingTwitch, setLoadingTwitch] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchPauvrathonFollows = useCallback(async () => {
@@ -70,7 +52,7 @@ const Following = () => {
     setLoadingPauvrathon(true);
     try {
       const { data: followData, error: followError } = await supabase
-        .from('user_follows') // Utilisation de la table user_follows
+        .from('user_follows')
         .select(`
           streamers:streamers!inner (
             id,
@@ -102,9 +84,9 @@ const Following = () => {
           };
         })
         .filter(Boolean) as PauvrathonStreamer[];
-      
+
       const livePauvrathonStreams = followedStreamers.filter(s => s.status === 'live');
-      
+
       console.log('Pauvrathon streams:', livePauvrathonStreams);
       setPauvrathonFollows(livePauvrathonStreams);
 
@@ -121,41 +103,11 @@ const Following = () => {
     }
   }, [user]);
 
-  const fetchTwitchFollows = useCallback(async () => {
-    if (!user) return;
-    setLoadingTwitch(true);
-    try {
-      // Appel de la fonction Edge pour récupérer les follows Twitch de l'utilisateur
-      const { data: twitchData, error: twitchError } = await supabase.functions.invoke('get-twitch-follows', {
-        body: { userId: user.id }
-      });
-      if (twitchError) throw twitchError;
-
-      const follows = twitchData?.streams || [];
-      console.log('Twitch follows:', follows);
-      setTwitchFollows(follows as TwitchStream[]);
-
-    } catch (error) {
-      console.error('Erreur lors du chargement des follows Twitch:', error);
-      setTwitchFollows([]);
-      toast({
-        title: "Erreur",
-        description: "Impossible de charger les streams Twitch que vous suivez.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoadingTwitch(false);
-    }
-  }, [user]);
-
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
-    await Promise.all([
-      fetchPauvrathonFollows(),
-      fetchTwitchFollows()
-    ]);
+    await fetchPauvrathonFollows();
     setRefreshing(false);
-  }, [fetchPauvrathonFollows, fetchTwitchFollows]);
+  }, [fetchPauvrathonFollows]);
 
   useEffect(() => {
     if (user) {
@@ -174,8 +126,6 @@ const Following = () => {
   if (!user) {
     return <Navigate to="/login" />;
   }
-
-  const allLoading = loadingPauvrathon && loadingTwitch;
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
@@ -197,149 +147,75 @@ const Following = () => {
           </Button>
         </div>
         <p className="text-lg text-muted-foreground mb-6">
-          Retrouvez ici les Pauvrathons et les streams Twitch de vos créateurs préférés.
+          Retrouvez ici les Pauvrathons de vos créateurs préférés.
         </p>
-
-        <Tabs defaultValue="pauvrathon" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="pauvrathon" className="flex items-center">
-              <Radio className="mr-2 h-4 w-4" /> Pauvrathon
-              {pauvrathonFollows.length > 0 && (
-                <Badge variant="secondary" className="ml-2">{pauvrathonFollows.length}</Badge>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="twitch" className="flex items-center">
-              <Eye className="mr-2 h-4 w-4" /> Twitch
-              {twitchFollows.length > 0 && (
-                <Badge variant="secondary" className="ml-2">{twitchFollows.length}</Badge>
-              )}
-            </TabsTrigger>
-          </TabsList>
-          
-          <TabsContent value="pauvrathon" className="mt-6">
-            {loadingPauvrathon ? (
-              <div className="flex justify-center items-center h-48">
-                <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
-              </div>
-            ) : pauvrathonFollows.length === 0 ? (
-              <div className="text-center p-8 bg-card rounded-lg border">
-                <AlertCircle className="mx-auto h-12 w-12 text-muted-foreground" />
-                <h3 className="mt-4 text-lg font-semibold">
-                  Aucun Pauvrathon en direct parmi vos favoris
-                </h3>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Allez sur la page Découvrir pour trouver de nouveaux Pauvrathons.
-                </p>
-                <Button asChild className="mt-4">
-                  <Link to="/discovery">Découvrir les streams</Link>
-                </Button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                {pauvrathonFollows.map((stream) => (
-                  <Card key={stream.id} className="hover:border-primary transition-all">
-                    <CardContent className="p-4">
-                      <div className="space-y-4">
-                        {/* En-tête du streamer */}
-                        <div className="flex items-center space-x-3">
-                          <Avatar className="h-12 w-12">
-                            <AvatarImage src={stream.profile?.avatar_url} />
-                            <AvatarFallback>
-                              {stream.profile?.twitch_display_name?.slice(0, 2).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="flex-1">
-                            <h3 className="font-semibold">{stream.profile?.twitch_display_name}</h3>
-                            <div className="flex items-center">
-                              <span className="relative flex h-2 w-2 mr-1">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-                              </span>
-                              <p className="text-xs text-muted-foreground">En direct</p>
-                            </div>
-                          </div>
+        
+        {loadingPauvrathon ? (
+          <div className="flex justify-center items-center h-48">
+            <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
+          </div>
+        ) : pauvrathonFollows.length === 0 ? (
+          <div className="text-center p-8 bg-card rounded-lg border">
+            <AlertCircle className="mx-auto h-12 w-12 text-muted-foreground" />
+            <h3 className="mt-4 text-lg font-semibold">
+              Aucun Pauvrathon en direct parmi vos favoris
+            </h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Allez sur la page Découvrir pour trouver de nouveaux Pauvrathons.
+            </p>
+            <Button asChild className="mt-4">
+              <Link to="/discovery">Découvrir les streams</Link>
+            </Button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            {pauvrathonFollows.map((stream) => (
+              <Card key={stream.id} className="hover:border-primary transition-all">
+                <CardContent className="p-4">
+                  <div className="space-y-4">
+                    {/* En-tête du streamer */}
+                    <div className="flex items-center space-x-3">
+                      <Avatar className="h-12 w-12">
+                        <AvatarImage src={stream.profile?.avatar_url} />
+                        <AvatarFallback>
+                          {stream.profile?.twitch_display_name?.slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1">
+                        <h3 className="font-semibold">{stream.profile?.twitch_display_name}</h3>
+                        <div className="flex items-center">
+                          <span className="relative flex h-2 w-2 mr-1">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                          </span>
+                          <p className="text-xs text-muted-foreground">En direct</p>
                         </div>
-                        <p className="text-sm line-clamp-2 leading-relaxed">
-                          {stream.stream_title}
-                        </p>
-                        {stream.clicks_required > 0 && (
-                          <div className="space-y-1">
-                            <Progress value={(stream.current_clicks / stream.clicks_required) * 100} className="h-2" />
-                            <div className="flex justify-between text-xs text-muted-foreground">
-                              <span>{stream.current_clicks} / {stream.clicks_required} clics</span>
-                              <span>Prochain jeu</span>
-                            </div>
-                          </div>
-                        )}
-                        <Button asChild className="w-full">
-                          <Link to={`/subathon/${stream.id}`}>
-                            <Play className="w-4 h-4 mr-2" />
-                            Rejoindre le Pauvrathon
-                          </Link>
-                        </Button>
                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </TabsContent>
-          
-          <TabsContent value="twitch" className="mt-6">
-            {loadingTwitch ? (
-              <div className="flex justify-center items-center h-48">
-                <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
-              </div>
-            ) : twitchFollows.length === 0 ? (
-              <div className="text-center p-8 bg-card rounded-lg border">
-                <AlertCircle className="mx-auto h-12 w-12 text-muted-foreground" />
-                <h3 className="mt-4 text-lg font-semibold">
-                  Aucun stream Twitch en direct parmi vos abonnements
-                </h3>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Connectez-vous à Twitch ou actualisez la page pour voir les streams en direct.
-                </p>
-                <Button onClick={fetchTwitchFollows} className="mt-4">
-                  <RefreshCw className="mr-2 h-4 w-4" /> Actualiser
-                </Button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                {twitchFollows.map((stream) => (
-                  <Card key={stream.id} className="hover:border-primary transition-all">
-                    <CardContent className="p-4">
-                      <div className="space-y-4">
-                        <div className="flex items-center space-x-3">
-                          <Avatar className="h-12 w-12">
-                            <AvatarImage src={stream.profile_image_url} />
-                            <AvatarFallback>
-                              {stream.user_name.slice(0, 2).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="flex-1">
-                            <h3 className="font-semibold">{stream.user_name}</h3>
-                            <p className="text-xs text-muted-foreground">
-                              {stream.game_name}
-                            </p>
-                          </div>
+                    </div>
+                    <p className="text-sm line-clamp-2 leading-relaxed">
+                      {stream.stream_title}
+                    </p>
+                    {stream.clicks_required > 0 && (
+                      <div className="space-y-1">
+                        <Progress value={(stream.current_clicks / stream.clicks_required) * 100} className="h-2" />
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>{stream.current_clicks} / {stream.clicks_required} clics</span>
+                          <span>Prochain jeu</span>
                         </div>
-                        <p className="text-sm line-clamp-2 mb-4 leading-relaxed">
-                          {stream.title}
-                        </p>
-                        <Button asChild variant="outline" className="w-full">
-                          <a href={`https://twitch.tv/${stream.user_login}`} target="_blank" rel="noopener noreferrer">
-                            <ArrowUpRight className="w-4 h-4 mr-2" />
-                            Regarder sur Twitch
-                          </a>
-                        </Button>
                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
+                    )}
+                    <Button asChild className="w-full">
+                      <Link to={`/subathon/${stream.id}`}>
+                        <Play className="w-4 h-4 mr-2" />
+                        Rejoindre le Pauvrathon
+                      </Link>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
