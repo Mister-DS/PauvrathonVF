@@ -13,9 +13,9 @@ import { TwitchPlayer } from '@/components/TwitchPlayer';
 import { Navigation } from '@/components/Navigation';
 import { UniversalTimer } from '@/components/UniversalTimer';
 import { toast } from '@/hooks/use-toast';
-import { Streamer, Minigame } from '@/types';
+import { Streamer } from '@/types';
 import {
-  Trophy, RotateCcw, AlertTriangle, Clock, Settings, Gamepad2, Plus, Loader2, Zap, Hourglass, CheckCircle,
+  Trophy, AlertTriangle, Clock, Settings, Gamepad2, Plus, Loader2, Zap, Hourglass, CheckCircle,
 } from 'lucide-react';
 
 const SubathonPage = () => {
@@ -296,7 +296,7 @@ const SubathonPage = () => {
       <Navigation />
       <div className="flex-1 container mx-auto px-4 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Zone 1 & 2 : Infos et Stream */}
+          {/* Section principale : Infos stream & Player */}
           <div className="lg:col-span-2 space-y-8">
             <Card>
               <CardHeader>
@@ -315,17 +315,45 @@ const SubathonPage = () => {
                 <TwitchPlayer twitchUsername={streamer.profile?.twitch_username} />
               </CardContent>
             </Card>
-
-            {/* Zone de Progression / Validation / Jeu */}
-            <Card className="block lg:hidden">
+          </div>
+          
+          {/* Section latérale : Stats & Actions */}
+          <div className="lg:col-span-1 space-y-8">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Clock className="mr-2 h-5 w-5" />
+                  Temps restant
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="text-center">
+                <UniversalTimer
+                  status={streamer.status}
+                  streamStartedAt={streamer.stream_started_at}
+                  pauseStartedAt={streamer.pause_started_at}
+                  initialDuration={streamer.initial_duration || 7200}
+                  totalTimeAdded={streamer.total_time_added || 0}
+                  totalElapsedTime={streamer.total_elapsed_time || 0}
+                />
+                
+                {isStreamerOwner && (
+                  <Button className="w-full mt-4" variant="outline" onClick={() => navigate('/streamer/panel')}>
+                    <Settings className="mr-2 h-4 w-4" />
+                    Panneau d'administration
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+            
+            {/* Zone de progression et de jeu - Visible sur tous les écrans */}
+            <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
                   <Gamepad2 className="mr-2 h-5 w-5" />
-                  Progression
+                  {isGameActive ? 'Mini-jeu en cours' : (showValidateTimeButton ? 'Victoire !' : 'Progression')}
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                {/* Contenu du clic/progression pour les écrans mobiles */}
+              <CardContent className="space-y-4">
                 {isGameActive && minigameState.component ? (
                   <div className="minigame-container">
                     <p className="text-sm text-muted-foreground mb-4">
@@ -377,37 +405,7 @@ const SubathonPage = () => {
                 )}
               </CardContent>
             </Card>
-            
-          </div>
-          
-          {/* Zone 3: Stats et Actions */}
-          <div className="lg:col-span-1 space-y-8">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Clock className="mr-2 h-5 w-5" />
-                  Temps restant
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="text-center">
-                <UniversalTimer
-                  status={streamer.status}
-                  streamStartedAt={streamer.stream_started_at}
-                  pauseStartedAt={streamer.pause_started_at}
-                  initialDuration={streamer.initial_duration || 7200}
-                  totalTimeAdded={streamer.total_time_added || 0}
-                  totalElapsedTime={streamer.total_elapsed_time || 0}
-                />
-                
-                {isStreamerOwner && (
-                  <Button className="w-full mt-4" variant="outline" onClick={() => navigate('/streamer/panel')}>
-                    <Settings className="mr-2 h-4 w-4" />
-                    Panneau d'administration
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-            
+
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
@@ -464,7 +462,7 @@ const SubathonPage = () => {
         </div>
       </div>
 
-      {/* La modale du jeu reste, mais s'ouvre via l'état isGameActive */}
+      {/* Modal pour le jeu */}
       <Dialog open={isGameActive} onOpenChange={setIsGameActive}>
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
