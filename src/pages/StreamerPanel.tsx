@@ -202,7 +202,7 @@ export default function StreamerPanel() {
       const { data, error } = await supabase
         .from('minigames')
         .select('*')
-        .order('name');
+        .order('component_code');
 
       if (error) throw error;
       
