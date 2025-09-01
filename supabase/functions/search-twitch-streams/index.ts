@@ -45,44 +45,15 @@ Deno.serve(async (req) => {
       throw new Error('Failed to get Twitch access token')
     }
 
-    // Construire l'URL de recherche avec les paramètres de langue
-    let searchUrl = `https://api.twitch.tv/helix/search/channels?query=${encodeURIComponent(query)}&first=20&live_only=true`
+    // CORRECTION: Récupérer tous les streams en direct, puis filtrer par titre
+    let streamsUrl = 'https://api.twitch.tv/helix/streams?first=100'
     
     // Ajouter le filtre de langue si spécifié
     if (language && language !== 'all') {
-      searchUrl += `&language=${language}`
+      streamsUrl += `&language=${language}`
     }
 
-    // Search for streams
-    const searchResponse = await fetch(searchUrl, {
-      headers: {
-        'Client-ID': twitchClientId,
-        'Authorization': `Bearer ${accessToken}`,
-      },
-    })
-
-    if (!searchResponse.ok) {
-      throw new Error(`Twitch search API error: ${searchResponse.status} - ${await searchResponse.text()}`)
-    }
-
-    const searchData = await searchResponse.json()
-    const channels = searchData.data || []
-
-    if (channels.length === 0) {
-      return new Response(
-        JSON.stringify({ 
-          streams: [],
-          message: `No live streams found for "${query}"${language && language !== 'all' ? ` in ${language}` : ''}`,
-          total: 0
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      )
-    }
-
-    // Get detailed stream info for the channels found
-    const channelIds = channels.map((channel: any) => channel.id)
-    const streamsUrl = `https://api.twitch.tv/helix/streams?${channelIds.map(id => `user_id=${id}`).join('&')}&first=20`
-
+    // Récupérer les streams en direct
     const streamsResponse = await fetch(streamsUrl, {
       headers: {
         'Client-ID': twitchClientId,
@@ -90,21 +61,58 @@ Deno.serve(async (req) => {
       },
     })
 
-    let streams = []
-    if (streamsResponse.ok) {
-      const streamsData = await streamsResponse.json()
-      streams = streamsData.data || []
+    if (!streamsResponse.ok) {
+      throw new Error(`Twitch streams API error: ${streamsResponse.status} - ${await streamsResponse.text()}`)
     }
 
-    // Enrichir avec les informations des channels
-    const enrichedStreams = streams.map((stream: any) => {
-      const channelInfo = channels.find((channel: any) => channel.id === stream.user_id)
+    const streamsData = await streamsResponse.json()
+    let streams = streamsData.data || []
+
+    // CORRECTION PRINCIPALE: Filtrer par titre de stream (pas par nom de chaîne)
+    const filteredStreams = streams.filter((stream: any) => 
+      stream.title.toLowerCase().includes(query.toLowerCase())
+    )
+
+    if (filteredStreams.length === 0) {
+      return new Response(
+        JSON.stringify({ 
+          streams: [],
+          message: `No live streams found with "${query}" in title${language && language !== 'all' ? ` in ${language}` : ''}`,
+          total: 0,
+          query: query,
+          language: language || 'all'
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Récupérer les informations détaillées des utilisateurs pour les avatars
+    const userIds = [...new Set(filteredStreams.map((stream: any) => stream.user_id))]
+    const usersUrl = `https://api.twitch.tv/helix/users?${userIds.map(id => `id=${id}`).join('&')}`
+
+    const usersResponse = await fetch(usersUrl, {
+      headers: {
+        'Client-ID': twitchClientId,
+        'Authorization': `Bearer ${accessToken}`,
+      },
+    })
+
+    let users = []
+    if (usersResponse.ok) {
+      const usersData = await usersResponse.json()
+      users = usersData.data || []
+    }
+
+    // Enrichir les streams avec les informations utilisateur
+    const enrichedStreams = filteredStreams.map((stream: any) => {
+      const userInfo = users.find((user: any) => user.id === stream.user_id)
       return {
         ...stream,
-        display_name: channelInfo?.display_name || stream.user_name,
-        profile_image_url: channelInfo?.thumbnail_url || '',
-        broadcaster_language: channelInfo?.broadcaster_language || stream.language,
-        tags: channelInfo?.tags || []
+        display_name: userInfo?.display_name || stream.user_name,
+        profile_image_url: userInfo?.profile_image_url || '',
+        user_description: userInfo?.description || '',
+        // Ajouter des tags basiques selon le contenu du titre
+        tags: generateTagsFromTitle(stream.title)
       }
     })
 
@@ -117,7 +125,7 @@ Deno.serve(async (req) => {
         total: enrichedStreams.length,
         query: query,
         language: language || 'all',
-        message: `Found ${enrichedStreams.length} live stream(s) for "${query}"${language && language !== 'all' ? ` in ${language}` : ''}`
+        message: `Found ${enrichedStreams.length} live stream(s) with "${query}" in title${language && language !== 'all' ? ` in ${language}` : ''}`
       }),
       { 
         headers: { 
@@ -145,3 +153,28 @@ Deno.serve(async (req) => {
     )
   }
 })
+
+// Fonction utilitaire pour générer des tags basés sur le titre
+function generateTagsFromTitle(title: string): string[] {
+  const titleLower = title.toLowerCase()
+  const tags: string[] = []
+  
+  const tagMap = {
+    'subathon': 'Subathon',
+    'marathon': 'Marathon',
+    '24h': '24h Stream',
+    'charity': 'Charity',
+    'speedrun': 'Speedrun',
+    'challenge': 'Challenge',
+    'first time': 'First Time',
+    'blind': 'Blind Playthrough'
+  }
+  
+  Object.entries(tagMap).forEach(([keyword, tag]) => {
+    if (titleLower.includes(keyword)) {
+      tags.push(tag)
+    }
+  })
+  
+  return tags
+}

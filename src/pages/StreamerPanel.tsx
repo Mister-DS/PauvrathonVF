@@ -134,6 +134,12 @@ const TwitchPlayer = ({ twitchUsername }: { twitchUsername: string | undefined }
   useEffect(() => {
     if (!twitchUsername) return;
 
+    // Nettoie l'ancien embed s'il existe
+    const existingEmbed = document.getElementById('twitch-embed');
+    if (existingEmbed) {
+      existingEmbed.innerHTML = '';
+    }
+
     // S'assure que le script de l'API Twitch est chargé
     if (!(window as any).Twitch) {
       const script = document.createElement('script');
@@ -142,7 +148,6 @@ const TwitchPlayer = ({ twitchUsername }: { twitchUsername: string | undefined }
       document.body.appendChild(script);
 
       script.onload = () => {
-        // Initialise le lecteur une fois le script chargé
         new (window as any).Twitch.Embed("twitch-embed", {
           width: '100%',
           height: '400',
@@ -154,22 +159,19 @@ const TwitchPlayer = ({ twitchUsername }: { twitchUsername: string | undefined }
         });
       };
     } else {
-        // Si le script est déjà là, initialise le lecteur directement
-        new (window as any).Twitch.Embed("twitch-embed", {
-          width: '100%',
-          height: '400',
-          channel: twitchUsername,
-          layout: 'video',
-          autoplay: true,
-          muted: false,
-          theme: 'dark'
-        });
+      // Si le script est déjà là, initialise le lecteur directement
+      new (window as any).Twitch.Embed("twitch-embed", {
+        width: '100%',
+        height: '400',
+        channel: twitchUsername,
+        layout: 'video',
+        autoplay: true,
+        muted: false,
+        theme: 'dark'
+      });
     }
 
-    return () => {
-      // Nettoyage si nécessaire
-      document.body.removeChild(document.querySelector('script[src="https://embed.twitch.tv/embed/v1.js"]') as Node);
-    };
+    // Supprimez le return avec removeChild qui cause le problème
   }, [twitchUsername]);
 
   if (!twitchUsername) {

@@ -44,8 +44,9 @@ Deno.serve(async (req) => {
     if (profileError || !profile?.twitch_id) {
       return new Response(
         JSON.stringify({ 
-          follows: [],
-          message: 'Twitch account not connected' 
+          streams: [], // CORRECTION: utiliser "streams" comme attendu par le frontend
+          total: 0,
+          message: 'Compte Twitch non connecté. Connectez votre compte dans les paramètres pour voir vos follows.' 
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
@@ -61,11 +62,10 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Si on n'a pas de token utilisateur, utiliser un token d'app pour une requête basique
     let accessToken = profile.twitch_access_token;
     
+    // Si pas de token utilisateur, obtenir un token d'app
     if (!accessToken) {
-      // Obtenir un token d'application
       const tokenResponse = await fetch('https://id.twitch.tv/oauth2/token', {
         method: 'POST',
         headers: {
@@ -86,66 +86,159 @@ Deno.serve(async (req) => {
       }
     }
 
-    // SOLUTION TEMPORAIRE : Retourner une liste de streamers populaires 
-    // au lieu d'essayer d'accéder aux follows privés
-    const popularStreamsResponse = await fetch(
-      'https://api.twitch.tv/helix/streams?game_id=509658&first=20', // Just Chatting category
-      {
-        headers: {
-          'Client-ID': twitchClientId,
-          'Authorization': `Bearer ${accessToken}`,
-        },
-      }
-    )
+    let followedStreams = []
 
-    if (!popularStreamsResponse.ok) {
-      throw new Error(`Twitch API streams error: ${popularStreamsResponse.status}`)
-    }
-
-    const streamsData = await popularStreamsResponse.json()
-    const streams = streamsData.data || []
-
-    // Enrichir avec les infos utilisateur
-    let enrichedStreams = []
-    
-    if (streams.length > 0) {
-      const userIds = streams.map((stream: any) => stream.user_id)
-      
-      const usersResponse = await fetch(
-        `https://api.twitch.tv/helix/users?${userIds.map(id => `id=${id}`).join('&')}`,
-        {
-          headers: {
-            'Client-ID': twitchClientId,
-            'Authorization': `Bearer ${accessToken}`,
-          },
-        }
-      )
-
-      if (usersResponse.ok) {
-        const usersData = await usersResponse.json()
-        const users = usersData.data || []
-        
-        const userMap = new Map()
-        users.forEach((user: any) => {
-          userMap.set(user.id, user)
-        })
-
-        enrichedStreams = streams.map((stream: any) => {
-          const userInfo = userMap.get(stream.user_id)
-          return {
-            ...stream,
-            profile_image_url: userInfo?.profile_image_url || '',
-            display_name: userInfo?.display_name || stream.user_name,
+    // ESSAYER D'ABORD DE RÉCUPÉRER LES VRAIS FOLLOWS (nécessite un token utilisateur)
+    if (profile.twitch_access_token) {
+      try {
+        // Récupérer la liste des follows
+        const followsResponse = await fetch(
+          `https://api.twitch.tv/helix/channels/followed?user_id=${profile.twitch_id}&first=100`,
+          {
+            headers: {
+              'Client-ID': twitchClientId,
+              'Authorization': `Bearer ${profile.twitch_access_token}`,
+            },
           }
-        })
+        )
+
+        if (followsResponse.ok) {
+          const followsData = await followsResponse.json()
+          const follows = followsData.data || []
+
+          if (follows.length > 0) {
+            // Récupérer les streams en direct pour les chaînes suivies
+            const broadcasterIds = follows.map((follow: any) => follow.broadcaster_id)
+            const chunks = []
+            
+            // L'API Twitch limite à 100 IDs par requête
+            for (let i = 0; i < broadcasterIds.length; i += 100) {
+              chunks.push(broadcasterIds.slice(i, i + 100))
+            }
+
+            const allStreams = []
+            
+            for (const chunk of chunks) {
+              const streamsUrl = `https://api.twitch.tv/helix/streams?${chunk.map(id => `user_id=${id}`).join('&')}`
+              
+              const streamsResponse = await fetch(streamsUrl, {
+                headers: {
+                  'Client-ID': twitchClientId,
+                  'Authorization': `Bearer ${accessToken}`,
+                },
+              })
+
+              if (streamsResponse.ok) {
+                const streamsData = await streamsResponse.json()
+                allStreams.push(...(streamsData.data || []))
+              }
+            }
+
+            // Enrichir avec les infos utilisateur
+            if (allStreams.length > 0) {
+              const userIds = [...new Set(allStreams.map((stream: any) => stream.user_id))]
+              const usersUrl = `https://api.twitch.tv/helix/users?${userIds.map(id => `id=${id}`).join('&')}`
+              
+              const usersResponse = await fetch(usersUrl, {
+                headers: {
+                  'Client-ID': twitchClientId,
+                  'Authorization': `Bearer ${accessToken}`,
+                },
+              })
+
+              if (usersResponse.ok) {
+                const usersData = await usersResponse.json()
+                const users = usersData.data || []
+                
+                const userMap = new Map()
+                users.forEach((user: any) => {
+                  userMap.set(user.id, user)
+                })
+
+                followedStreams = allStreams.map((stream: any) => {
+                  const userInfo = userMap.get(stream.user_id)
+                  return {
+                    ...stream,
+                    profile_image_url: userInfo?.profile_image_url || '',
+                    display_name: userInfo?.display_name || stream.user_name,
+                  }
+                }).sort((a: any, b: any) => b.viewer_count - a.viewer_count) // Trier par audience
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Erreur lors de la récupération des follows:', error)
+        // En cas d'erreur, on continue avec la solution de fallback
       }
     }
 
+    // FALLBACK: Si pas de token utilisateur ou pas de follows en live, montrer des streams populaires
+    if (followedStreams.length === 0) {
+      try {
+        const popularStreamsResponse = await fetch(
+          'https://api.twitch.tv/helix/streams?first=20', // Streams populaires toutes catégories
+          {
+            headers: {
+              'Client-ID': twitchClientId,
+              'Authorization': `Bearer ${accessToken}`,
+            },
+          }
+        )
+
+        if (popularStreamsResponse.ok) {
+          const streamsData = await popularStreamsResponse.json()
+          const streams = streamsData.data || []
+
+          // Enrichir avec les infos utilisateur
+          if (streams.length > 0) {
+            const userIds = streams.map((stream: any) => stream.user_id)
+            const usersUrl = `https://api.twitch.tv/helix/users?${userIds.map(id => `id=${id}`).join('&')}`
+            
+            const usersResponse = await fetch(usersUrl, {
+              headers: {
+                'Client-ID': twitchClientId,
+                'Authorization': `Bearer ${accessToken}`,
+              },
+            })
+
+            if (usersResponse.ok) {
+              const usersData = await usersResponse.json()
+              const users = usersData.data || []
+              
+              const userMap = new Map()
+              users.forEach((user: any) => {
+                userMap.set(user.id, user)
+              })
+
+              followedStreams = streams.map((stream: any) => {
+                const userInfo = userMap.get(stream.user_id)
+                return {
+                  ...stream,
+                  profile_image_url: userInfo?.profile_image_url || '',
+                  display_name: userInfo?.display_name || stream.user_name,
+                }
+              })
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Erreur lors de la récupération des streams populaires:', error)
+      }
+    }
+
+    const isRealFollows = profile.twitch_access_token && followedStreams.length > 0
+    
     return new Response(
       JSON.stringify({ 
-        follows: enrichedStreams, // Renvoyer les streams populaires comme "follows"
-        total_live: enrichedStreams.length,
-        message: 'Showing popular streams (follows feature requires Twitch user token)'
+        streams: followedStreams, // CORRECTION: utiliser "streams" comme clé
+        total: followedStreams.length,
+        is_real_follows: isRealFollows,
+        message: isRealFollows 
+          ? `${followedStreams.length} de vos follows sont actuellement en direct`
+          : followedStreams.length > 0 
+            ? 'Streams populaires affichés (connectez votre compte Twitch pour voir vos vrais follows)'
+            : 'Aucun stream en direct trouvé'
       }),
       { 
         headers: { 
@@ -159,7 +252,8 @@ Deno.serve(async (req) => {
     console.error('Error in get-twitch-follows:', error)
     return new Response(
       JSON.stringify({ 
-        follows: [],
+        streams: [], // CORRECTION: utiliser "streams" comme clé
+        total: 0,
         error: error.message,
         details: 'Check function logs in Supabase dashboard'
       }),
