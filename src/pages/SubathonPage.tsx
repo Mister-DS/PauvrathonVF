@@ -124,57 +124,37 @@ const SubathonPage = () => {
       });
       setShowValidateTimeButton(true);
       
-      // Remise à zéro des clics après une victoire
-      await supabase
-        .from('streamers')
-        .update({ 
-          current_clicks: 0,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', streamer!.id);
-        
-      setMinigameAttempts(0); // Réinitialiser les essais
-      setMinigameChances(3); // Réinitialiser les chances
+      // Réinitialiser les essais et chances pour la prochaine fois
+      setMinigameAttempts(0);
+      setMinigameChances(3);
       
     } else {
       setMinigameAttempts(prev => prev + 1);
-      toast({
-        title: "Défaite !",
-        description: `Il vous reste ${12 - minigameAttempts - 1} essais sur cette chance.`,
-        variant: "destructive",
-      });
-
+      
       if (minigameAttempts + 1 < 12) {
-        // Nouvelle tentative après 5 secondes
         toast({
-          title: "Nouvel essai...",
-          description: `Relance du jeu dans 5 secondes.`,
+          title: "Défaite !",
+          description: `Il vous reste ${12 - (minigameAttempts + 1)} essais sur cette chance. Relance du jeu dans 5 secondes.`,
+          variant: "destructive",
         });
         setTimeout(launchRandomMinigame, 5000);
       } else {
-        // Échoué aux 12 essais, chance perdue
         setMinigameChances(prev => prev - 1);
-        toast({
-          title: "Chance perdue !",
-          description: `Vous avez échoué 12 fois. Il vous reste ${minigameChances - 1} chance(s) sur 3.`,
-          variant: "destructive",
-        });
-        
         if (minigameChances - 1 > 0) {
-          setMinigameAttempts(0); // Réinitialiser les essais pour la nouvelle chance
+          setMinigameAttempts(0);
           toast({
-            title: "Nouvelle chance...",
-            description: `Nouvelle chance dans 5 secondes.`,
+            title: "Chance perdue !",
+            description: `Vous avez épuisé vos 12 essais. Il vous reste ${minigameChances - 1} chance(s). Nouvelle chance dans 5 secondes.`,
+            variant: "destructive",
           });
           setTimeout(launchRandomMinigame, 5000);
         } else {
-          // Toutes les chances sont épuisées
           toast({
             title: "Toutes les chances épuisées !",
-            description: "Retour à la page des clics.",
+            description: "Retour à la page des clics. Vous devez recommencer à faire avancer la barre.",
             variant: "destructive",
           });
-          // On ne fait rien d'autre, le joueur doit retourner cliquer.
+          // Réinitialisation complète
           setMinigameAttempts(0);
           setMinigameChances(3);
         }
@@ -185,6 +165,26 @@ const SubathonPage = () => {
   const launchRandomMinigame = async () => {
     if (!streamer || isGameActive) return;
     
+    setIsGameActive(true);
+    
+    // Réinitialisation des clics au moment du lancement du jeu
+    const { error: resetError } = await supabase
+      .from('streamers')
+      .update({ 
+        current_clicks: 0,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', streamer.id);
+      
+    if (resetError) {
+      console.error('Erreur lors de la réinitialisation des clics:', resetError);
+      toast({
+        title: "Erreur",
+        description: "Impossible de réinitialiser le compteur de clics.",
+        variant: "destructive",
+      });
+    }
+    
     const activeGames = streamer.active_minigames;
     if (!activeGames || activeGames.length === 0) {
       toast({
@@ -192,10 +192,10 @@ const SubathonPage = () => {
         description: "Aucun mini-jeu actif n'est configuré pour ce streamer.",
         variant: "destructive",
       });
+      setIsGameActive(false);
       return;
     }
   
-    setIsGameActive(true);
     const randomGameCode = activeGames[Math.floor(Math.random() * activeGames.length)];
     const gameComponent = minigameComponents[randomGameCode];
     
@@ -222,14 +222,10 @@ const SubathonPage = () => {
     if (!streamer) return;
     
     try {
-      // TODO: Implémenter la logique d'ajout de temps au compteur du Pauvrathon
-      // Cela pourrait être un appel à une fonction RPC dans Supabase pour plus de sécurité
-      // const { error } = await supabase.rpc('add_time_to_subathon', { streamer_id: streamer.id, time_to_add_seconds: 600 });
-      
       const { error } = await supabase
         .from('streamers')
         .update({
-          total_time_added: (streamer.total_time_added || 0) + 600, // Exemple: ajout de 10 minutes (600 secondes)
+          total_time_added: (streamer.total_time_added || 0) + 600, // Ajout de 10 minutes (600 secondes)
           updated_at: new Date().toISOString()
         })
         .eq('id', streamer.id);
@@ -253,7 +249,6 @@ const SubathonPage = () => {
     }
   };
   
-  // Utiliser useEffect pour les écouteurs de changements et le déclenchement des actions
   useEffect(() => {
     if (id) {
       fetchStreamer(id);
@@ -267,7 +262,6 @@ const SubathonPage = () => {
             const updatedStreamer = payload.new as Streamer;
             setStreamer(updatedStreamer);
 
-            // Déclencher le jeu si les clics requis sont atteints et qu'aucun jeu n'est déjà actif
             if (updatedStreamer.current_clicks >= updatedStreamer.clicks_required && !isGameActive && updatedStreamer.status === 'live' && !showValidateTimeButton) {
               launchRandomMinigame();
             }
@@ -321,16 +315,17 @@ const SubathonPage = () => {
                 <TwitchPlayer twitchUsername={streamer.profile?.twitch_username} />
               </CardContent>
             </Card>
-            
-            {/* Zone 4: Jeu ou Bouton de validation */}
-            <Card>
+
+            {/* Zone de Progression / Validation / Jeu */}
+            <Card className="block lg:hidden">
               <CardHeader>
                 <CardTitle className="flex items-center">
                   <Gamepad2 className="mr-2 h-5 w-5" />
-                  {isGameActive ? 'Mini-jeu en cours' : (showValidateTimeButton ? 'Victoire !' : 'Progression')}
+                  Progression
                 </CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent>
+                {/* Contenu du clic/progression pour les écrans mobiles */}
                 {isGameActive && minigameState.component ? (
                   <div className="minigame-container">
                     <p className="text-sm text-muted-foreground mb-4">
@@ -382,6 +377,7 @@ const SubathonPage = () => {
                 )}
               </CardContent>
             </Card>
+            
           </div>
           
           {/* Zone 3: Stats et Actions */}
