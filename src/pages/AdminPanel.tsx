@@ -186,77 +186,35 @@ export default function AdminPanel() {
 
     console.log('Processing request:', request);
 
-    // Étape 1 : Tenter de trouver le profil de l'utilisateur.
-    const { data: userProfile, error: profileCheckError } = await supabase
+    // Étape 1: Mettre à jour le rôle de l'utilisateur vers 'streamer'
+    const { error: profileUpdateError } = await supabase
       .from('profiles')
-      .select('*')
-      .eq('user_id', request.user_id)
-      .single();
+      .update({ 
+        role: 'streamer',
+        updated_at: new Date().toISOString()
+      })
+      .eq('user_id', request.user_id);
 
-    if (profileCheckError && profileCheckError.code !== 'PGRST116') {
-      // Si l'erreur n'est pas "profil non trouvé", jeter l'erreur.
-      // Le code de statut 406 sera traité ici.
-      throw profileCheckError;
-    }
-
-    // Étape 2 : Si le profil n'existe pas, le créer directement avec le rôle de streamer.
-    // Cette condition est plus fiable, car elle vérifie si les données sont nulles.
-    if (!userProfile) {
-        console.log('Profile not found, creating new profile for user:', request.user_id);
+    if (profileUpdateError) {
+      if (profileUpdateError.code === '23503') {
+        // L'utilisateur n'existe pas dans la table auth.users
+        await supabase
+          .from('streamer_requests')
+          .update({
+            status: 'rejected',
+            rejection_reason: 'Utilisateur supprimé ou inexistant dans le système',
+            reviewed_at: new Date().toISOString(),
+            reviewed_by: user.id
+          })
+          .eq('id', requestId);
         
-        let extractedTwitchId = null;
-        try {
-            const twitchUrlMatch = request.stream_link.match(/twitch\.tv\/([a-zA-Z0-9_]+)/);
-            if (twitchUrlMatch) {
-                extractedTwitchId = twitchUrlMatch[1];
-            }
-        } catch (e) {
-            console.warn('Could not extract Twitch ID from stream link');
-        }
-
-        const { error: createProfileError } = await supabase
-            .from('profiles')
-            .insert({
-                user_id: request.user_id,
-                twitch_username: request.twitch_username,
-                twitch_display_name: request.twitch_username,
-                twitch_id: extractedTwitchId,
-                role: 'streamer'
-            });
-
-        if (createProfileError) {
-            if (createProfileError.code === '23503') {
-                await supabase
-                    .from('streamer_requests')
-                    .update({
-                        status: 'rejected',
-                        rejection_reason: 'Utilisateur supprimé ou inexistant dans le système',
-                        reviewed_at: new Date().toISOString(),
-                        reviewed_by: user.id
-                    })
-                    .eq('id', requestId);
-                
-                throw new Error('Cet utilisateur n\'existe plus dans le système. La demande a été automatiquement rejetée.');
-            }
-            throw new Error(`Impossible de créer le profil utilisateur: ${createProfileError.message}`);
-        }
-    } else {
-        // Étape 3 : Si le profil existe déjà, mettre à jour son rôle vers 'streamer'.
-        console.log('User profile found, updating role to streamer');
-        const { error: profileUpdateError } = await supabase
-            .from('profiles')
-            .update({ 
-                role: 'streamer',
-                updated_at: new Date().toISOString()
-            })
-            .eq('user_id', request.user_id);
-
-        if (profileUpdateError) {
-            throw new Error(`Erreur de mise à jour du rôle: ${profileUpdateError.message}`);
-        }
+        throw new Error('Cet utilisateur n\'existe plus dans le système. La demande a été automatiquement rejetée.');
+      }
+      
+      throw new Error(`Erreur de mise à jour du rôle: ${profileUpdateError.message}`);
     }
 
-    // Étape 4 : Mettre à jour le statut de la demande.
+    // Étape 2: Mettre à jour le statut de la demande vers 'approved'
     const { error: updateRequestError } = await supabase
       .from('streamer_requests')
       .update({
@@ -270,7 +228,7 @@ export default function AdminPanel() {
       throw new Error(`Erreur de mise à jour de la demande: ${updateRequestError.message}`);
     }
 
-    // Étape 5 : Créer l'entrée streamer si elle n'existe pas.
+    // Étape 3: Créer une entrée 'streamers' si elle n'existe pas
     const { data: existingStreamer, error: streamerCheckError } = await supabase
       .from('streamers')
       .select('id')
@@ -282,19 +240,20 @@ export default function AdminPanel() {
     }
 
     if (!existingStreamer) {
-        const twitchUrlMatch = request.stream_link.match(/twitch\.tv\/([a-zA-Z0-9_]+)/);
-        const extractedTwitchId = twitchUrlMatch ? twitchUrlMatch[1] : null;
+      const twitchUrlMatch = request.stream_link.match(/twitch\.tv\/([a-zA-Z0-9_]+)/);
+      const extractedTwitchId = twitchUrlMatch ? twitchUrlMatch[1] : null;
 
-        const streamerData = {
-          user_id: request.user_id,
-          twitch_id: extractedTwitchId,
-          stream_title: `Pauvrathon de ${request.twitch_username}`,
-          // ... autres champs
-        };
-        const { error: streamerInsertError } = await supabase.from('streamers').insert(streamerData);
-        if (streamerInsertError) {
-            throw new Error(`Erreur de création du streamer: ${streamerInsertError.message}`);
-        }
+      const streamerData = {
+        user_id: request.user_id,
+        twitch_id: extractedTwitchId || 'unknown',
+        stream_title: `Pauvrathon de ${request.twitch_username}`,
+        // Ajoutez ici d'autres champs si nécessaire
+      };
+      
+      const { error: streamerInsertError } = await supabase.from('streamers').insert(streamerData);
+      if (streamerInsertError) {
+          throw new Error(`Erreur de création du streamer: ${streamerInsertError.message}`);
+      }
     }
 
     toast({
