@@ -81,6 +81,7 @@ Deno.serve(async (req) => {
 
     const tokenData: TwitchTokenResponse = await tokenResponse.json();
     console.log('✅ Token received successfully');
+    console.log('🔐 Token scopes:', tokenData.scope);
 
     // Get user data from Twitch
     const userResponse = await fetch('https://api.twitch.tv/helix/users', {
@@ -201,9 +202,9 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Create or update profile
+    // CORRECTION PRINCIPALE : Stocker le token d'accès Twitch
     if (supabaseUser) {
-      console.log('🔄 Upserting profile...');
+      console.log('🔄 Upserting profile with Twitch token...');
       const { error: profileError } = await supabaseClient
         .from('profiles')
         .upsert({
@@ -212,12 +213,15 @@ Deno.serve(async (req) => {
           twitch_username: twitchUser.login,
           twitch_display_name: twitchUser.display_name,
           avatar_url: twitchUser.profile_image_url,
+          // AJOUT : Stocker le token d'accès pour les follows
+          twitch_access_token: tokenData.access_token,
+          twitch_refresh_token: tokenData.refresh_token,
         });
 
       if (profileError) {
         console.error('❌ Profile upsert error:', profileError);
       } else {
-        console.log('✅ Profile updated successfully');
+        console.log('✅ Profile updated successfully with Twitch tokens');
       }
     }
 
@@ -226,6 +230,8 @@ Deno.serve(async (req) => {
       success: true,
       twitch_user: twitchUser,
       supabase_user: supabaseUser,
+      scopes: tokenData.scope, // Retourner les scopes obtenus
+      has_follows_permission: tokenData.scope?.includes('user:read:follows'),
       // Return credentials for direct authentication
       credentials: {
         email: supabaseUser.email,
@@ -234,6 +240,7 @@ Deno.serve(async (req) => {
     };
 
     console.log('🎉 Authentication data prepared successfully');
+    console.log('📊 Scopes granted:', tokenData.scope);
 
     return new Response(JSON.stringify(response), {
       headers: { 

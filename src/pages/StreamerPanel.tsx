@@ -58,10 +58,11 @@ interface StreamerSettings {
   current_clicks: number;
   stream_started_at: string | null;
   pause_started_at: string | null;
+  total_elapsed_time?: number;
 }
 
-// Fonction utilitaire pour le timer du pauvrathon (pas de changements)
-const PauvrathonTimer = ({ status, startTime, initialDuration, addedTime }) => {
+// Fonction utilitaire pour le timer du pauvrathon avec gestion correcte des pauses
+const PauvrathonTimer = ({ status, startTime, initialDuration, addedTime, pauseStartedAt, totalTimeElapsed = 0 }) => {
   const [timeRemaining, setTimeRemaining] = useState(initialDuration);
   const [elapsedPercent, setElapsedPercent] = useState(100);
 
@@ -71,11 +72,25 @@ const PauvrathonTimer = ({ status, startTime, initialDuration, addedTime }) => {
     const interval = setInterval(() => {
       if (!startTime) return;
       
-      const start = new Date(startTime).getTime();
       const now = new Date().getTime();
-      const elapsedSeconds = Math.floor((now - start) / 1000);
+      let totalElapsedSeconds = 0;
+      
+      // CORRECTION : Calcul correct du temps écoulé avec gestion des pauses
+      if (status === 'live') {
+        const streamStart = new Date(startTime).getTime();
+        
+        // Si on a un temps total déjà écoulé (stocké en base), on l'utilise
+        if (totalTimeElapsed > 0) {
+          // Temps déjà écoulé + temps depuis la reprise
+          totalElapsedSeconds = totalTimeElapsed + Math.floor((now - streamStart) / 1000);
+        } else {
+          // Premier démarrage, calcul normal
+          totalElapsedSeconds = Math.floor((now - streamStart) / 1000);
+        }
+      }
+      
       const totalDuration = initialDuration + addedTime;
-      const remaining = Math.max(0, totalDuration - elapsedSeconds);
+      const remaining = Math.max(0, totalDuration - totalElapsedSeconds);
       
       setTimeRemaining(remaining);
       setElapsedPercent(Math.min(100, Math.max(0, (remaining / totalDuration) * 100)));
@@ -86,7 +101,23 @@ const PauvrathonTimer = ({ status, startTime, initialDuration, addedTime }) => {
     }, 1000);
     
     return () => clearInterval(interval);
-  }, [status, startTime, initialDuration, addedTime]);
+  }, [status, startTime, initialDuration, addedTime, totalTimeElapsed]);
+
+  // Pour le statut en pause, calculer le temps restant basé sur le temps écoulé avant la pause
+  useEffect(() => {
+    if (status === 'paused' && pauseStartedAt && startTime) {
+      const streamStart = new Date(startTime).getTime();
+      const pauseStart = new Date(pauseStartedAt).getTime();
+      
+      // Temps écoulé jusqu'à la pause
+      const elapsedUntilPause = Math.floor((pauseStart - streamStart) / 1000);
+      const totalDuration = initialDuration + addedTime;
+      const remaining = Math.max(0, totalDuration - (totalTimeElapsed + elapsedUntilPause));
+      
+      setTimeRemaining(remaining);
+      setElapsedPercent(Math.min(100, Math.max(0, (remaining / totalDuration) * 100)));
+    }
+  }, [status, pauseStartedAt, startTime, initialDuration, addedTime, totalTimeElapsed]);
 
   const formatTime = (seconds) => {
     const hours = Math.floor(seconds / 3600);
@@ -129,7 +160,7 @@ const PauvrathonTimer = ({ status, startTime, initialDuration, addedTime }) => {
   );
 };
 
-// **MODIFICATION : Lecteur vidéo Twitch**
+// Lecteur vidéo Twitch
 const TwitchPlayer = ({ twitchUsername }: { twitchUsername: string | undefined }) => {
   useEffect(() => {
     if (!twitchUsername) return;
@@ -170,8 +201,6 @@ const TwitchPlayer = ({ twitchUsername }: { twitchUsername: string | undefined }
         theme: 'dark'
       });
     }
-
-    // Supprimez le return avec removeChild qui cause le problème
   }, [twitchUsername]);
 
   if (!twitchUsername) {
@@ -216,8 +245,8 @@ export default function StreamerPanel() {
   const [overlayUrl, setOverlayUrl] = useState('');
   
   if (!user || (profile?.role !== 'streamer' && profile?.role !== 'admin')) {
-  return <Navigate to="/" replace />;
-}
+    return <Navigate to="/" replace />;
+  }
 
   const fetchStreamerData = useCallback(async () => {
     if (!user) return;
@@ -389,7 +418,6 @@ export default function StreamerPanel() {
         stream_title: streamer.stream_title,
         time_mode: timeMode,
         time_increment: fixedTime,
-        ...(timeMode === 'random' && { min_random_time: minRandomTime }),
         max_random_time: maxRandomTime,
         clicks_required: clicksRequired,
         cooldown_seconds: cooldownTime,
@@ -443,24 +471,57 @@ export default function StreamerPanel() {
         updated_at: new Date().toISOString()
       };
 
-      if (newStatus === 'live' && streamer.status !== 'live') {
-        updateData.stream_started_at = new Date().toISOString();
-        if (!selectedGames.length) {
-          toast({
-            title: "Attention",
-            description: "Aucun mini-jeu n'a été sélectionné. Les viewers ne pourront pas jouer.",
-            variant: "destructive",
-          });
+      // GESTION DES DIFFÉRENTS CHANGEMENTS DE STATUT
+      if (newStatus === 'live') {
+        if (streamer.status === 'paused') {
+          // REPRISE APRÈS PAUSE : Calculer le temps écoulé total
+          if (streamer.stream_started_at && streamer.pause_started_at) {
+            const streamStart = new Date(streamer.stream_started_at).getTime();
+            const pauseStart = new Date(streamer.pause_started_at).getTime();
+            const elapsedBeforePause = Math.floor((pauseStart - streamStart) / 1000);
+            
+            // Ajouter ce temps au temps total déjà écoulé
+            const totalElapsed = (streamer.total_elapsed_time || 0) + elapsedBeforePause;
+            
+            updateData.total_elapsed_time = totalElapsed;
+            updateData.stream_started_at = new Date().toISOString(); // Nouveau départ pour calculer le temps depuis la reprise
+            updateData.pause_started_at = null;
+          }
+        } else {
+          // PREMIER DÉMARRAGE
+          updateData.stream_started_at = new Date().toISOString();
+          updateData.total_elapsed_time = 0;
+          
+          if (!selectedGames.length) {
+            toast({
+              title: "Attention",
+              description: "Aucun mini-jeu n'a été sélectionné. Les viewers ne pourront pas jouer.",
+              variant: "destructive",
+            });
+          }
         }
       }
 
       if (newStatus === 'paused') {
-        updateData.pause_started_at = new Date().toISOString();
+        // MISE EN PAUSE : Calculer et stocker le temps écoulé
+        if (streamer.stream_started_at) {
+          const streamStart = new Date(streamer.stream_started_at).getTime();
+          const now = new Date().getTime();
+          const elapsedSinceStart = Math.floor((now - streamStart) / 1000);
+          
+          // Ajouter ce temps au temps total déjà écoulé
+          const totalElapsed = (streamer.total_elapsed_time || 0) + elapsedSinceStart;
+          
+          updateData.total_elapsed_time = totalElapsed;
+          updateData.pause_started_at = new Date().toISOString();
+        }
       }
 
       if (newStatus === 'ended' || newStatus === 'offline') {
+        // ARRÊT COMPLET : Remettre à zéro
         updateData.current_clicks = 0;
         updateData.total_time_added = 0;
+        updateData.total_elapsed_time = 0;
         updateData.stream_started_at = null;
         updateData.pause_started_at = null;
       }
@@ -476,7 +537,7 @@ export default function StreamerPanel() {
       setStreamer(data as StreamerSettings);
       
       const statusMessages = {
-        live: "Pauvrathon démarré",
+        live: streamer.status === 'paused' ? "Pauvrathon repris" : "Pauvrathon démarré",
         paused: "Pauvrathon en pause", 
         ended: "Pauvrathon terminé",
         offline: "Pauvrathon arrêté"
@@ -1028,6 +1089,8 @@ export default function StreamerPanel() {
                   startTime={streamer?.stream_started_at}
                   initialDuration={streamer?.initial_duration}
                   addedTime={streamer?.total_time_added}
+                  pauseStartedAt={streamer?.pause_started_at}
+                  totalTimeElapsed={streamer?.total_elapsed_time || 0}
                 />
               </CardContent>
               <CardFooter className="flex flex-col space-y-4 pt-0">

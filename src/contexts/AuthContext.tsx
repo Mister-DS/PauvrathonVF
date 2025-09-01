@@ -91,7 +91,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       const clientId = clientIdData.client_id;
       const redirectUri = `${window.location.origin}/auth/callback`;
-      const scopes = ['user:read:email'];
+      
+      // CORRECTION : Ajouter le scope pour lire les follows
+      // L'utilisateur autorisera explicitement l'accès à ses informations de follows
+      const scopes = ['user:read:email', 'user:read:follows'];
       
       const twitchAuthUrl = `https://id.twitch.tv/oauth2/authorize?` +
         `client_id=${clientId}&` +
@@ -99,7 +102,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         `response_type=code&` +
         `scope=${encodeURIComponent(scopes.join(' '))}`;
       
-      console.log('🔗 Redirection vers Twitch');
+      console.log('🔗 Redirection vers Twitch avec scopes:', scopes);
+      console.log('🔐 L\'utilisateur va autoriser l\'accès à son email et ses follows');
+      
+      // Informer l'utilisateur des permissions demandées
+      toast({
+        title: "Connexion à Twitch",
+        description: "Vous allez autoriser l'accès à votre email et à votre liste de follows pour afficher vos streamers suivis.",
+      });
+      
       window.location.href = twitchAuthUrl;
       
     } catch (error: any) {
