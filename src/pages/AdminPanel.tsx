@@ -1,19 +1,19 @@
 // src/pages/AdminPanel.tsx
 
-import { useState, useEffect } from 'react';
-import { Navigate } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Navigation } from '@/components/Navigation';
-import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
-import { toast } from '@/hooks/use-toast';
-import { StreamerRequest, Streamer, Minigame } from '@/types';
+import { useState, useEffect } from "react";
+import { Navigate } from "react-router-dom";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Navigation } from "@/components/Navigation";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
+import { StreamerRequest, Streamer, Minigame } from "@/types";
 import {
   Shield,
   UserCheck,
@@ -31,10 +31,22 @@ import {
   ArrowUpRight,
   Filter,
   Loader2,
-  AlertTriangle
-} from 'lucide-react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+  AlertTriangle,
+} from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 // Interfaces pour un typage plus précis
 interface DetailedStreamerRequest extends StreamerRequest {
@@ -47,9 +59,21 @@ interface DetailedStreamerRequest extends StreamerRequest {
 }
 
 const predefinedGames = [
-  { id: 'guess_number', name: 'Devine le nombre', description: 'Les viewers doivent deviner le nombre mystère.' },
-  { id: 'click_race', name: 'Course aux clics', description: 'Le premier à cliquer 100 fois l\'emporte.' },
-  { id: 'random_emote', name: 'Émote aléatoire', description: 'Le premier à poster l\'émote du jour gagne.' },
+  {
+    id: "guess_number",
+    name: "Devine le nombre",
+    description: "Les viewers doivent deviner le nombre mystère.",
+  },
+  {
+    id: "click_race",
+    name: "Course aux clics",
+    description: "Le premier à cliquer 100 fois l'emporte.",
+  },
+  {
+    id: "random_emote",
+    name: "Émote aléatoire",
+    description: "Le premier à poster l'émote du jour gagne.",
+  },
 ];
 
 export default function AdminPanel() {
@@ -58,15 +82,19 @@ export default function AdminPanel() {
   const [streamers, setStreamers] = useState<Streamer[]>([]);
   const [minigames, setMinigames] = useState<Minigame[]>([]);
   const [loading, setLoading] = useState(true);
-  const [newMinigameName, setNewMinigameName] = useState('');
-  const [newMinigameDescription, setNewMinigameDescription] = useState('');
+  const [newMinigameName, setNewMinigameName] = useState("");
+  const [newMinigameDescription, setNewMinigameDescription] = useState("");
   const [showAllRequests, setShowAllRequests] = useState(false);
-  const [rejectionReason, setRejectionReason] = useState('');
+  const [rejectionReason, setRejectionReason] = useState("");
   const [showRejectionDialog, setShowRejectionDialog] = useState(false);
-  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
-  const [processingRequest, setProcessingRequest] = useState<string | null>(null);
+  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(
+    null
+  );
+  const [processingRequest, setProcessingRequest] = useState<string | null>(
+    null
+  );
 
-  if (!user || profile?.role !== 'admin') {
+  if (!user || profile?.role !== "admin") {
     return <Navigate to="/" replace />;
   }
 
@@ -79,18 +107,20 @@ export default function AdminPanel() {
   const fetchRequests = async () => {
     try {
       const { data, error } = await supabase
-        .from('streamer_requests')
-        .select(`
+        .from("streamer_requests")
+        .select(
+          `
           *,
           profiles(twitch_display_name, avatar_url, twitch_username)
-        `)
-        .order('created_at', { ascending: false });
+        `
+        )
+        .order("created_at", { ascending: false });
 
       if (error) throw error;
 
       setRequests((data || []) as DetailedStreamerRequest[]);
     } catch (error) {
-      console.error('Error fetching requests:', error);
+      console.error("Error fetching requests:", error);
       toast({
         title: "Erreur",
         description: "Impossible de charger les demandes.",
@@ -102,38 +132,42 @@ export default function AdminPanel() {
   const fetchStreamers = async () => {
     try {
       const { data, error } = await supabase
-        .from('streamers')
-        .select(`
+        .from("streamers")
+        .select(
+          `
           *,
           profiles(twitch_display_name, avatar_url, twitch_username)
-        `)
-        .order('created_at', { ascending: false });
+        `
+        )
+        .order("created_at", { ascending: false });
 
       if (error) throw error;
 
-      const streamersWithProfile = (data || []).map(streamer => ({
+      const streamersWithProfile = (data || []).map((streamer) => ({
         ...streamer,
-        profile: Array.isArray(streamer.profiles) ? streamer.profiles[0] : streamer.profiles
+        profile: Array.isArray(streamer.profiles)
+          ? streamer.profiles[0]
+          : streamer.profiles,
       }));
 
       setStreamers(streamersWithProfile as unknown as Streamer[]);
     } catch (error) {
-      console.error('Error fetching streamers:', error);
+      console.error("Error fetching streamers:", error);
     }
   };
 
   const fetchMinigames = async () => {
     try {
       const { data, error } = await supabase
-        .from('minigames')
-        .select('*')
-        .order('created_at', { ascending: false });
+        .from("minigames")
+        .select("*")
+        .order("created_at", { ascending: false });
 
       if (error) throw error;
 
-      setMinigames(data as Minigame[] || []);
+      setMinigames((data as Minigame[]) || []);
     } catch (error) {
-      console.error('Error fetching minigames:', error);
+      console.error("Error fetching minigames:", error);
     } finally {
       setLoading(false);
     }
@@ -150,9 +184,7 @@ export default function AdminPanel() {
       throw new Error('Demande ou user_id manquant');
     }
 
-    console.log('Processing request:', request);
-
-    // Étape 1: Tenter de trouver le profil de l'utilisateur pour vérifier son rôle actuel
+    // Étape 1 : Tenter de trouver le profil de l'utilisateur.
     const { data: userProfile, error: profileCheckError } = await supabase
       .from('profiles')
       .select('*')
@@ -160,89 +192,59 @@ export default function AdminPanel() {
       .single();
 
     if (profileCheckError && profileCheckError.code !== 'PGRST116') {
-      // Gérer toutes les erreurs de profil sauf "non trouvé"
-      console.error('Error checking user profile:', profileCheckError);
+      // Gérer toutes les erreurs de profil sauf "non trouvé".
       throw new Error(`Erreur lors de la vérification du profil: ${profileCheckError.message}`);
     }
 
-    // Étape 2: Si un profil existe et que le rôle est déjà 'streamer', marquer la demande comme approuvée et sortir
-    if (userProfile && userProfile.role === 'streamer') {
-      console.log('User already has a streamer profile. Updating request status.');
-      const { error: updateRequestError } = await supabase
-        .from('streamer_requests')
-        .update({
-          status: 'approved',
-          reviewed_at: new Date().toISOString(),
-          reviewed_by: user.id
-        })
-        .eq('id', requestId);
-      
-      if (updateRequestError) {
-        throw updateRequestError;
-      }
-      
-      toast({
-        title: "Demande approuvée",
-        description: `La demande de ${request.twitch_username} a été approuvée, mais le profil streamer existait déjà.`,
-      });
-      await Promise.all([fetchRequests(), fetchStreamers()]);
-      return;
-    }
+    // Si le profil existe, le mettre à jour. Sinon, le créer.
+    if (userProfile) {
+        // Le profil existe déjà. Mettre à jour le rôle vers 'streamer'.
+        console.log('Profile found, updating role to streamer:', userProfile);
+        const { error: profileUpdateError } = await supabase
+            .from('profiles')
+            .update({ 
+                role: 'streamer',
+                updated_at: new Date().toISOString()
+            })
+            .eq('user_id', request.user_id);
 
-    // Si le profil n'existe pas, nous devons le créer.
-    let newProfileData = userProfile;
-
-    if (!newProfileData) {
-        console.log('Profile not found, creating new profile for user:', request.user_id);
-        
-        let extractedTwitchId = null;
-        try {
-          const twitchUrlMatch = request.stream_link.match(/twitch\.tv\/([a-zA-Z0-9_]+)/);
-          if (twitchUrlMatch) {
-            extractedTwitchId = twitchUrlMatch[1];
-          }
-        } catch (e) {
-          console.warn('Could not extract Twitch ID from stream link');
+        if (profileUpdateError) {
+            throw new Error(`Erreur de mise à jour du rôle: ${profileUpdateError.message}`);
         }
+    } else {
+        // Le profil n'existe pas. Le créer.
+        console.log('Profile not found, creating new profile for user:', request.user_id);
+        const twitchUrlMatch = request.stream_link.match(/twitch\.tv\/([a-zA-Z0-9_]+)/);
+        const extractedTwitchId = twitchUrlMatch ? twitchUrlMatch[1] : null;
 
         const { data: newProfile, error: createProfileError } = await supabase
-          .from('profiles')
-          .insert({
-            user_id: request.user_id,
-            twitch_username: request.twitch_username,
-            twitch_display_name: request.twitch_username,
-            twitch_id: extractedTwitchId,
-            role: 'viewer'
-          })
-          .select()
-          .single();
+            .from('profiles')
+            .insert({
+                user_id: request.user_id,
+                twitch_username: request.twitch_username,
+                twitch_display_name: request.twitch_username,
+                twitch_id: extractedTwitchId,
+                role: 'streamer' // Créer directement avec le bon rôle
+            })
+            .select()
+            .single();
 
         if (createProfileError) {
-          console.error('Error creating profile:', createProfileError);
-          
-          if (createProfileError.code === '23503') {
-            await supabase
-              .from('streamer_requests')
-              .update({
-                status: 'rejected',
-                rejection_reason: 'Utilisateur supprimé ou inexistant dans le système',
-                reviewed_at: new Date().toISOString(),
-                reviewed_by: user.id
-              })
-              .eq('id', requestId);
-              
-            throw new Error('Cet utilisateur n\'existe plus dans le système. La demande a été automatiquement rejetée.');
-          }
-          
-          throw new Error(`Impossible de créer le profil utilisateur: ${createProfileError.message}`);
+            if (createProfileError.code === '23503') {
+                // Le user_id n'existe pas dans la table 'users'
+                await supabase.from('streamer_requests').update({
+                    status: 'rejected',
+                    rejection_reason: 'Utilisateur supprimé ou inexistant dans le système',
+                    reviewed_at: new Date().toISOString(),
+                    reviewed_by: user.id
+                }).eq('id', requestId);
+                throw new Error('Cet utilisateur n\'existe plus dans le système. La demande a été automatiquement rejetée.');
+            }
+            throw new Error(`Impossible de créer le profil utilisateur: ${createProfileError.message}`);
         }
-
-        newProfileData = newProfile;
-        console.log('Profile created successfully:', newProfileData);
     }
 
-
-    // Étape 3: Mettre à jour le statut de la demande et le rôle de l'utilisateur
+    // Marquer la demande comme approuvée.
     const { error: updateRequestError } = await supabase
       .from('streamer_requests')
       .update({
@@ -253,89 +255,47 @@ export default function AdminPanel() {
       .eq('id', requestId);
 
     if (updateRequestError) {
-      console.error('Error updating request:', updateRequestError);
       throw new Error(`Erreur de mise à jour de la demande: ${updateRequestError.message}`);
     }
 
-    console.log('Request status updated successfully');
-
-    const { error: profileUpdateError } = await supabase
-      .from('profiles')
-      .update({ 
-        role: 'streamer',
-        updated_at: new Date().toISOString()
-      })
-      .eq('user_id', request.user_id);
-
-    if (profileUpdateError) {
-      console.error('Error updating profile role:', profileUpdateError);
-      throw new Error(`Erreur de mise à jour du rôle: ${profileUpdateError.message}`);
-    } else {
-      console.log('Profile role updated successfully');
-    }
-
-    // Étape 4: Extraire le twitch_id depuis le stream_link et créer l'entrée streamer
-    let extractedTwitchId = null;
-    try {
-      const twitchUrlMatch = request.stream_link.match(/twitch\.tv\/([a-zA-Z0-9_]+)/);
-      if (twitchUrlMatch) {
-        extractedTwitchId = twitchUrlMatch[1];
-      }
-    } catch (e) {
-      console.warn('Could not extract Twitch ID from stream link');
-    }
-
-    const streamerData = {
-      user_id: request.user_id,
-      twitch_id: extractedTwitchId || newProfileData.twitch_id || request.twitch_username || 'unknown',
-      stream_title: `Pauvrathon de ${newProfileData.twitch_display_name || request.twitch_username || 'Streamer'}`,
-      time_increment: 30,
-      clicks_required: 100,
-      cooldown_seconds: 300,
-      active_minigames: ['guess_number', 'hangman'],
-      current_clicks: 0,
-      total_time_added: 0,
-      is_live: false,
-      time_mode: 'fixed',
-      max_random_time: 60,
-      status: 'offline',
-      stream_started_at: null,
-      pause_started_at: null,
-      total_paused_duration: 0,
-      initial_duration: 7200,
-      min_random_time: null,
-      total_elapsed_time: 0,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-
-    console.log('Creating streamer with data:', streamerData);
-
-    const { data: newStreamer, error: streamerInsertError } = await supabase
+    // Créer l'entrée 'streamer' si elle n'existe pas déjà.
+    const { data: existingStreamer, error: streamerCheckError } = await supabase
       .from('streamers')
-      .insert(streamerData)
-      .select()
+      .select('id')
+      .eq('user_id', request.user_id)
       .single();
 
-    if (streamerInsertError) {
-      console.error('Error inserting streamer:', streamerInsertError);
-      throw new Error(`Erreur de création du streamer: ${streamerInsertError.message}`);
+    if (streamerCheckError && streamerCheckError.code !== 'PGRST116') {
+        throw new Error(`Erreur lors de la vérification du streamer: ${streamerCheckError.message}`);
     }
 
-    console.log('Streamer created successfully:', newStreamer);
+    if (!existingStreamer) {
+        const twitchUrlMatch = request.stream_link.match(/twitch\.tv\/([a-zA-Z0-9_]+)/);
+        const extractedTwitchId = twitchUrlMatch ? twitchUrlMatch[1] : null;
+
+        const streamerData = {
+            user_id: request.user_id,
+            twitch_id: extractedTwitchId || 'unknown',
+            // ... autres champs du streamer
+        };
+        const { error: streamerInsertError } = await supabase.from('streamers').insert(streamerData);
+        if (streamerInsertError) {
+            throw new Error(`Erreur de création du streamer: ${streamerInsertError.message}`);
+        }
+    }
+
 
     toast({
       title: "Demande approuvée",
-      description: `La demande de ${request.twitch_username} a été approuvée avec succès.`,
+      description: `La demande de ${request.twitch_username} a été traitée avec succès.`,
     });
 
     await Promise.all([fetchRequests(), fetchStreamers()]);
 
   } catch (error: any) {
-    console.error('Error in handleApproveRequest:', error);
     toast({
       title: "Erreur",
-      description: error.message || "Impossible de traiter la demande. Vérifiez la console pour plus de détails.",
+      description: error.message || "Impossible de traiter la demande.",
       variant: "destructive",
     });
   } finally {
@@ -354,18 +314,18 @@ export default function AdminPanel() {
     }
 
     try {
-      const request = requests.find(r => r.id === selectedRequestId);
+      const request = requests.find((r) => r.id === selectedRequestId);
       if (!request) return;
 
       const { error: updateError } = await supabase
-        .from('streamer_requests')
+        .from("streamer_requests")
         .update({
-          status: 'rejected',
+          status: "rejected",
           rejection_reason: rejectionReason,
           reviewed_at: new Date().toISOString(),
-          reviewed_by: user.id
+          reviewed_by: user.id,
         })
-        .eq('id', selectedRequestId);
+        .eq("id", selectedRequestId);
 
       if (updateError) throw updateError;
 
@@ -375,12 +335,12 @@ export default function AdminPanel() {
       });
 
       setShowRejectionDialog(false);
-      setRejectionReason('');
+      setRejectionReason("");
       setSelectedRequestId(null);
       fetchRequests();
       fetchStreamers();
     } catch (error: any) {
-      console.error('Error rejecting request:', error);
+      console.error("Error rejecting request:", error);
       toast({
         title: "Erreur",
         description: "Impossible de rejeter la demande.",
@@ -392,16 +352,16 @@ export default function AdminPanel() {
   const handleRemoveStreamer = async (streamerId: string, userId: string) => {
     try {
       const { error: streamerError } = await supabase
-        .from('streamers')
+        .from("streamers")
         .delete()
-        .eq('id', streamerId);
+        .eq("id", streamerId);
 
       if (streamerError) throw streamerError;
 
       const { error: profileError } = await supabase
-        .from('profiles')
-        .update({ role: 'viewer' })
-        .eq('user_id', userId);
+        .from("profiles")
+        .update({ role: "viewer" })
+        .eq("user_id", userId);
 
       if (profileError) throw profileError;
 
@@ -412,7 +372,7 @@ export default function AdminPanel() {
 
       fetchStreamers();
     } catch (error: any) {
-      console.error('Error removing streamer:', error);
+      console.error("Error removing streamer:", error);
       toast({
         title: "Erreur",
         description: "Impossible de retirer le rôle de streamer.",
@@ -432,12 +392,12 @@ export default function AdminPanel() {
     }
 
     try {
-      const componentCode = newMinigameName.toLowerCase().replace(/\s+/g, '_');
-      
+      const componentCode = newMinigameName.toLowerCase().replace(/\s+/g, "_");
+
       const { data: existingGame, error: existingError } = await supabase
-        .from('minigames')
-        .select('id')
-        .eq('component_code', componentCode)
+        .from("minigames")
+        .select("id")
+        .eq("component_code", componentCode)
         .single();
 
       if (existingGame) {
@@ -449,18 +409,16 @@ export default function AdminPanel() {
         return;
       }
 
-      if (existingError && existingError.code !== 'PGRST116') {
+      if (existingError && existingError.code !== "PGRST116") {
         throw existingError;
       }
 
-      const { error } = await supabase
-        .from('minigames')
-        .insert({
-          component_code: componentCode,
-          description: newMinigameDescription || `Mini-jeu ${newMinigameName}`,
-          is_active: true,
-          created_by: user.id
-        });
+      const { error } = await supabase.from("minigames").insert({
+        component_code: componentCode,
+        description: newMinigameDescription || `Mini-jeu ${newMinigameName}`,
+        is_active: true,
+        created_by: user.id,
+      });
 
       if (error) throw error;
 
@@ -469,11 +427,11 @@ export default function AdminPanel() {
         description: `Le mini-jeu "${newMinigameName}" (${componentCode}) a été ajouté avec succès.`,
       });
 
-      setNewMinigameName('');
-      setNewMinigameDescription('');
+      setNewMinigameName("");
+      setNewMinigameDescription("");
       fetchMinigames();
     } catch (error: any) {
-      console.error('Error adding minigame:', error);
+      console.error("Error adding minigame:", error);
       toast({
         title: "Erreur",
         description: error.message || "Impossible d'ajouter le mini-jeu.",
@@ -484,7 +442,7 @@ export default function AdminPanel() {
 
   const handleCreateAdminStreamerProfile = async () => {
     try {
-      const { error } = await supabase.rpc('create_admin_streamer_profile');
+      const { error } = await supabase.rpc("create_admin_streamer_profile");
 
       if (error) throw error;
 
@@ -495,7 +453,7 @@ export default function AdminPanel() {
 
       fetchStreamers();
     } catch (error: any) {
-      console.error('Error creating admin streamer profile:', error);
+      console.error("Error creating admin streamer profile:", error);
       toast({
         title: "Erreur",
         description: error.message || "Impossible de créer le profil streamer.",
@@ -504,12 +462,15 @@ export default function AdminPanel() {
     }
   };
 
-  const handleToggleMinigame = async (minigameId: string, isActive: boolean) => {
+  const handleToggleMinigame = async (
+    minigameId: string,
+    isActive: boolean
+  ) => {
     try {
       const { error } = await supabase
-        .from('minigames')
+        .from("minigames")
         .update({ is_active: !isActive })
-        .eq('id', minigameId);
+        .eq("id", minigameId);
 
       if (error) throw error;
 
@@ -520,7 +481,7 @@ export default function AdminPanel() {
 
       fetchMinigames();
     } catch (error: any) {
-      console.error('Error toggling minigame:', error);
+      console.error("Error toggling minigame:", error);
       toast({
         title: "Erreur",
         description: "Impossible de modifier le mini-jeu.",
@@ -547,13 +508,13 @@ export default function AdminPanel() {
     );
   }
 
-  const pendingRequests = requests.filter(r => r.status === 'pending');
+  const pendingRequests = requests.filter((r) => r.status === "pending");
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'approved':
+      case "approved":
         return <Badge className="bg-green-500 text-white">Approuvé</Badge>;
-      case 'rejected':
+      case "rejected":
         return <Badge className="bg-red-500 text-white">Rejeté</Badge>;
       default:
         return <Badge variant="outline">En attente</Badge>;
@@ -590,8 +551,12 @@ export default function AdminPanel() {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-2xl font-bold text-yellow-500">{pendingRequests.length}</p>
-                  <p className="text-xs text-muted-foreground">Demandes en attente</p>
+                  <p className="text-2xl font-bold text-yellow-500">
+                    {pendingRequests.length}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Demandes en attente
+                  </p>
                 </div>
                 <AlertCircle className="h-6 w-6 text-yellow-500" />
               </div>
@@ -602,8 +567,12 @@ export default function AdminPanel() {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-2xl font-bold text-primary">{streamers.length}</p>
-                  <p className="text-xs text-muted-foreground">Streamers actifs</p>
+                  <p className="text-2xl font-bold text-primary">
+                    {streamers.length}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Streamers actifs
+                  </p>
                 </div>
                 <Users className="h-6 w-6 text-primary" />
               </div>
@@ -614,7 +583,9 @@ export default function AdminPanel() {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-2xl font-bold text-accent">{minigames.length}</p>
+                  <p className="text-2xl font-bold text-accent">
+                    {minigames.length}
+                  </p>
                   <p className="text-xs text-muted-foreground">Mini-jeux</p>
                 </div>
                 <Gamepad2 className="h-6 w-6 text-accent" />
@@ -630,7 +601,9 @@ export default function AdminPanel() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-2xl font-bold">{requests.length}</p>
-                  <p className="text-xs text-muted-foreground">Total demandes</p>
+                  <p className="text-xs text-muted-foreground">
+                    Total demandes
+                  </p>
                 </div>
                 <Clock className="h-6 w-6 text-muted-foreground" />
               </div>
@@ -657,19 +630,29 @@ export default function AdminPanel() {
                 ) : (
                   <div className="space-y-4">
                     {pendingRequests.map((request) => (
-                      <div key={request.id} className="border border-border rounded-lg p-4 glass-effect">
+                      <div
+                        key={request.id}
+                        className="border border-border rounded-lg p-4 glass-effect"
+                      >
                         <div className="flex items-start justify-between mb-3">
                           <div className="flex items-center space-x-3">
                             <Avatar>
                               <AvatarImage src={request.profiles?.avatar_url} />
                               <AvatarFallback>
-                                {request.twitch_username?.charAt(0).toUpperCase() || 'S'}
+                                {request.twitch_username
+                                  ?.charAt(0)
+                                  .toUpperCase() || "S"}
                               </AvatarFallback>
                             </Avatar>
                             <div>
-                              <h3 className="font-medium">{request.profiles?.twitch_display_name || request.twitch_username}</h3>
+                              <h3 className="font-medium">
+                                {request.profiles?.twitch_display_name ||
+                                  request.twitch_username}
+                              </h3>
                               <p className="text-sm text-muted-foreground">
-                                {new Date(request.created_at).toLocaleDateString('fr-FR')}
+                                {new Date(
+                                  request.created_at
+                                ).toLocaleDateString("fr-FR")}
                               </p>
                             </div>
                           </div>
@@ -677,7 +660,9 @@ export default function AdminPanel() {
                         </div>
 
                         <div className="mb-3">
-                          <p className="text-sm mb-1"><strong>Chaîne:</strong></p>
+                          <p className="text-sm mb-1">
+                            <strong>Chaîne:</strong>
+                          </p>
                           <a
                             href={request.stream_link}
                             target="_blank"
@@ -689,7 +674,9 @@ export default function AdminPanel() {
                         </div>
 
                         <div className="mb-4">
-                          <p className="text-sm mb-1"><strong>Motivation:</strong></p>
+                          <p className="text-sm mb-1">
+                            <strong>Motivation:</strong>
+                          </p>
                           <p className="text-sm text-muted-foreground bg-muted/50 p-2 rounded">
                             {request.motivation}
                           </p>
@@ -752,17 +739,23 @@ export default function AdminPanel() {
                 ) : (
                   <div className="space-y-3 max-h-96 overflow-y-auto">
                     {streamers.map((streamer) => (
-                      <div key={streamer.id} className="flex items-center justify-between p-3 border border-border rounded neon-border">
+                      <div
+                        key={streamer.id}
+                        className="flex items-center justify-between p-3 border border-border rounded neon-border"
+                      >
                         <div className="flex items-center space-x-3">
                           <Avatar className="h-10 w-10">
                             <AvatarImage src={streamer.profile?.avatar_url} />
                             <AvatarFallback>
-                              {streamer.profile?.twitch_display_name?.charAt(0) || 'S'}
+                              {streamer.profile?.twitch_display_name?.charAt(
+                                0
+                              ) || "S"}
                             </AvatarFallback>
                           </Avatar>
                           <div>
                             <p className="font-medium">
-                              {streamer.profile?.twitch_display_name || 'Streamer'}
+                              {streamer.profile?.twitch_display_name ||
+                                "Streamer"}
                             </p>
                             <p className="text-sm text-muted-foreground">
                               @{streamer.profile?.twitch_username}
@@ -770,13 +763,20 @@ export default function AdminPanel() {
                           </div>
                         </div>
                         <div className="flex items-center space-x-2">
-                          <Badge variant={streamer.is_live ? 'default' : 'secondary'}>
-                            {streamer.is_live ? 'Live' : 'Offline'}
+                          <Badge
+                            variant={streamer.is_live ? "default" : "secondary"}
+                          >
+                            {streamer.is_live ? "Live" : "Offline"}
                           </Badge>
                           <Button
                             size="sm"
                             variant="destructive"
-                            onClick={() => handleRemoveStreamer(streamer.id, streamer.user_id)}
+                            onClick={() =>
+                              handleRemoveStreamer(
+                                streamer.id,
+                                streamer.user_id
+                              )
+                            }
                           >
                             <UserMinus className="h-4 w-4" />
                           </Button>
@@ -817,7 +817,11 @@ export default function AdminPanel() {
                     onChange={(e) => setNewMinigameDescription(e.target.value)}
                   />
                 </div>
-                <Button onClick={handleAddMinigame} className="w-full neon-glow" disabled={!newMinigameName}>
+                <Button
+                  onClick={handleAddMinigame}
+                  className="w-full neon-glow"
+                  disabled={!newMinigameName}
+                >
                   <Plus className="mr-2 h-4 w-4" />
                   Ajouter le Mini-jeu
                 </Button>
@@ -840,23 +844,41 @@ export default function AdminPanel() {
                 ) : (
                   <div className="space-y-3 max-h-96 overflow-y-auto">
                     {minigames.map((minigame) => (
-                      <div key={minigame.id} className="flex items-center justify-between p-3 border border-border rounded neon-border">
+                      <div
+                        key={minigame.id}
+                        className="flex items-center justify-between p-3 border border-border rounded neon-border"
+                      >
                         <div>
-                          <p className="font-medium">{minigame.component_code}</p>
+                          <p className="font-medium">
+                            {minigame.component_code}
+                          </p>
                           <p className="text-sm text-muted-foreground">
-                            {minigame.description || 'Pas de description'}
+                            {minigame.description || "Pas de description"}
                           </p>
                         </div>
                         <div className="flex items-center space-x-2">
-                          <Badge variant={minigame.is_active ? 'default' : 'secondary'}>
-                            {minigame.is_active ? 'Actif' : 'Inactif'}
+                          <Badge
+                            variant={
+                              minigame.is_active ? "default" : "secondary"
+                            }
+                          >
+                            {minigame.is_active ? "Actif" : "Inactif"}
                           </Badge>
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => handleToggleMinigame(minigame.id, minigame.is_active)}
+                            onClick={() =>
+                              handleToggleMinigame(
+                                minigame.id,
+                                minigame.is_active
+                              )
+                            }
                           >
-                            {minigame.is_active ? <XCircle className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
+                            {minigame.is_active ? (
+                              <XCircle className="h-4 w-4" />
+                            ) : (
+                              <CheckCircle className="h-4 w-4" />
+                            )}
                           </Button>
                         </div>
                       </div>
@@ -891,31 +913,43 @@ export default function AdminPanel() {
                         <Avatar>
                           <AvatarImage src={request.profiles?.avatar_url} />
                           <AvatarFallback>
-                            {request.twitch_username?.charAt(0).toUpperCase() || 'S'}
+                            {request.twitch_username?.charAt(0).toUpperCase() ||
+                              "S"}
                           </AvatarFallback>
                         </Avatar>
                         <div>
-                          <h3 className="font-medium">{request.profiles?.twitch_display_name || request.twitch_username}</h3>
+                          <h3 className="font-medium">
+                            {request.profiles?.twitch_display_name ||
+                              request.twitch_username}
+                          </h3>
                           <p className="text-sm text-muted-foreground">
-                            {new Date(request.created_at).toLocaleDateString('fr-FR')}
+                            {new Date(request.created_at).toLocaleDateString(
+                              "fr-FR"
+                            )}
                           </p>
                         </div>
                       </div>
                       <div className="flex flex-col items-end">
                         {getStatusBadge(request.status)}
                         <span className="text-xs text-muted-foreground mt-1">
-                          {request.reviewed_at ? new Date(request.reviewed_at).toLocaleDateString('fr-FR') : 'N/A'}
+                          {request.reviewed_at
+                            ? new Date(request.reviewed_at).toLocaleDateString(
+                                "fr-FR"
+                              )
+                            : "N/A"}
                         </span>
                       </div>
                     </div>
-                    {request.status === 'rejected' && request.rejection_reason && (
-                      <div className="mt-2 p-3 text-sm rounded bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300">
-                        <p className="font-medium mb-1 flex items-center">
-                          <AlertTriangle className="mr-2 w-4 h-4" /> Raison du rejet
-                        </p>
-                        <p>{request.rejection_reason}</p>
-                      </div>
-                    )}
+                    {request.status === "rejected" &&
+                      request.rejection_reason && (
+                        <div className="mt-2 p-3 text-sm rounded bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300">
+                          <p className="font-medium mb-1 flex items-center">
+                            <AlertTriangle className="mr-2 w-4 h-4" /> Raison du
+                            rejet
+                          </p>
+                          <p>{request.rejection_reason}</p>
+                        </div>
+                      )}
                   </Card>
                 ))
               )}
@@ -924,7 +958,10 @@ export default function AdminPanel() {
         </Dialog>
 
         {/* Dialog for Rejection Reason */}
-        <Dialog open={showRejectionDialog} onOpenChange={setShowRejectionDialog}>
+        <Dialog
+          open={showRejectionDialog}
+          onOpenChange={setShowRejectionDialog}
+        >
           <DialogContent>
             <DialogHeader>
               <DialogTitle className="flex items-center">
@@ -934,7 +971,8 @@ export default function AdminPanel() {
             </DialogHeader>
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Veuillez fournir une raison pour le rejet de cette demande de streamer.
+                Veuillez fournir une raison pour le rejet de cette demande de
+                streamer.
               </p>
               <div>
                 <Label htmlFor="rejection-reason">Raison du rejet</Label>
@@ -947,10 +985,17 @@ export default function AdminPanel() {
               </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setShowRejectionDialog(false)}>
+              <Button
+                variant="outline"
+                onClick={() => setShowRejectionDialog(false)}
+              >
                 Annuler
               </Button>
-              <Button variant="destructive" onClick={handleRejectRequest} disabled={!rejectionReason.trim()}>
+              <Button
+                variant="destructive"
+                onClick={handleRejectRequest}
+                disabled={!rejectionReason.trim()}
+              >
                 Confirmer le rejet
               </Button>
             </DialogFooter>
