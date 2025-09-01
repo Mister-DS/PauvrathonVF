@@ -152,7 +152,7 @@ export default function AdminPanel() {
 
       console.log('Processing request:', request);
 
-      // Étape 1: Vérifier si l'utilisateur existe dans profiles, sinon le créer
+      // Étape 1: Vérifier si l'utilisateur a déjà un profil ou en créer un
       let userProfile;
       const { data: existingProfile, error: profileCheckError } = await supabase
         .from('profiles')
@@ -161,10 +161,9 @@ export default function AdminPanel() {
         .single();
 
       if (profileCheckError && profileCheckError.code === 'PGRST116') {
-        // L'utilisateur n'existe pas dans profiles, créons-le
+        // L'utilisateur n'a pas de profil, essayons d'en créer un
         console.log('Profile not found, creating new profile for user:', request.user_id);
         
-        // Extraire les informations Twitch depuis la demande
         let extractedTwitchId = null;
         try {
           const twitchUrlMatch = request.stream_link.match(/twitch\.tv\/([a-zA-Z0-9_]+)/);
@@ -182,20 +181,36 @@ export default function AdminPanel() {
             twitch_username: request.twitch_username,
             twitch_display_name: request.twitch_username,
             twitch_id: extractedTwitchId,
-            role: 'viewer' // Sera mis à jour plus tard
+            role: 'viewer'
           })
           .select()
           .single();
 
         if (createProfileError) {
           console.error('Error creating profile:', createProfileError);
+          
+          // Si l'erreur est liée à une contrainte de clé étrangère, l'utilisateur n'existe pas
+          if (createProfileError.code === '23503') {
+            // Marquer la demande comme rejetée
+            await supabase
+              .from('streamer_requests')
+              .update({
+                status: 'rejected',
+                rejection_reason: 'Utilisateur supprimé ou inexistant dans le système',
+                reviewed_at: new Date().toISOString(),
+                reviewed_by: user.id
+              })
+              .eq('id', requestId);
+              
+            throw new Error('Cet utilisateur n\'existe plus dans le système. La demande a été automatiquement rejetée.');
+          }
+          
           throw new Error(`Impossible de créer le profil utilisateur: ${createProfileError.message}`);
         }
 
         userProfile = newProfile;
         console.log('Profile created successfully:', userProfile);
       } else if (profileCheckError) {
-        // Autre erreur que "not found"
         console.error('Error checking user profile:', profileCheckError);
         throw new Error(`Erreur lors de la vérification du profil: ${profileCheckError.message}`);
       } else {
@@ -203,18 +218,7 @@ export default function AdminPanel() {
         console.log('User profile found:', userProfile);
       }
 
-      // Étape 2: Extraire le twitch_id depuis le stream_link
-      let extractedTwitchId = null;
-      try {
-        const twitchUrlMatch = request.stream_link.match(/twitch\.tv\/([a-zA-Z0-9_]+)/);
-        if (twitchUrlMatch) {
-          extractedTwitchId = twitchUrlMatch[1];
-        }
-      } catch (e) {
-        console.warn('Could not extract Twitch ID from stream link');
-      }
-
-      // Étape 3: Mettre à jour le statut de la demande
+      // Étape 2: Mettre à jour le statut de la demande
       const { error: updateRequestError } = await supabase
         .from('streamer_requests')
         .update({
@@ -230,6 +234,17 @@ export default function AdminPanel() {
       }
 
       console.log('Request status updated successfully');
+
+      // Étape 3: Extraire le twitch_id depuis le stream_link
+      let extractedTwitchId = null;
+      try {
+        const twitchUrlMatch = request.stream_link.match(/twitch\.tv\/([a-zA-Z0-9_]+)/);
+        if (twitchUrlMatch) {
+          extractedTwitchId = twitchUrlMatch[1];
+        }
+      } catch (e) {
+        console.warn('Could not extract Twitch ID from stream link');
+      }
 
       // Étape 4: Créer l'entrée streamer
       const streamerData = {

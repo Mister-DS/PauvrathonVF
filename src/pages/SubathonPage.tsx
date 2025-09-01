@@ -138,7 +138,13 @@ const SubathonPage = () => {
   };
 
   const launchRandomMinigame = async () => {
+    console.log('=== DEBUG MINIGAME ===');
+    console.log('Streamer:', streamer);
+    console.log('Active minigames:', streamer?.active_minigames);
+    console.log('Minigame components available:', Object.keys(minigameComponents));
+    
     if (!streamer || !streamer.active_minigames || streamer.active_minigames.length === 0) {
+      console.log('❌ Pas de mini-jeux actifs configurés');
       toast({
         title: "Pas de mini-jeu",
         description: "Aucun mini-jeu actif n'est configuré pour ce streamer.",
@@ -149,6 +155,7 @@ const SubathonPage = () => {
   
     // Sélectionner un mini-jeu aléatoire parmi ceux disponibles
     const randomGameCode = streamer.active_minigames[Math.floor(Math.random() * streamer.active_minigames.length)];
+    console.log('🎲 Jeu sélectionné:', randomGameCode);
     
     // Récupérer les détails du mini-jeu depuis la base de données
     const { data: minigameData, error: minigameError } = await supabase
@@ -157,11 +164,14 @@ const SubathonPage = () => {
       .eq('component_code', randomGameCode)
       .single();
       
+    console.log('🎮 Données du jeu depuis la DB:', minigameData);
+    console.log('❌ Erreur DB:', minigameError);
+      
     if (minigameError || !minigameData) {
-      console.error('Erreur mini-jeu:', minigameError);
+      console.error('❌ Erreur mini-jeu:', minigameError);
       toast({
         title: "Erreur",
-        description: `Impossible de charger le mini-jeu '${randomGameCode}'.`,
+        description: `Impossible de charger le mini-jeu '${randomGameCode}'. Vérifiez que ce jeu existe dans la base de données.`,
         variant: "destructive",
       });
       return;
@@ -171,7 +181,10 @@ const SubathonPage = () => {
 
     // Charger le composant du mini-jeu
     const gameComponent = minigameComponents[component_code];
+    console.log('🎯 Composant trouvé:', !!gameComponent);
+    
     if (gameComponent) {
+      console.log('✅ Lancement du mini-jeu:', component_code);
       setMinigameState({
         component: gameComponent,
         name: component_code, // Utiliser component_code comme nom d'affichage
@@ -198,11 +211,11 @@ const SubathonPage = () => {
       });
       setIsMinigameModalOpen(true);
     } else {
-      console.error('Composant introuvable:', component_code);
-      console.log('Composants disponibles:', Object.keys(minigameComponents));
+      console.error('❌ Composant introuvable:', component_code);
+      console.log('📋 Composants disponibles:', Object.keys(minigameComponents));
       toast({
         title: "Erreur",
-        description: `Le composant du mini-jeu '${component_code}' est introuvable.`,
+        description: `Le composant du mini-jeu '${component_code}' est introuvable. Composants disponibles: ${Object.keys(minigameComponents).join(', ')}`,
         variant: "destructive",
       });
     }
