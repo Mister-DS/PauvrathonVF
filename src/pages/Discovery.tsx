@@ -43,11 +43,6 @@ interface PauvrathonStreamer {
     twitch_display_name?: string;
     twitch_username?: string;
   };
-  profiles?: {
-    avatar_url?: string;
-    twitch_display_name?: string;
-    twitch_username?: string;
-  };
 }
 
 interface TwitchStream {
@@ -171,28 +166,27 @@ export default function Discovery() {
   });
 
   // Fonction pour obtenir l'URL de l'avatar d'un streamer.
-  const getStreamerAvatar = (streamer: any) => {
-    const profile = streamer.profile || streamer.profiles;
-    const displayName =
-      profile?.twitch_display_name ||
-      profile?.twitch_username ||
-      'Streamer';
+ // Fonction pour obtenir l'URL de l'avatar d'un streamer.
+const getStreamerAvatar = (streamer: PauvrathonStreamer) => {
+  const displayName =
+    streamer.profile?.twitch_display_name ||
+    streamer.profile?.twitch_username ||
+    'Streamer';
 
-    return (
-      profile?.avatar_url ||
-      `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName)}`
-    );
-  };
+  return (
+    streamer.profile?.avatar_url ||
+    `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName)}`
+  );
+};
 
-  // Fonction pour obtenir le nom d'affichage d'un streamer.
-  const getStreamerDisplayName = (streamer: any) => {
-    const profile = streamer.profile || streamer.profiles;
-    return (
-      profile?.twitch_display_name ||
-      profile?.twitch_username ||
-      'Streamer inconnu'
-    );
-  };
+// Fonction pour obtenir le nom d'affichage d'un streamer.
+const getStreamerDisplayName = (streamer: PauvrathonStreamer) => {
+  return (
+    streamer.profile?.twitch_display_name ||
+    streamer.profile?.twitch_username ||
+    'Streamer inconnu'
+  );
+};
 
   // Fonction pour formater la durée de stream.
   const formatStreamDuration = (startedAt: string) => {
