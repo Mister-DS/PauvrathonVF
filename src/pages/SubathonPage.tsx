@@ -11,7 +11,6 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-// Importation du dictionnaire de mini-jeux centralisé
 import { minigameComponents } from '@/components/minigames';
 import { TwitchPlayer } from '@/components/TwitchPlayer';
 import { Navigation } from '@/components/Navigation';
@@ -20,7 +19,7 @@ import { toast } from '@/hooks/use-toast';
 import { Streamer, Minigame } from '@/types';
 import {
   Maximize, Minimize, Trophy, RotateCcw, AlertTriangle,
-  Wifi, Play, Pause, Square, Clock, Settings, Gamepad2, Plus, Loader2
+  Wifi, Play, Pause, Square, Clock, Settings, Gamepad2, Plus, Loader2, Zap // Ajout de Zap ici
 } from 'lucide-react';
 
 const SubathonPage = () => {
@@ -38,7 +37,6 @@ const SubathonPage = () => {
     name: string;
   }>({ component: null, props: {}, name: '' });
 
-  // Récupération des données du streamer
   const fetchStreamer = async (streamerId: string) => {
     try {
       const { data, error } = await supabase
@@ -56,7 +54,6 @@ const SubathonPage = () => {
 
       if (error) throw error;
       
-      // Nouvelle logique : redirection si le streamer n'existe pas ou n'est pas en direct
       if (!data || data.status !== 'live') {
         toast({
           title: "Pauvrathon non disponible",
@@ -82,7 +79,6 @@ const SubathonPage = () => {
     }
   };
 
-  // Logique pour lancer un mini-jeu
   const launchRandomMinigame = async () => {
     if (!streamer || !streamer.active_minigames || streamer.active_minigames.length === 0) {
       toast({
@@ -93,10 +89,8 @@ const SubathonPage = () => {
       return;
     }
   
-    // Logique de sélection du jeu, etc.
     const randomGameId = streamer.active_minigames[Math.floor(Math.random() * streamer.active_minigames.length)];
     
-    // Récupérer le nom et le code du jeu depuis la BDD (supposé ici)
     const { data: minigameData, error: minigameError } = await supabase
         .from('minigames')
         .select('*')
@@ -120,7 +114,6 @@ const SubathonPage = () => {
         name: name,
         props: {
           streamerId: streamer.id,
-          // Autres props nécessaires...
         },
       });
       setIsMinigameModalOpen(true);
@@ -138,7 +131,6 @@ const SubathonPage = () => {
     if (id) {
       fetchStreamer(id);
       
-      // Souscription en temps réel aux changements du streamer
       const channel = supabase
         .channel(`public:streamers:id=eq.${id}`)
         .on(
@@ -146,7 +138,6 @@ const SubathonPage = () => {
           { event: '*', schema: 'public', table: 'streamers', filter: `id=eq.${id}` },
           (payload) => {
             const updatedStreamer = payload.new as Streamer;
-            // Si le statut passe hors ligne, rediriger
             if (updatedStreamer.status !== 'live' && updatedStreamer.status !== 'paused') {
               toast({
                 title: "Pauvrathon terminé",
@@ -175,11 +166,7 @@ const SubathonPage = () => {
     );
   }
 
-  // Affiche un message de chargement si les données sont en cours de fetch,
-  // ou si la page n'est pas encore prête à s'afficher.
   if (!streamer) {
-    // Si nous arrivons ici, c'est que la redirection a échoué pour une raison inconnue.
-    // Il vaut mieux ne rien afficher de visible et laisser la redirection se faire.
     return null;
   }
 
@@ -192,7 +179,6 @@ const SubathonPage = () => {
       <Navigation />
       <div className="flex-1 container mx-auto px-4 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Colonne de gauche: Lecteur Twitch et statistiques */}
           <div className="lg:col-span-2 space-y-8">
             <Card>
               <CardContent className="p-4">
@@ -269,7 +255,6 @@ const SubathonPage = () => {
             </Card>
           </div>
 
-          {/* Colonne de droite: Timer, Clics et Règles */}
           <div className="lg:col-span-1 space-y-8">
             <Card>
               <CardHeader>
