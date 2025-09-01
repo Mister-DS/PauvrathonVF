@@ -174,105 +174,122 @@ export default function AdminPanel() {
   };
 
   const handleApproveRequest = async (requestId: string) => {
-  if (processingRequest) return;
+    if (processingRequest) return;
   
-  setProcessingRequest(requestId);
+    setProcessingRequest(requestId);
   
-  try {
-    const request = requests.find(r => r.id === requestId);
-    if (!request || !request.user_id) {
-      throw new Error('Demande ou user_id manquant');
-    }
-
-    console.log('Processing request:', request);
-
-    // Étape 1: Mettre à jour le rôle de l'utilisateur vers 'streamer'
-    const { error: profileUpdateError } = await supabase
-      .from('profiles')
-      .update({ 
-        role: 'streamer',
-        updated_at: new Date().toISOString()
-      })
-      .eq('user_id', request.user_id);
-
-    if (profileUpdateError) {
-      if (profileUpdateError.code === '23503') {
-        // L'utilisateur n'existe pas dans la table auth.users
-        await supabase
-          .from('streamer_requests')
-          .update({
-            status: 'rejected',
-            rejection_reason: 'Utilisateur supprimé ou inexistant dans le système',
-            reviewed_at: new Date().toISOString(),
-            reviewed_by: user.id
-          })
-          .eq('id', requestId);
-        
-        throw new Error('Cet utilisateur n\'existe plus dans le système. La demande a été automatiquement rejetée.');
+    try {
+      const request = requests.find(r => r.id === requestId);
+      if (!request || !request.user_id) {
+        throw new Error('Demande ou user_id manquant');
       }
-      
-      throw new Error(`Erreur de mise à jour du rôle: ${profileUpdateError.message}`);
-    }
-
-    // Étape 2: Mettre à jour le statut de la demande vers 'approved'
-    const { error: updateRequestError } = await supabase
-      .from('streamer_requests')
-      .update({
-        status: 'approved',
-        reviewed_at: new Date().toISOString(),
-        reviewed_by: user.id
-      })
-      .eq('id', requestId);
-
-    if (updateRequestError) {
-      throw new Error(`Erreur de mise à jour de la demande: ${updateRequestError.message}`);
-    }
-
-    // Étape 3: Créer une entrée 'streamers' si elle n'existe pas
-    const { data: existingStreamer, error: streamerCheckError } = await supabase
-      .from('streamers')
-      .select('id')
-      .eq('user_id', request.user_id)
-      .single();
-
-    if (streamerCheckError && streamerCheckError.code !== 'PGRST116') {
+  
+      console.log('Processing request:', request);
+  
+      // Étape 1: Trouver le profil de l'utilisateur en utilisant le user_id de la demande
+      const { data: userProfile, error: profileCheckError } = await supabase
+        .from('profiles')
+        .select('user_id')
+        .eq('id', request.user_id)
+        .single();
+  
+      if (profileCheckError) {
+        if (profileCheckError.code === 'PGRST116') {
+          await supabase
+            .from('streamer_requests')
+            .update({
+              status: 'rejected',
+              rejection_reason: 'Profil utilisateur supprimé ou inexistant.',
+              reviewed_at: new Date().toISOString(),
+              reviewed_by: user.id
+            })
+            .eq('id', requestId);
+          throw new Error('Le profil de cet utilisateur n\'existe plus. La demande a été rejetée automatiquement.');
+        } else {
+          throw new Error(`Erreur lors de la vérification du profil: ${profileCheckError.message}`);
+        }
+      }
+  
+      // Étape 2: Mettre à jour le rôle de l'utilisateur dans la table 'profiles'
+      const { error: profileUpdateError } = await supabase
+        .from('profiles')
+        .update({
+          role: 'streamer',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', request.user_id);
+  
+      if (profileUpdateError) {
+        throw new Error(`Erreur de mise à jour du rôle: ${profileUpdateError.message}`);
+      }
+  
+      // Étape 3: Mettre à jour le statut de la demande dans la table 'streamer_requests'
+      const { error: updateRequestError } = await supabase
+        .from('streamer_requests')
+        .update({
+          status: 'approved',
+          reviewed_at: new Date().toISOString(),
+          reviewed_by: user.id
+        })
+        .eq('id', requestId);
+  
+      if (updateRequestError) {
+        throw new Error(`Erreur de mise à jour de la demande: ${updateRequestError.message}`);
+      }
+  
+      // Étape 4: Créer une entrée dans la table 'streamers' si elle n'existe pas
+      // Note : On utilise l'ID de l'utilisateur de la table 'auth.users' ici
+      const { data: existingStreamer, error: streamerCheckError } = await supabase
+        .from('streamers')
+        .select('id')
+        .eq('user_id', userProfile.user_id) // CORRECTION: Utiliser le user_id récupéré
+        .single();
+  
+      if (streamerCheckError && streamerCheckError.code !== 'PGRST116') {
         throw new Error(`Erreur lors de la vérification du streamer: ${streamerCheckError.message}`);
-    }
-
-    if (!existingStreamer) {
-      const twitchUrlMatch = request.stream_link.match(/twitch\.tv\/([a-zA-Z0-9_]+)/);
-      const extractedTwitchId = twitchUrlMatch ? twitchUrlMatch[1] : null;
-
-      const streamerData = {
-        user_id: request.user_id,
-        twitch_id: extractedTwitchId || 'unknown',
-        stream_title: `Pauvrathon de ${request.twitch_username}`,
-        // Ajoutez ici d'autres champs si nécessaire
-      };
-      
-      const { error: streamerInsertError } = await supabase.from('streamers').insert(streamerData);
-      if (streamerInsertError) {
-          throw new Error(`Erreur de création du streamer: ${streamerInsertError.message}`);
       }
+  
+      if (!existingStreamer) {
+        let extractedTwitchId = null;
+        try {
+          const twitchUrlMatch = request.stream_link.match(/twitch\.tv\/([a-zA-Z0-9_]+)/);
+          if (twitchUrlMatch) {
+            extractedTwitchId = twitchUrlMatch[1];
+          }
+        } catch (e) {
+          console.warn('Could not extract Twitch ID from stream link');
+        }
+  
+        const streamerData = {
+          user_id: userProfile.user_id, // CORRECTION: Utiliser le user_id récupéré
+          twitch_id: extractedTwitchId || 'unknown',
+          stream_title: `Pauvrathon de ${request.twitch_username}`,
+          // ... autres champs par défaut
+        };
+        
+        const { error: streamerInsertError } = await supabase.from('streamers').insert(streamerData);
+        if (streamerInsertError) {
+          throw new Error(`Erreur de création du streamer: ${streamerInsertError.message}`);
+        }
+      }
+  
+      toast({
+        title: "Demande approuvée",
+        description: `La demande de ${request.profiles?.twitch_username} a été traitée avec succès.`,
+      });
+  
+      await Promise.all([fetchRequests(), fetchStreamers()]);
+  
+    } catch (error: any) {
+      toast({
+        title: "Erreur",
+        description: error.message || "Impossible de traiter la demande.",
+        variant: "destructive",
+      });
+    } finally {
+      setProcessingRequest(null);
     }
-
-    toast({
-      title: "Demande approuvée",
-      description: `La demande de ${request.twitch_username} a été traitée avec succès.`,
-    });
-
-    await Promise.all([fetchRequests(), fetchStreamers()]);
-
-  } catch (error: any) {
-    toast({
-      title: "Erreur",
-      description: error.message || "Impossible de traiter la demande.",
-      variant: "destructive",
-    });
-  } finally {
-    setProcessingRequest(null);
-  }
-};
+  };
 
   const handleRejectRequest = async () => {
     if (!selectedRequestId || !rejectionReason.trim()) {
