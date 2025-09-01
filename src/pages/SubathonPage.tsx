@@ -191,7 +191,7 @@ const SubathonPage = () => {
         .select('*')
         .eq('is_active', true);
       if (error) throw error;
-      setDynamicGames(data || []);
+      setDynamicGames(data as Minigame[] || []);
     } catch (error) {
       console.error('Error fetching dynamic games:', error);
       toast({

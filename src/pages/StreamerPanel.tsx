@@ -238,7 +238,7 @@ export default function StreamerPanel() {
         setInitialMinutes(Math.floor(((data.initial_duration || 7200) % 3600) / 60));
         setTimeMode(data.time_mode || 'fixed');
         setFixedTime(data.time_increment || 30);
-        setMinRandomTime((data.min_random_time ?? data.time_increment) || 10);
+        setMinRandomTime((data as any).min_random_time ?? data.time_increment ?? 10);
         setMaxRandomTime(data.max_random_time || 60);
         setClicksRequired(data.clicks_required || 100);
         setCooldownTime(data.cooldown_seconds || 30);
@@ -265,7 +265,7 @@ export default function StreamerPanel() {
 
       if (error) throw error;
       
-      setAvailableMinigames(data || []);
+      setAvailableMinigames((data || []).map(item => ({ ...item, code: '' })));
     } catch (error: any) {
       console.error('Error fetching minigames:', error);
     }

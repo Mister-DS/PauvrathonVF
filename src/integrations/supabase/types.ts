@@ -63,7 +63,6 @@ export type Database = {
       }
       minigames: {
         Row: {
-          code: string
           created_at: string
           created_by: string | null
           description: string | null
@@ -72,7 +71,6 @@ export type Database = {
           name: string
         }
         Insert: {
-          code: string
           created_at?: string
           created_by?: string | null
           description?: string | null
@@ -81,7 +79,6 @@ export type Database = {
           name: string
         }
         Update: {
-          code?: string
           created_at?: string
           created_by?: string | null
           description?: string | null
@@ -132,6 +129,7 @@ export type Database = {
           created_at: string
           id: string
           motivation: string
+          rejection_reason: string | null
           reviewed_at: string | null
           reviewed_by: string | null
           status: string | null
@@ -143,6 +141,7 @@ export type Database = {
           created_at?: string
           id?: string
           motivation: string
+          rejection_reason?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           status?: string | null
@@ -154,6 +153,7 @@ export type Database = {
           created_at?: string
           id?: string
           motivation?: string
+          rejection_reason?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           status?: string | null

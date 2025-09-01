@@ -130,7 +130,7 @@ export default function AdminPanel() {
 
       if (error) throw error;
 
-      setMinigames(data || []);
+      setMinigames(data as Minigame[] || []);
     } catch (error) {
       console.error('Error fetching minigames:', error);
     } finally {

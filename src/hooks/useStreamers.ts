@@ -46,7 +46,7 @@ export function useStreamers() {
         current_clicks: item.current_clicks,
         clicks_required: item.clicks_required,
         total_time_added: item.total_time_added,
-        profile: item.profiles,
+        profile: item.profiles as any,
         // Add required fields with defaults
         user_id: '',
         twitch_id: '',
@@ -54,7 +54,7 @@ export function useStreamers() {
         cooldown_seconds: 300,
         active_minigames: [],
         status: item.is_live ? 'live' : 'offline' as 'live' | 'offline' | 'paused' | 'ended',
-        time_mode: 'fixed',
+        time_mode: 'fixed' as 'fixed' | 'random',
         max_random_time: 60,
         min_random_time: 10,
         initial_duration: 7200,
@@ -63,7 +63,7 @@ export function useStreamers() {
         total_paused_duration: 0,
         created_at: '',
         updated_at: '',
-        profiles: item.profiles
+        profiles: item.profiles as any
       }));
       setStreamers(transformedData);
 

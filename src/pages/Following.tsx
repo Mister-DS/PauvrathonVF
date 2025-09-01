@@ -93,14 +93,16 @@ const useFollowedStreamers = (user: any) => {
 
       if (error) throw error;
       
-      const followedStreamers = (data || []).map(f => {
-        const streamer = f.streamers;
-        if (!streamer || !streamer.profiles) return null;
-        return {
-          ...streamer,
-          profile: streamer.profiles
-        };
-      }).filter(Boolean);
+      const followedStreamers = (data || [])
+        .map(f => {
+          if (!f?.streamers) return null;
+          const streamer = f.streamers as any;
+          return {
+            ...streamer,
+            profile: streamer.profiles
+          };
+        })
+        .filter(Boolean);
       
       // Prioriser les streamers en live
       const sortedStreamers = followedStreamers.sort((a, b) => {
