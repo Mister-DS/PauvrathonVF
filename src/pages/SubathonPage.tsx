@@ -88,21 +88,26 @@ const SubathonPage = () => {
     
     try {
       // Incrémenter le compteur de clics
-      const { data: updatedStreamer, error } = await supabase
+      const newClickCount = (streamer.current_clicks || 0) + 1;
+      
+      const { error } = await supabase
         .from('streamers')
         .update({ 
-          current_clicks: (streamer.current_clicks || 0) + 1,
+          current_clicks: newClickCount,
           updated_at: new Date().toISOString()
         })
-        .eq('id', streamer.id)
-        .select()
-        .single();
+        .eq('id', streamer.id);
 
       if (error) throw error;
 
       // Vérifier si on a atteint le seuil pour déclencher un mini-jeu
-      const newClickCount = updatedStreamer.current_clicks;
       if (newClickCount >= streamer.clicks_required) {
+        toast({
+          title: "Mini-jeu déclenché !",
+          description: "Un mini-jeu va se lancer !",
+        });
+        
+        // Lancer le mini-jeu
         await launchRandomMinigame();
         
         // Remettre les clics à zéro après avoir déclenché le jeu
@@ -113,12 +118,12 @@ const SubathonPage = () => {
             updated_at: new Date().toISOString()
           })
           .eq('id', streamer.id);
+      } else {
+        toast({
+          title: "Clic enregistré !",
+          description: `${streamer.clicks_required - newClickCount} clics restants pour déclencher un mini-jeu.`,
+        });
       }
-
-      toast({
-        title: "Clic enregistré !",
-        description: `${streamer.clicks_required - newClickCount} clics restants pour déclencher un mini-jeu.`,
-      });
 
     } catch (error) {
       console.error('Error handling click:', error);
@@ -153,22 +158,23 @@ const SubathonPage = () => {
       .single();
       
     if (minigameError || !minigameData) {
+      console.error('Erreur mini-jeu:', minigameError);
       toast({
         title: "Erreur",
-        description: "Impossible de charger les données du mini-jeu.",
+        description: `Impossible de charger le mini-jeu '${randomGameCode}'.`,
         variant: "destructive",
       });
       return;
     }
 
-    const { name, component_code } = minigameData;
+    const { component_code, description } = minigameData;
 
     // Charger le composant du mini-jeu
     const gameComponent = minigameComponents[component_code];
     if (gameComponent) {
       setMinigameState({
         component: gameComponent,
-        name: name,
+        name: component_code, // Utiliser component_code comme nom d'affichage
         props: {
           streamerId: streamer.id,
           onGameEnd: (victory: boolean) => {
@@ -192,6 +198,8 @@ const SubathonPage = () => {
       });
       setIsMinigameModalOpen(true);
     } else {
+      console.error('Composant introuvable:', component_code);
+      console.log('Composants disponibles:', Object.keys(minigameComponents));
       toast({
         title: "Erreur",
         description: `Le composant du mini-jeu '${component_code}' est introuvable.`,
