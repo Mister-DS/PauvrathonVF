@@ -93,9 +93,14 @@ const useFollowedStreamers = (user: any) => {
 
       if (error) throw error;
       
-      // La requête SQL renvoie un tableau d'objets `streamers` directement,
-      // donc pas besoin de map()
-      const followedStreamers = (data || []).map(f => f.streamers).filter(Boolean);
+      const followedStreamers = (data || []).map(f => {
+        const streamer = f.streamers;
+        if (!streamer || !streamer.profiles) return null;
+        return {
+          ...streamer,
+          profile: streamer.profiles
+        };
+      }).filter(Boolean);
       
       // Prioriser les streamers en live
       const sortedStreamers = followedStreamers.sort((a, b) => {
@@ -104,7 +109,7 @@ const useFollowedStreamers = (user: any) => {
         return 0;
       });
 
-      setPauvrathonFollows(sortedStreamers as PauvrathonStreamer[]);
+      setPauvrathonFollows(sortedStreamers);
       
     } catch (error) {
       console.error('Erreur récupération follows Pauvrathon:', error);

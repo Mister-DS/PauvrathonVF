@@ -249,7 +249,7 @@ export default function StreamOverlay() {
       </div>
 
       {/* CSS pour les animations */}
-      <style jsx>{`
+      <style>{`
         @keyframes pulse-glow {
           0%, 100% {
             box-shadow: 0 0 20px rgba(147, 51, 234, 0.5);

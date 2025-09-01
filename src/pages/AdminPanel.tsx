@@ -38,6 +38,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 
 // Interfaces pour un typage plus précis
 interface DetailedStreamerRequest extends StreamerRequest {
+  rejection_reason?: string;
   profiles?: {
     twitch_display_name?: string;
     avatar_url?: string;
@@ -299,6 +300,7 @@ export default function AdminPanel() {
         .insert({
           name: newMinigameName,
           description: newMinigameDescription,
+          code: `// Code pour ${newMinigameName}\nconst game = {\n  name: '${newMinigameName}',\n  description: '${newMinigameDescription}'\n};\n\nexport default game;`,
           is_active: true,
           created_by: user.id
         });

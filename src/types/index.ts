@@ -49,6 +49,7 @@ export interface Streamer {
   stream_title?: string;
   time_mode: 'fixed' | 'random';
   max_random_time: number;
+  min_random_time?: number;
   initial_duration: number;
   stream_started_at?: string | null;
   pause_started_at?: string | null;
@@ -56,6 +57,41 @@ export interface Streamer {
   created_at: string;
   updated_at: string;
   profile?: Profile | null;
+  profiles?: Profile | null;
+}
+
+export interface DetailedStreamerRequest extends StreamerRequest {
+  rejection_reason?: string;
+}
+
+export interface TwitchStream {
+  id: string;
+  user_id: string;
+  user_name: string;
+  user_login: string;
+  display_name: string;
+  title: string;
+  game_name: string;
+  viewer_count: number;
+  thumbnail_url: string;
+  started_at: string;
+  language: string;
+  tags: string[];
+  profile_image_url: string;
+}
+
+export interface PauvrathonStreamer {
+  id: string;
+  is_live: boolean;
+  stream_title?: string;
+  current_clicks: number;
+  clicks_required: number;
+  total_time_added: number;
+  profile: {
+    avatar_url?: string;
+    twitch_display_name?: string;
+    twitch_username?: string;
+  };
 }
 
 export interface SubathonStats {

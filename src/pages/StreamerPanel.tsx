@@ -20,7 +20,7 @@ import {
   Clock,
   Timer,
   Gamepad2,
-  Broadcast,
+  Radio,
   Play,
   Pause,
   RotateCcw,
@@ -46,7 +46,7 @@ interface StreamerSettings {
   twitch_id: string;
   time_mode: 'fixed' | 'random';
   time_increment: number;
-  min_random_time: number;
+  min_random_time?: number;
   max_random_time: number;
   clicks_required: number;
   cooldown_seconds: number;
@@ -238,7 +238,7 @@ export default function StreamerPanel() {
         setInitialMinutes(Math.floor(((data.initial_duration || 7200) % 3600) / 60));
         setTimeMode(data.time_mode || 'fixed');
         setFixedTime(data.time_increment || 30);
-        setMinRandomTime(data.min_random_time || 10);
+        setMinRandomTime((data.min_random_time ?? data.time_increment) || 10);
         setMaxRandomTime(data.max_random_time || 60);
         setClicksRequired(data.clicks_required || 100);
         setCooldownTime(data.cooldown_seconds || 30);
@@ -387,7 +387,7 @@ export default function StreamerPanel() {
         stream_title: streamer.stream_title,
         time_mode: timeMode,
         time_increment: fixedTime,
-        min_random_time: minRandomTime,
+        ...(timeMode === 'random' && { min_random_time: minRandomTime }),
         max_random_time: maxRandomTime,
         clicks_required: clicksRequired,
         cooldown_seconds: cooldownTime,

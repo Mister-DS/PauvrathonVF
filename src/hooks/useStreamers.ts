@@ -38,9 +38,34 @@ export function useStreamers() {
         throw error;
       }
 
-      // Correction: Data is already in the correct format with a 'profiles' object, 
-      // so no unsafe mapping or casting is needed.
-      setStreamers(data || []);
+      // Transform data to match Streamer interface with all required fields
+      const transformedData = (data || []).map(item => ({
+        id: item.id,
+        is_live: item.is_live,
+        stream_title: item.stream_title,
+        current_clicks: item.current_clicks,
+        clicks_required: item.clicks_required,
+        total_time_added: item.total_time_added,
+        profile: item.profiles,
+        // Add required fields with defaults
+        user_id: '',
+        twitch_id: '',
+        time_increment: 30,
+        cooldown_seconds: 300,
+        active_minigames: [],
+        status: item.is_live ? 'live' : 'offline' as 'live' | 'offline' | 'paused' | 'ended',
+        time_mode: 'fixed',
+        max_random_time: 60,
+        min_random_time: 10,
+        initial_duration: 7200,
+        stream_started_at: null,
+        pause_started_at: null,
+        total_paused_duration: 0,
+        created_at: '',
+        updated_at: '',
+        profiles: item.profiles
+      }));
+      setStreamers(transformedData);
 
     } catch (error) {
       console.error('Error fetching streamers:', error);

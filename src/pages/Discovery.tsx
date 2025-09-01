@@ -171,28 +171,25 @@ export default function Discovery() {
   });
 
   // Fonction pour obtenir l'URL de l'avatar d'un streamer.
-  const getStreamerAvatar = (streamer: PauvrathonStreamer) => {
+  const getStreamerAvatar = (streamer: any) => {
+    const profile = streamer.profile || streamer.profiles;
     const displayName =
-      streamer.profile?.twitch_display_name ||
-      streamer.profiles?.twitch_display_name ||
-      streamer.profile?.twitch_username ||
-      streamer.profiles?.twitch_username ||
+      profile?.twitch_display_name ||
+      profile?.twitch_username ||
       'Streamer';
 
     return (
-      streamer.profile?.avatar_url ||
-      streamer.profiles?.avatar_url ||
+      profile?.avatar_url ||
       `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName)}`
     );
   };
 
   // Fonction pour obtenir le nom d'affichage d'un streamer.
-  const getStreamerDisplayName = (streamer: PauvrathonStreamer) => {
+  const getStreamerDisplayName = (streamer: any) => {
+    const profile = streamer.profile || streamer.profiles;
     return (
-      streamer.profile?.twitch_display_name ||
-      streamer.profiles?.twitch_display_name ||
-      streamer.profile?.twitch_username ||
-      streamer.profiles?.twitch_username ||
+      profile?.twitch_display_name ||
+      profile?.twitch_username ||
       'Streamer inconnu'
     );
   };
@@ -508,7 +505,7 @@ export default function Discovery() {
                         {/* Header with Avatar and Name */}
                         <div className="flex items-center space-x-3 mb-3">
                           <Avatar className="h-10 w-10">
-                            <AvatarImage src={stream.profile_image_url} alt={stream.user_name} />
+                            <AvatarImage src={stream.thumbnail_url?.replace('{width}', '100').replace('{height}', '100')} alt={stream.user_name} />
                             <AvatarFallback>{stream.user_name.charAt(0).toUpperCase()}</AvatarFallback>
                           </Avatar>
                           <div className="flex-1">
