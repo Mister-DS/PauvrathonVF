@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { minigameComponents } from '@/components/minigames';
 import { TwitchPlayer } from '@/components/TwitchPlayer';
 import { Navigation } from '@/components/Navigation';
+import { UniversalTimer } from '@/components/UniversalTimer';
 import { toast } from '@/hooks/use-toast';
 import { Streamer, Minigame } from '@/types';
 import {
@@ -39,8 +40,6 @@ const SubathonPage = () => {
   const [countdown, setCountdown] = useState(0);
   const [gameWon, setGameWon] = useState(false);
   const [streamData, setStreamData] = useState<any>(null);
-  const [currentTime, setCurrentTime] = useState(new Date());
-  const [timeRemaining, setTimeRemaining] = useState<string>('');
   const [playerLoaded, setPlayerLoaded] = useState(false);
   const [forceStreamOnline, setForceStreamOnline] = useState(false);
 
@@ -75,86 +74,37 @@ const SubathonPage = () => {
     return () => clearTimeout(timer);
   }, [countdown, showMinigame, failedAttempts]);
 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const now = new Date();
-      setCurrentTime(now);
-      if (!streamer) {
-        setTimeRemaining("--:--:--");
-        return;
-      }
-      const baseDuration = streamer.initial_duration || 7200;
-      const totalDuration = baseDuration + (streamer.total_time_added || 0);
-      if (streamer.status === 'live' && streamer.stream_started_at) {
-        const startTime = new Date(streamer.stream_started_at).getTime();
-        let elapsed = Math.floor((now.getTime() - startTime) / 1000);
-        if (streamer.total_paused_duration) {
-          elapsed = Math.max(0, elapsed - streamer.total_paused_duration);
-        }
-        const remaining = Math.max(0, totalDuration - elapsed);
-        if (remaining > 0) {
-          const hours = Math.floor(remaining / 3600);
-          const minutes = Math.floor((remaining % 3600) / 60);
-          const seconds = remaining % 60;
-          setTimeRemaining(`${hours}h ${minutes}m ${seconds}s`);
-        } else {
-          setTimeRemaining("Terminé");
-        }
-      } else if (streamer.status === 'paused') {
-        if (streamer.pause_started_at && streamer.stream_started_at) {
-          const startTime = new Date(streamer.stream_started_at).getTime();
-          const pauseTime = new Date(streamer.pause_started_at).getTime();
-          let elapsedWhenPaused = Math.floor((pauseTime - startTime) / 1000);
-          if (streamer.total_paused_duration) {
-            elapsedWhenPaused = Math.max(0, elapsedWhenPaused - streamer.total_paused_duration);
-          }
-          const remainingWhenPaused = Math.max(0, totalDuration - elapsedWhenPaused);
-          const hours = Math.floor(remainingWhenPaused / 3600);
-          const minutes = Math.floor((remainingWhenPaused % 3600) / 60);
-          const seconds = remainingWhenPaused % 60;
-          setTimeRemaining(`${hours}h ${minutes}m ${seconds}s`);
-        } else {
-          const hours = Math.floor(totalDuration / 3600);
-          const minutes = Math.floor((totalDuration % 3600) / 60);
-          const seconds = totalDuration % 60;
-          setTimeRemaining(`${hours}h ${minutes}m ${seconds}s`);
-        }
-      } else if (streamer.status === 'ended') {
-        setTimeRemaining("Terminé");
-      } else {
-        const hours = Math.floor(totalDuration / 3600);
-        const minutes = Math.floor((totalDuration % 3600) / 60);
-        const seconds = totalDuration % 60;
-        setTimeRemaining(`${hours}h ${minutes}m ${seconds}s`);
-      }
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [streamer?.status, streamer?.total_time_added, streamer?.initial_duration, streamer?.stream_started_at, streamer?.pause_started_at, streamer?.total_paused_duration]);
-
   const fetchStreamerData = async () => {
     if (!id) return;
     try {
+      // CORRECTION : Récupérer aussi total_elapsed_time
       const { data: streamerData, error: streamerError } = await supabase
         .from('streamers')
-        .select('*')
+        .select('*, total_elapsed_time')
         .eq('id', id)
         .single();
+        
       if (streamerError) throw streamerError;
       if (!streamerData) throw new Error('Streamer non trouvé');
+      
       const { data: profileData, error: profileError } = await supabase
         .from('profiles')
         .select('*')
         .eq('user_id', streamerData.user_id)
         .single();
+        
       if (profileError) console.warn('Profil non trouvé:', profileError);
+      
       const completeStreamerData = {
         ...streamerData,
         profile: profileData || null
       };
+      
       setStreamer(completeStreamerData as unknown as Streamer);
       setCurrentClicks(streamerData.current_clicks || 0);
       setClicksRequired(streamerData.clicks_required || 10);
       setIsStreamerOwner(user?.id === streamerData.user_id);
+      
       if (user && user.id === '5cee82f9-1c72-4a76-abdc-021976598a77') {
         setSimulationMode(true);
         toast({
@@ -162,10 +112,12 @@ const SubathonPage = () => {
           description: "Vous pouvez maintenant tester les clics et mini-jeux !",
         });
       }
+      
       if (streamerData.initial_duration) {
         setInitialHours(Math.floor(streamerData.initial_duration / 3600));
         setInitialMinutes(Math.floor((streamerData.initial_duration % 3600) / 60));
       }
+      
       const isLive = streamerData.status === 'live';
       if (playerLoaded && !forceStreamOnline) {
       } else {
@@ -231,20 +183,42 @@ const SubathonPage = () => {
     if (!streamer || !isStreamerOwner) return;
     try {
       const now = new Date();
+      let updateData: any = {
+        status: 'live',
+        is_live: true,
+        stream_started_at: now.toISOString(),
+        pause_started_at: null,
+        updated_at: now.toISOString()
+      };
+
+      // CORRECTION : Gestion des pauses comme dans StreamerPanel
+      if (streamer.status === 'paused') {
+        // REPRISE APRÈS PAUSE
+        if (streamer.stream_started_at && streamer.pause_started_at) {
+          const streamStart = new Date(streamer.stream_started_at).getTime();
+          const pauseStart = new Date(streamer.pause_started_at).getTime();
+          const elapsedBeforePause = Math.floor((pauseStart - streamStart) / 1000);
+          
+          const totalElapsed = (streamer.total_elapsed_time || 0) + elapsedBeforePause;
+          updateData.total_elapsed_time = totalElapsed;
+        }
+      } else {
+        // PREMIER DÉMARRAGE
+        updateData.total_elapsed_time = 0;
+      }
+
       const { error } = await supabase
         .from('streamers')
-        .update({
-          status: 'live',
-          is_live: true,
-          stream_started_at: now.toISOString(),
-          pause_started_at: null
-        })
+        .update(updateData)
         .eq('id', streamer.id);
+      
       if (error) throw error;
+      
       toast({
-        title: "Pauvrathon démarré!",
-        description: "Le pauvrathon a commencé. Bonne chance!",
+        title: streamer.status === 'paused' ? "Pauvrathon repris!" : "Pauvrathon démarré!",
+        description: "Le pauvrathon est maintenant en cours. Bonne chance!",
       });
+      
       await fetchStreamerData();
     } catch (error) {
       console.error('Error starting pauvrathon:', error);
@@ -260,19 +234,34 @@ const SubathonPage = () => {
     if (!streamer || !isStreamerOwner) return;
     try {
       const now = new Date();
+      let updateData: any = {
+        status: 'paused',
+        is_live: false,
+        pause_started_at: now.toISOString(),
+        updated_at: now.toISOString()
+      };
+
+      // CORRECTION : Calculer et stocker le temps écoulé lors de la pause
+      if (streamer.stream_started_at) {
+        const streamStart = new Date(streamer.stream_started_at).getTime();
+        const elapsedSinceStart = Math.floor((now.getTime() - streamStart) / 1000);
+        const totalElapsed = (streamer.total_elapsed_time || 0) + elapsedSinceStart;
+        
+        updateData.total_elapsed_time = totalElapsed;
+      }
+
       const { error } = await supabase
         .from('streamers')
-        .update({
-          status: 'paused',
-          is_live: false,
-          pause_started_at: now.toISOString()
-        })
+        .update(updateData)
         .eq('id', streamer.id);
+        
       if (error) throw error;
+      
       toast({
         title: "Pauvrathon en pause",
         description: "Le pauvrathon a été mis en pause.",
       });
+      
       await fetchStreamerData();
     } catch (error) {
       console.error('Error pausing pauvrathon:', error);
@@ -292,14 +281,20 @@ const SubathonPage = () => {
         .update({
           status: 'ended',
           is_live: false,
-          pause_started_at: null
+          pause_started_at: null,
+          total_elapsed_time: 0,
+          current_clicks: 0,
+          total_time_added: 0
         })
         .eq('id', streamer.id);
+        
       if (error) throw error;
+      
       toast({
         title: "Pauvrathon terminé",
         description: "Le pauvrathon a été arrêté.",
       });
+      
       await fetchStreamerData();
     } catch (error) {
       console.error('Error stopping pauvrathon:', error);
@@ -623,12 +618,21 @@ const SubathonPage = () => {
               </div>
             </div>
             <p className="text-muted-foreground text-xl mb-2">Pauvrathon en cours</p>
-            {(streamer?.status === 'live' || streamer?.status === 'paused') && timeRemaining && (
+            {(streamer?.status === 'live' || streamer?.status === 'paused') && (
               <div className="flex items-center gap-4 text-lg font-bold">
-                <span className={`${streamer?.status === 'paused' ? 'text-yellow-500' : 'text-orange-500'}`}>
-                  Temps restant: {timeRemaining}
-                  {streamer?.status === 'paused' && <span className="ml-2 text-yellow-500">(EN PAUSE)</span>}
-                </span>
+                <span>Temps restant: </span>
+                <UniversalTimer
+                  status={streamer.status}
+                  streamStartedAt={streamer.stream_started_at}
+                  pauseStartedAt={streamer.pause_started_at}
+                  initialDuration={streamer.initial_duration || 7200}
+                  totalTimeAdded={streamer.total_time_added || 0}
+                  totalElapsedTime={streamer.total_elapsed_time || 0}
+                  formatStyle="long"
+                  showStatus={false}
+                  className={`${streamer?.status === 'paused' ? 'text-yellow-500' : 'text-orange-500'}`}
+                />
+                {streamer?.status === 'paused' && <span className="ml-2 text-yellow-500">(EN PAUSE)</span>}
                 {streamData?.viewer_count && (
                   <span className="text-purple-500">{streamData.viewer_count} spectateurs</span>
                 )}

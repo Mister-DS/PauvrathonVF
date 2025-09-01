@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { UniversalTimer } from '@/components/UniversalTimer';
 import { Navigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -1084,14 +1085,17 @@ export default function StreamerPanel() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <PauvrathonTimer
-                  status={streamer?.status}
-                  startTime={streamer?.stream_started_at}
-                  initialDuration={streamer?.initial_duration}
-                  addedTime={streamer?.total_time_added}
-                  pauseStartedAt={streamer?.pause_started_at}
-                  totalTimeElapsed={streamer?.total_elapsed_time || 0}
-                />
+                <UniversalTimer
+  status={streamer?.status}
+  streamStartedAt={streamer?.stream_started_at}
+  pauseStartedAt={streamer?.pause_started_at}
+  initialDuration={streamer?.initial_duration}
+  totalTimeAdded={streamer?.total_time_added}
+  totalElapsedTime={streamer?.total_elapsed_time || 0}
+  formatStyle="colon"
+  showStatus={true}
+  className="text-3xl font-mono font-bold text-primary mb-2"
+/>
               </CardContent>
               <CardFooter className="flex flex-col space-y-4 pt-0">
                 <div className="flex gap-2 w-full">

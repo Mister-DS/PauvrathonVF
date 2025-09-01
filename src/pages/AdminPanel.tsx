@@ -139,53 +139,66 @@ export default function AdminPanel() {
   };
 
   const handleApproveRequest = async (requestId: string) => {
-    try {
-      const request = requests.find(r => r.id === requestId);
-      if (!request) return;
+  try {
+    const request = requests.find(r => r.id === requestId);
+    if (!request) return;
 
-      const { error: updateError } = await supabase
-        .from('streamer_requests')
-        .update({
-          status: 'approved',
-          reviewed_at: new Date().toISOString(),
-          reviewed_by: user.id
-        })
-        .eq('id', requestId);
+    // Récupérer le profil pour obtenir le twitch_id
+    const { data: profileData, error: profileFetchError } = await supabase
+      .from('profiles')
+      .select('twitch_id')
+      .eq('user_id', request.user_id)
+      .single();
 
-      if (updateError) throw updateError;
+    if (profileFetchError) throw profileFetchError;
 
-      const { error: streamerError } = await supabase
-        .from('streamers')
-        .insert({
-          user_id: request.user_id,
-          twitch_id: request.twitch_username,
-        });
+    // Étape 1: Mettre à jour le statut de la demande de streamer
+    const { error: updateRequestError } = await supabase
+      .from('streamer_requests')
+      .update({
+        status: 'approved',
+        reviewed_at: new Date().toISOString(),
+        reviewed_by: user.id
+      })
+      .eq('id', requestId);
 
-      if (streamerError) throw streamerError;
+    if (updateRequestError) throw updateRequestError;
 
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({ role: 'streamer' })
-        .eq('user_id', request.user_id);
-
-      if (profileError) throw profileError;
-
-      toast({
-        title: "Demande approuvée",
-        description: `La demande de ${request.twitch_username} a été approuvée.`,
+    // Étape 2: Insérer l'utilisateur dans la table des streamers
+    const { error: streamerInsertError } = await supabase
+      .from('streamers')
+      .insert({
+        user_id: request.user_id,
+        // Utilisez le twitch_id récupéré du profil
+        twitch_id: profileData.twitch_id, 
       });
 
-      fetchRequests();
-      fetchStreamers();
-    } catch (error: any) {
-      console.error('Error handling request:', error);
-      toast({
-        title: "Erreur",
-        description: "Impossible de traiter la demande.",
-        variant: "destructive",
-      });
-    }
-  };
+    if (streamerInsertError) throw streamerInsertError;
+
+    // Étape 3: Mettre à jour le rôle de l'utilisateur dans la table des profils
+    const { error: profileUpdateError } = await supabase
+      .from('profiles')
+      .update({ role: 'streamer' })
+      .eq('user_id', request.user_id);
+
+    if (profileUpdateError) throw profileUpdateError;
+
+    toast({
+      title: "Demande approuvée",
+      description: `La demande de ${request.profiles?.twitch_username} a été approuvée.`,
+    });
+
+    fetchRequests();
+    fetchStreamers();
+  } catch (error: any) {
+    console.error('Error handling request:', error);
+    toast({
+      title: "Erreur",
+      description: "Impossible de traiter la demande.",
+      variant: "destructive",
+    });
+  }
+};
 
   const handleRejectRequest = async () => {
     if (!selectedRequestId || !rejectionReason.trim()) {

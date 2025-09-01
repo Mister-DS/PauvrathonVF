@@ -7,6 +7,22 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
 }
 
+// Fonction de déchiffrement (doit correspondre à celle dans twitch-auth)
+function decryptToken(encryptedToken: string): string {
+  try {
+    const key = Deno.env.get('TOKEN_ENCRYPTION_KEY') || 'default-key-change-this';
+    const encrypted = atob(encryptedToken); // Décoder de base64
+    let decrypted = '';
+    for (let i = 0; i < encrypted.length; i++) {
+      decrypted += String.fromCharCode(encrypted.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+    }
+    return decrypted;
+  } catch (error) {
+    console.error('Token decryption failed:', error);
+    return '';
+  }
+}
+
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -34,22 +50,50 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Get user profile with Twitch data
+    // SÉCURITÉ AMÉLIORÉE : Essayer d'abord la table sécurisée
+    let accessToken = null;
+    let twitchId = null;
+
+    // 1. Essayer de récupérer le token depuis la table sécurisée
+    try {
+      const { data: tokenData, error: tokenError } = await supabaseClient
+        .from('user_tokens')
+        .select('encrypted_access_token')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!tokenError && tokenData?.encrypted_access_token) {
+        accessToken = decryptToken(tokenData.encrypted_access_token);
+        console.log('🔐 Token récupéré depuis la table sécurisée');
+      }
+    } catch (error) {
+      console.log('ℹ️ Table sécurisée non disponible, utilisation du fallback');
+    }
+
+    // 2. Récupérer les informations du profil (toujours nécessaire pour twitch_id)
     const { data: profile, error: profileError } = await supabaseClient
       .from('profiles')
-      .select('twitch_id, twitch_access_token')
+      .select('twitch_id, twitch_access_token') // Garde twitch_access_token comme fallback
       .eq('user_id', user.id)
       .single()
 
     if (profileError || !profile?.twitch_id) {
       return new Response(
         JSON.stringify({ 
-          streams: [], // CORRECTION: utiliser "streams" comme attendu par le frontend
+          streams: [],
           total: 0,
           message: 'Compte Twitch non connecté. Connectez votre compte dans les paramètres pour voir vos follows.' 
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
+    }
+
+    twitchId = profile.twitch_id;
+
+    // 3. Fallback vers l'ancien système si pas de token sécurisé
+    if (!accessToken && profile.twitch_access_token) {
+      accessToken = profile.twitch_access_token;
+      console.log('⚠️ Utilisation du token fallback depuis profiles');
     }
 
     const twitchClientId = Deno.env.get('TWITCH_CLIENT_ID')
@@ -62,8 +106,6 @@ Deno.serve(async (req) => {
       )
     }
 
-    let accessToken = profile.twitch_access_token;
-    
     // Si pas de token utilisateur, obtenir un token d'app
     if (!accessToken) {
       const tokenResponse = await fetch('https://id.twitch.tv/oauth2/token', {
@@ -89,15 +131,21 @@ Deno.serve(async (req) => {
     let followedStreams = []
 
     // ESSAYER D'ABORD DE RÉCUPÉRER LES VRAIS FOLLOWS (nécessite un token utilisateur)
-    if (profile.twitch_access_token) {
+    const hasUserToken = profile.twitch_access_token || (await supabaseClient
+      .from('user_tokens')
+      .select('encrypted_access_token')
+      .eq('user_id', user.id)
+      .single()).data?.encrypted_access_token;
+
+    if (hasUserToken && twitchId) {
       try {
         // Récupérer la liste des follows
         const followsResponse = await fetch(
-          `https://api.twitch.tv/helix/channels/followed?user_id=${profile.twitch_id}&first=100`,
+          `https://api.twitch.tv/helix/channels/followed?user_id=${twitchId}&first=100`,
           {
             headers: {
               'Client-ID': twitchClientId,
-              'Authorization': `Bearer ${profile.twitch_access_token}`,
+              'Authorization': `Bearer ${accessToken}`,
             },
           }
         )
@@ -162,7 +210,7 @@ Deno.serve(async (req) => {
                     profile_image_url: userInfo?.profile_image_url || '',
                     display_name: userInfo?.display_name || stream.user_name,
                   }
-                }).sort((a: any, b: any) => b.viewer_count - a.viewer_count) // Trier par audience
+                }).sort((a: any, b: any) => b.viewer_count - a.viewer_count)
               }
             }
           }
@@ -177,7 +225,7 @@ Deno.serve(async (req) => {
     if (followedStreams.length === 0) {
       try {
         const popularStreamsResponse = await fetch(
-          'https://api.twitch.tv/helix/streams?first=20', // Streams populaires toutes catégories
+          'https://api.twitch.tv/helix/streams?first=20',
           {
             headers: {
               'Client-ID': twitchClientId,
@@ -227,13 +275,14 @@ Deno.serve(async (req) => {
       }
     }
 
-    const isRealFollows = profile.twitch_access_token && followedStreams.length > 0
+    const isRealFollows = hasUserToken && followedStreams.length > 0
     
     return new Response(
       JSON.stringify({ 
-        streams: followedStreams, // CORRECTION: utiliser "streams" comme clé
+        streams: followedStreams,
         total: followedStreams.length,
         is_real_follows: isRealFollows,
+        security_enhanced: !!hasUserToken,
         message: isRealFollows 
           ? `${followedStreams.length} de vos follows sont actuellement en direct`
           : followedStreams.length > 0 
@@ -252,7 +301,7 @@ Deno.serve(async (req) => {
     console.error('Error in get-twitch-follows:', error)
     return new Response(
       JSON.stringify({ 
-        streams: [], // CORRECTION: utiliser "streams" comme clé
+        streams: [],
         total: 0,
         error: error.message,
         details: 'Check function logs in Supabase dashboard'

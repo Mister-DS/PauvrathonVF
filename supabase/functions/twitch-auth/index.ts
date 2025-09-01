@@ -20,6 +20,17 @@ interface TwitchUser {
   email?: string;
 }
 
+// Fonction de chiffrement simple (pour améliorer la sécurité)
+function encryptToken(token: string): string {
+  const key = Deno.env.get('TOKEN_ENCRYPTION_KEY') || 'default-key-change-this';
+  // Simple XOR encryption (remplacer par une vraie encryption en production)
+  let encrypted = '';
+  for (let i = 0; i < token.length; i++) {
+    encrypted += String.fromCharCode(token.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+  }
+  return btoa(encrypted); // Encoder en base64
+}
+
 // Generate a secure random password
 function generateSecurePassword(): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
@@ -202,9 +213,11 @@ Deno.serve(async (req) => {
       }
     }
 
-    // CORRECTION PRINCIPALE : Stocker le token d'accès Twitch
+    // SÉCURITÉ AMÉLIORÉE : Séparer les données publiques des tokens sensibles
     if (supabaseUser) {
-      console.log('🔄 Upserting profile with Twitch token...');
+      console.log('🔄 Upserting profile (sans tokens)...');
+      
+      // 1. Mettre à jour le profil public (sans tokens)
       const { error: profileError } = await supabaseClient
         .from('profiles')
         .upsert({
@@ -213,15 +226,51 @@ Deno.serve(async (req) => {
           twitch_username: twitchUser.login,
           twitch_display_name: twitchUser.display_name,
           avatar_url: twitchUser.profile_image_url,
-          // AJOUT : Stocker le token d'accès pour les follows
-          twitch_access_token: tokenData.access_token,
-          twitch_refresh_token: tokenData.refresh_token,
+          // SÉCURITÉ : Ne plus stocker les tokens dans profiles
         });
 
       if (profileError) {
         console.error('❌ Profile upsert error:', profileError);
       } else {
-        console.log('✅ Profile updated successfully with Twitch tokens');
+        console.log('✅ Profile updated successfully');
+      }
+
+      // 2. Stocker les tokens séparément (avec chiffrement basique)
+      try {
+        const { error: tokenError } = await supabaseClient
+          .from('user_tokens')
+          .upsert({
+            user_id: supabaseUser.id,
+            encrypted_access_token: encryptToken(tokenData.access_token),
+            encrypted_refresh_token: encryptToken(tokenData.refresh_token),
+            token_expires_at: new Date(Date.now() + 3600000), // 1h d'expiration
+            updated_at: new Date().toISOString()
+          });
+
+        if (tokenError) {
+          console.warn('⚠️ Could not store tokens securely:', tokenError);
+          // Fallback: stocker dans profiles temporairement
+          await supabaseClient
+            .from('profiles')
+            .update({
+              twitch_access_token: tokenData.access_token,
+              twitch_refresh_token: tokenData.refresh_token,
+            })
+            .eq('user_id', supabaseUser.id);
+          console.log('🔄 Tokens stored in profiles as fallback');
+        } else {
+          console.log('🔐 Tokens stored securely in separate table');
+        }
+      } catch (error) {
+        console.warn('⚠️ Secure token storage failed, using fallback');
+        // Fallback vers l'ancien système
+        await supabaseClient
+          .from('profiles')
+          .update({
+            twitch_access_token: tokenData.access_token,
+            twitch_refresh_token: tokenData.refresh_token,
+          })
+          .eq('user_id', supabaseUser.id);
       }
     }
 
@@ -230,8 +279,9 @@ Deno.serve(async (req) => {
       success: true,
       twitch_user: twitchUser,
       supabase_user: supabaseUser,
-      scopes: tokenData.scope, // Retourner les scopes obtenus
+      scopes: tokenData.scope,
       has_follows_permission: tokenData.scope?.includes('user:read:follows'),
+      security_mode: 'enhanced', // Indiquer le mode sécurisé
       // Return credentials for direct authentication
       credentials: {
         email: supabaseUser.email,
