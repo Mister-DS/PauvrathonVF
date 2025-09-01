@@ -82,7 +82,7 @@ export default function AdminPanel() {
         .from('streamer_requests')
         .select(`
           *,
-          profiles!streamer_requests_user_id_fkey(twitch_display_name, avatar_url, twitch_username)
+          profiles(twitch_display_name, avatar_url, twitch_username)
         `)
         .order('created_at', { ascending: false });
 
@@ -105,7 +105,7 @@ export default function AdminPanel() {
         .from('streamers')
         .select(`
           *,
-          profiles!streamers_user_id_profiles_fkey(twitch_display_name, avatar_url, twitch_username)
+          profiles(twitch_display_name, avatar_url, twitch_username)
         `)
         .order('created_at', { ascending: false });
 
@@ -358,16 +358,18 @@ export default function AdminPanel() {
     }
 
     try {
+      const componentCode = newMinigameName.toLowerCase().replace(/\s+/g, '_');
+      
       const { data: existingGame, error: existingError } = await supabase
         .from('minigames')
         .select('id')
-        .eq('name', newMinigameName)
+        .eq('component_code', componentCode)
         .single();
 
       if (existingGame) {
         toast({
           title: "Mini-jeu déjà existant",
-          description: `Un mini-jeu avec le nom "${newMinigameName}" a déjà été ajouté.`,
+          description: `Un mini-jeu avec le code "${componentCode}" a déjà été ajouté.`,
           variant: "destructive",
         });
         return;
@@ -382,7 +384,7 @@ export default function AdminPanel() {
         .insert({
           name: newMinigameName,
           description: newMinigameDescription,
-          component_code: newMinigameName.toLowerCase().replace(/\s+/g, '_'),
+          component_code: componentCode,
           is_active: true,
           created_by: user.id
         });
