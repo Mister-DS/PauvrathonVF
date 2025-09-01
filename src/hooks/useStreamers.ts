@@ -15,17 +15,17 @@ export function useStreamers() {
 
       // Récupère TOUS les streamers (pas de filtre status='live')
       const { data: streamersData, error: streamersError } = await supabase
-        .from('streamers')
-        .select(`
-          *,
-          profiles (
-            id,
-            twitch_display_name,
-            twitch_username,
-            avatar_url
-          )
-        `)
-        .order('current_clicks', { ascending: false });
+  .from('streamers')
+  .select(`
+    *,
+    profile:profiles!streamers_user_id_profiles_fkey (
+      id,
+      twitch_display_name,
+      twitch_username,
+      avatar_url
+    )
+  `)
+  .order('current_clicks', { ascending: false });
 
       if (streamersError) {
         throw streamersError;
