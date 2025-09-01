@@ -1,5 +1,3 @@
-// src/pages/SubathonPage.tsx
-
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -8,9 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { minigameComponents } from '@/components/minigames';
 import { TwitchPlayer } from '@/components/TwitchPlayer';
 import { Navigation } from '@/components/Navigation';
@@ -18,8 +15,7 @@ import { UniversalTimer } from '@/components/UniversalTimer';
 import { toast } from '@/hooks/use-toast';
 import { Streamer, Minigame } from '@/types';
 import {
-  Maximize, Minimize, Trophy, RotateCcw, AlertTriangle,
-  Wifi, Play, Pause, Square, Clock, Settings, Gamepad2, Plus, Loader2, Zap
+  Trophy, RotateCcw, AlertTriangle, Clock, Settings, Gamepad2, Plus, Loader2, Zap, Hourglass, CheckCircle,
 } from 'lucide-react';
 
 const SubathonPage = () => {
@@ -29,14 +25,18 @@ const SubathonPage = () => {
   const [streamer, setStreamer] = useState<Streamer | null>(null);
   const [loading, setLoading] = useState(true);
   const [isStreamerOwner, setIsStreamerOwner] = useState(false);
-  const [isMinigameModalOpen, setIsMinigameModalOpen] = useState(false);
-  const [isClicking, setIsClicking] = useState(false);
-
+  
+  // États pour le jeu
+  const [isGameActive, setIsGameActive] = useState(false);
   const [minigameState, setMinigameState] = useState<{
     component: React.ComponentType<any> | null;
     props: any;
     name: string;
   }>({ component: null, props: {}, name: '' });
+  const [minigameAttempts, setMinigameAttempts] = useState(0);
+  const [minigameChances, setMinigameChances] = useState(3);
+  const [showValidateTimeButton, setShowValidateTimeButton] = useState(false);
+  const [isClicking, setIsClicking] = useState(false);
 
   const fetchStreamer = async (streamerId: string) => {
     try {
@@ -54,7 +54,7 @@ const SubathonPage = () => {
         .single();
 
       if (error) throw error;
-      
+
       if (!data || data.status !== 'live') {
         toast({
           title: "Pauvrathon non disponible",
@@ -80,9 +80,8 @@ const SubathonPage = () => {
     }
   };
 
-  // Fonction pour gérer les clics des viewers
   const handleViewerClick = async () => {
-    if (!streamer || !user || isClicking) return;
+    if (!streamer || !user || isClicking || isGameActive) return;
     
     setIsClicking(true);
     
@@ -96,8 +95,7 @@ const SubathonPage = () => {
         .eq('id', streamer.id);
 
       if (error) throw error;
-      
-      // La mise à jour de l'état se fera via l'écoute en temps réel (useEffect)
+
       toast({
         title: "Clic enregistré !",
         description: `Votre clic a été enregistré.`,
@@ -115,14 +113,80 @@ const SubathonPage = () => {
     }
   };
 
+  const handleGameEnd = async (victory: boolean) => {
+    setIsGameActive(false);
+    setMinigameState({ component: null, props: {}, name: '' });
+
+    if (victory) {
+      toast({
+        title: "Victoire !",
+        description: "Vous avez gagné ! Validez le temps pour l'ajouter au Pauvrathon.",
+      });
+      setShowValidateTimeButton(true);
+      
+      // Remise à zéro des clics après une victoire
+      await supabase
+        .from('streamers')
+        .update({ 
+          current_clicks: 0,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', streamer!.id);
+        
+      setMinigameAttempts(0); // Réinitialiser les essais
+      setMinigameChances(3); // Réinitialiser les chances
+      
+    } else {
+      setMinigameAttempts(prev => prev + 1);
+      toast({
+        title: "Défaite !",
+        description: `Il vous reste ${12 - minigameAttempts - 1} essais sur cette chance.`,
+        variant: "destructive",
+      });
+
+      if (minigameAttempts + 1 < 12) {
+        // Nouvelle tentative après 5 secondes
+        toast({
+          title: "Nouvel essai...",
+          description: `Relance du jeu dans 5 secondes.`,
+        });
+        setTimeout(launchRandomMinigame, 5000);
+      } else {
+        // Échoué aux 12 essais, chance perdue
+        setMinigameChances(prev => prev - 1);
+        toast({
+          title: "Chance perdue !",
+          description: `Vous avez échoué 12 fois. Il vous reste ${minigameChances - 1} chance(s) sur 3.`,
+          variant: "destructive",
+        });
+        
+        if (minigameChances - 1 > 0) {
+          setMinigameAttempts(0); // Réinitialiser les essais pour la nouvelle chance
+          toast({
+            title: "Nouvelle chance...",
+            description: `Nouvelle chance dans 5 secondes.`,
+          });
+          setTimeout(launchRandomMinigame, 5000);
+        } else {
+          // Toutes les chances sont épuisées
+          toast({
+            title: "Toutes les chances épuisées !",
+            description: "Retour à la page des clics.",
+            variant: "destructive",
+          });
+          // On ne fait rien d'autre, le joueur doit retourner cliquer.
+          setMinigameAttempts(0);
+          setMinigameChances(3);
+        }
+      }
+    }
+  };
+
   const launchRandomMinigame = async () => {
-    console.log('=== DEBUG MINIGAME ===');
-    console.log('Streamer:', streamer);
-    console.log('Active minigames:', streamer?.active_minigames);
-    console.log('Minigame components available:', Object.keys(minigameComponents));
+    if (!streamer || isGameActive) return;
     
-    if (!streamer || !streamer.active_minigames || streamer.active_minigames.length === 0) {
-      console.log('❌ Pas de mini-jeux actifs configurés');
+    const activeGames = streamer.active_minigames;
+    if (!activeGames || activeGames.length === 0) {
       toast({
         title: "Pas de mini-jeu",
         description: "Aucun mini-jeu actif n'est configuré pour ce streamer.",
@@ -131,84 +195,65 @@ const SubathonPage = () => {
       return;
     }
   
-    // Sélectionner un mini-jeu aléatoire parmi ceux disponibles
-    const randomGameCode = streamer.active_minigames[Math.floor(Math.random() * streamer.active_minigames.length)];
-    console.log('🎲 Jeu sélectionné:', randomGameCode);
-    
-    // Récupérer les détails du mini-jeu depuis la base de données
-    const { data: minigameData, error: minigameError } = await supabase
-      .from('minigames')
-      .select('*')
-      .eq('component_code', randomGameCode)
-      .single();
-      
-    console.log('🎮 Données du jeu depuis la DB:', minigameData);
-    console.log('❌ Erreur DB:', minigameError);
-      
-    if (minigameError || !minigameData) {
-      console.error('❌ Erreur mini-jeu:', minigameError);
-      toast({
-        title: "Erreur",
-        description: `Impossible de charger le mini-jeu '${randomGameCode}'. Vérifiez que ce jeu existe dans la base de données.`,
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const { component_code, description } = minigameData;
-
-    // Charger le composant du mini-jeu
-    const gameComponent = minigameComponents[component_code];
-    console.log('🎯 Composant trouvé:', !!gameComponent);
+    setIsGameActive(true);
+    const randomGameCode = activeGames[Math.floor(Math.random() * activeGames.length)];
+    const gameComponent = minigameComponents[randomGameCode];
     
     if (gameComponent) {
-      console.log('✅ Lancement du mini-jeu:', component_code);
       setMinigameState({
         component: gameComponent,
-        name: component_code, // Utiliser component_code comme nom d'affichage
+        name: randomGameCode,
         props: {
           streamerId: streamer.id,
-          onGameEnd: async (victory: boolean) => {
-            setIsMinigameModalOpen(false);
-            setMinigameState({ component: null, props: {}, name: '' });
-            
-            if (victory) {
-              toast({
-                title: "Victoire !",
-                description: "Du temps a été ajouté au compteur !",
-              });
-            } else {
-              toast({
-                title: "Défaite !",
-                description: "Continuez à cliquer pour déclencher un nouveau jeu !",
-                variant: "destructive",
-              });
-            }
-            
-            // Remettre les clics à zéro après avoir déclenché le jeu
-            // On le fait ici pour éviter le risque de double-déclenchement
-            await supabase
-              .from('streamers')
-              .update({ 
-                current_clicks: 0,
-                updated_at: new Date().toISOString()
-              })
-              .eq('id', streamer.id);
-          },
+          onGameEnd: handleGameEnd,
         },
       });
-      setIsMinigameModalOpen(true);
     } else {
-      console.error('❌ Composant introuvable:', component_code);
-      console.log('📋 Composants disponibles:', Object.keys(minigameComponents));
       toast({
         title: "Erreur",
-        description: `Le composant du mini-jeu '${component_code}' est introuvable.`,
+        description: `Le composant du mini-jeu '${randomGameCode}' est introuvable.`,
+        variant: "destructive",
+      });
+      setIsGameActive(false);
+    }
+  };
+
+  const handleValidateTime = async () => {
+    if (!streamer) return;
+    
+    try {
+      // TODO: Implémenter la logique d'ajout de temps au compteur du Pauvrathon
+      // Cela pourrait être un appel à une fonction RPC dans Supabase pour plus de sécurité
+      // const { error } = await supabase.rpc('add_time_to_subathon', { streamer_id: streamer.id, time_to_add_seconds: 600 });
+      
+      const { error } = await supabase
+        .from('streamers')
+        .update({
+          total_time_added: (streamer.total_time_added || 0) + 600, // Exemple: ajout de 10 minutes (600 secondes)
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', streamer.id);
+
+      if (error) throw error;
+      
+      toast({
+        title: "Temps ajouté !",
+        description: "Le temps a été ajouté au compteur du Pauvrathon.",
+      });
+      
+      setShowValidateTimeButton(false);
+      
+    } catch (error) {
+      console.error('Error validating time:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible d'ajouter le temps au Pauvrathon.",
         variant: "destructive",
       });
     }
   };
-
+  
+  // Utiliser useEffect pour les écouteurs de changements et le déclenchement des actions
   useEffect(() => {
     if (id) {
       fetchStreamer(id);
@@ -220,21 +265,10 @@ const SubathonPage = () => {
           { event: '*', schema: 'public', table: 'streamers', filter: `id=eq.${id}` },
           (payload) => {
             const updatedStreamer = payload.new as Streamer;
-            if (updatedStreamer.status !== 'live' && updatedStreamer.status !== 'paused') {
-              toast({
-                title: "Pauvrathon terminé",
-                description: "Ce streamer n'est plus en direct.",
-                variant: "destructive",
-              });
-              navigate('/discovery', { replace: true });
-              return;
-            }
             setStreamer(updatedStreamer);
-            
-            // Auto-déclencher un mini-jeu si les clics requis sont atteints
-            if (updatedStreamer.current_clicks >= updatedStreamer.clicks_required && 
-                updatedStreamer.status === 'live' && 
-                !minigameState.component) {
+
+            // Déclencher le jeu si les clics requis sont atteints et qu'aucun jeu n'est déjà actif
+            if (updatedStreamer.current_clicks >= updatedStreamer.clicks_required && !isGameActive && updatedStreamer.status === 'live' && !showValidateTimeButton) {
               launchRandomMinigame();
             }
           }
@@ -245,7 +279,7 @@ const SubathonPage = () => {
         supabase.removeChannel(channel);
       };
     }
-  }, [id, navigate, user, minigameState.component]);
+  }, [id, navigate, user, isGameActive, showValidateTimeButton]);
 
   if (loading) {
     return (
@@ -262,91 +296,95 @@ const SubathonPage = () => {
   const progress = streamer.clicks_required > 0
     ? Math.min(100, (streamer.current_clicks / streamer.clicks_required) * 100)
     : 0;
-
+    
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground">
       <Navigation />
       <div className="flex-1 container mx-auto px-4 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Zone 1 & 2 : Infos et Stream */}
           <div className="lg:col-span-2 space-y-8">
             <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <Avatar>
+                    <AvatarImage src={streamer.profile?.avatar_url} />
+                    <AvatarFallback>{streamer.profile?.twitch_display_name?.substring(0, 2)}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                    <h2 className="text-xl font-bold">{streamer.profile?.twitch_display_name}</h2>
+                    <p className="text-sm text-muted-foreground">{streamer.stream_title || 'Titre du stream non défini'}</p>
+                  </div>
+                </CardTitle>
+              </CardHeader>
               <CardContent className="p-4">
                 <TwitchPlayer twitchUsername={streamer.profile?.twitch_username} />
               </CardContent>
             </Card>
             
+            {/* Zone 4: Jeu ou Bouton de validation */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
-                  <Trophy className="mr-2 h-5 w-5" />
-                  Mini-jeu actuel
+                  <Gamepad2 className="mr-2 h-5 w-5" />
+                  {isGameActive ? 'Mini-jeu en cours' : (showValidateTimeButton ? 'Victoire !' : 'Progression')}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                {minigameState.component ? (
-                  <div>
-                    <h3 className="text-lg font-semibold mb-2">
-                      {minigameState.name} en cours !
-                    </h3>
-                    <div className="minigame-container">
-                      <minigameState.component {...minigameState.props} />
-                    </div>
+                {isGameActive && minigameState.component ? (
+                  <div className="minigame-container">
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Tentative {minigameAttempts + 1} sur 12. Chance {3 - minigameChances + 1} sur 3.
+                    </p>
+                    <minigameState.component {...minigameState.props} />
+                  </div>
+                ) : showValidateTimeButton ? (
+                  <div className="flex flex-col items-center justify-center p-8 text-center bg-green-500/10 border-2 border-green-500 rounded-lg">
+                    <Trophy className="h-12 w-12 text-green-500 mb-4" />
+                    <h3 className="text-xl font-bold mb-2">Bravo !</h3>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      Vous avez réussi le mini-jeu. Cliquez sur le bouton ci-dessous pour ajouter du temps au compteur du Pauvrathon.
+                    </p>
+                    <Button onClick={handleValidateTime}>
+                      <CheckCircle className="mr-2 h-4 w-4" />
+                      Valider le temps
+                    </Button>
                   </div>
                 ) : (
-                  <div className="text-center p-4 bg-muted rounded-lg">
-                    <p className="text-sm text-muted-foreground">
-                      Aucun mini-jeu en cours pour le moment.
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-2">
-                      Cliquez sur le bouton "Cliquer pour le streamer" pour contribuer !
-                    </p>
-                    {isStreamerOwner && (
-                      <Button onClick={launchRandomMinigame} className="mt-4">
-                        <Plus className="mr-2 h-4 w-4" />
-                        Lancer un jeu aléatoire (admin)
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <Label htmlFor="progression" className="font-semibold">
+                        Progression vers le prochain mini-jeu
+                      </Label>
+                      <span className="text-sm text-muted-foreground">
+                        {streamer.current_clicks} / {streamer.clicks_required} clics
+                      </span>
+                    </div>
+                    <Progress value={progress} id="progression" className="h-4" />
+                    {streamer.status === 'live' && user && (
+                      <Button 
+                        className="w-full mt-4" 
+                        onClick={handleViewerClick}
+                        disabled={isClicking || isGameActive}
+                      >
+                        <Zap className="mr-2 h-4 w-4" />
+                        {isClicking ? 'Clic en cours...' : 'Cliquer pour le streamer'}
                       </Button>
+                    )}
+                    {!user && (
+                      <div className="mt-4 p-3 bg-muted rounded-lg text-center">
+                        <p className="text-sm text-muted-foreground">
+                          Connectez-vous pour participer au Pauvrathon !
+                        </p>
+                      </div>
                     )}
                   </div>
                 )}
               </CardContent>
             </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Clock className="mr-2 h-5 w-5" />
-                  Informations
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center space-x-4">
-                  <Avatar className="w-16 h-16">
-                    <AvatarImage src={streamer.profile?.avatar_url} alt={`${streamer.profile?.twitch_display_name}'s avatar`} />
-                    <AvatarFallback>{streamer.profile?.twitch_display_name?.substring(0, 2)}</AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1">
-                    <h2 className="text-xl font-bold">{streamer.profile?.twitch_display_name}</h2>
-                    <p className="text-muted-foreground">
-                      {streamer.stream_title || 'Titre du stream non défini'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <Label htmlFor="progression" className="font-semibold">
-                      Progression vers le prochain mini-jeu
-                    </Label>
-                    <span className="text-sm text-muted-foreground">
-                      {streamer.current_clicks} / {streamer.clicks_required} clics
-                    </span>
-                  </div>
-                  <Progress value={progress} id="progression" className="h-4" />
-                </div>
-              </CardContent>
-            </Card>
           </div>
-
+          
+          {/* Zone 3: Stats et Actions */}
           <div className="lg:col-span-1 space-y-8">
             <Card>
               <CardHeader>
@@ -365,25 +403,6 @@ const SubathonPage = () => {
                   totalElapsedTime={streamer.total_elapsed_time || 0}
                 />
                 
-                {streamer.status === 'live' && user && (
-                  <Button 
-                    className="w-full mt-4" 
-                    onClick={handleViewerClick}
-                    disabled={isClicking}
-                  >
-                    <Zap className="mr-2 h-4 w-4" />
-                    {isClicking ? 'Clic en cours...' : 'Cliquer pour le streamer'}
-                  </Button>
-                )}
-                
-                {!user && (
-                  <div className="mt-4 p-3 bg-muted rounded-lg">
-                    <p className="text-sm text-muted-foreground">
-                      Connectez-vous pour participer au Pauvrathon !
-                    </p>
-                  </div>
-                )}
-                
                 {isStreamerOwner && (
                   <Button className="w-full mt-4" variant="outline" onClick={() => navigate('/streamer/panel')}>
                     <Settings className="mr-2 h-4 w-4" />
@@ -392,22 +411,33 @@ const SubathonPage = () => {
                 )}
               </CardContent>
             </Card>
-
+            
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
-                  <Gamepad2 className="mr-2 h-5 w-5" />
-                  Mini-jeux
+                  <Hourglass className="mr-2 h-5 w-5" />
+                  Mini-jeux & Chances
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  <p className="text-sm text-muted-foreground">
-                    Un mini-jeu se lancera automatiquement dès que les clics requis seront atteints.
-                  </p>
-                  <div className="text-xs text-muted-foreground">
-                    <p>Mini-jeux actifs : {streamer.active_minigames?.length || 0}</p>
-                    <p>Clics requis : {streamer.clicks_required}</p>
+                  <div className="flex justify-between items-center">
+                    <p className="text-sm text-muted-foreground">
+                      Mini-jeux actifs :
+                    </p>
+                    <span className="text-sm font-semibold">{streamer.active_minigames?.length || 0}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <p className="text-sm text-muted-foreground">
+                      Clics requis :
+                    </p>
+                    <span className="text-sm font-semibold">{streamer.clicks_required}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <p className="text-sm text-muted-foreground">
+                      Chances restantes :
+                    </p>
+                    <span className="text-sm font-semibold">{minigameChances} sur 3</span>
                   </div>
                   {isStreamerOwner && (
                     <Button onClick={launchRandomMinigame} className="mt-4" size="sm">
@@ -438,8 +468,8 @@ const SubathonPage = () => {
         </div>
       </div>
 
-      {/* Modal pour les mini-jeux */}
-      <Dialog open={isMinigameModalOpen} onOpenChange={setIsMinigameModalOpen}>
+      {/* La modale du jeu reste, mais s'ouvre via l'état isGameActive */}
+      <Dialog open={isGameActive} onOpenChange={setIsGameActive}>
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center">
