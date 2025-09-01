@@ -74,7 +74,7 @@ const SubathonPage = () => {
     return () => clearTimeout(timer);
   }, [countdown, showMinigame, failedAttempts]);
 
-  const fetchStreamerData = async () => {
+ const fetchStreamerData = async () => {
     if (!id) return;
     try {
       // CORRECTION : Récupérer aussi total_elapsed_time
@@ -103,9 +103,21 @@ const SubathonPage = () => {
       setStreamer(completeStreamerData as unknown as Streamer);
       setCurrentClicks(streamerData.current_clicks || 0);
       setClicksRequired(streamerData.clicks_required || 10);
-      setIsStreamerOwner(user?.id === streamerData.user_id);
       
-      if (user && user.id === '5cee82f9-1c72-4a76-abdc-021976598a77') {
+      const isOwner = user?.id === streamerData.user_id;
+      setIsStreamerOwner(isOwner);
+      
+      // ANCIEN CODE
+      // if (user && user.id === '5cee82f9-1c72-4a76-abdc-021976598a77') {
+      //   setSimulationMode(true);
+      //   toast({
+      //     title: "Mode Test Activé",
+      //     description: "Vous pouvez maintenant tester les clics et mini-jeux !",
+      //   });
+      // }
+      
+      // NOUVEAU CODE : Le mode de simulation est activé pour le propriétaire du stream
+      if (isOwner) {
         setSimulationMode(true);
         toast({
           title: "Mode Test Activé",
