@@ -228,7 +228,7 @@ const PauvrathonPage = () => {
     } finally {
       setIsClicking(false);
       // Cooldown de 1 seconde pour éviter le spam
-      setTimeout(() => {
+      const cooldownTimer = setTimeout(() => {
         setClickCooldown(false);
         
         // Message de rafraîchissement si le cooldown se termine et qu'on ne peut plus cliquer
@@ -240,6 +240,16 @@ const PauvrathonPage = () => {
         }
         
       }, 1000);
+      
+      // Ajout de la logique de rechargement
+      const refreshCheckInterval = setInterval(() => {
+        const timeRemaining = Math.ceil((1000 - (Date.now() - now)) / 1000);
+        if (timeRemaining <= 1) {
+          console.log("Cooldown at 1 second. Refreshing page...");
+          window.location.reload();
+          clearInterval(refreshCheckInterval);
+        }
+      }, 100); // Vérifie toutes les 100ms
     }
   };
 
@@ -385,12 +395,11 @@ const PauvrathonPage = () => {
     if (!streamer) return;
     
     try {
-      // Mise à jour des clics et du temps totaux
+      // Mise à jour du temps total. La mise à jour des clics totaux est désactivée car la colonne n'existe pas.
       const { error } = await supabase
         .from('streamers')
         .update({
           total_time_added: (streamer.total_time_added || 0) + timeToAdd,
-          total_clicks: (streamer.total_clicks || 0) + userClicks,
           updated_at: new Date().toISOString()
         })
         .eq('id', streamer.id);
