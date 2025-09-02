@@ -21,7 +21,8 @@ import {
   Trash2, 
   AlertTriangle,
   Loader2,
-  Shield
+  Shield,
+  Star // Ajout de l'icône Star pour les clics
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -34,6 +35,17 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+
+// Fonction utilitaire pour formater le temps
+const formatTime = (seconds: number) => {
+  if (isNaN(seconds) || seconds < 0) return "0s";
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  if (mins > 0) {
+    return `${mins}m ${secs}s`;
+  }
+  return `${secs}s`;
+};
 
 export default function Profile() {
   const { user, profile, signOut, connectTwitch, twitchUser } = useAuth();
@@ -206,7 +218,7 @@ export default function Profile() {
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-2xl font-bold">0</p>
+                    <p className="text-2xl font-bold">0</p> {/* Remplacer par profile?.games_played ou similaire */}
                     <p className="text-xs text-muted-foreground">Parties jouées</p>
                   </div>
                   <Gamepad2 className="h-6 w-6 text-muted-foreground" />
@@ -218,7 +230,7 @@ export default function Profile() {
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-2xl font-bold">0</p>
+                    <p className="text-2xl font-bold">0</p> {/* Remplacer par profile?.wins ou similaire */}
                     <p className="text-xs text-muted-foreground">Victoires</p>
                   </div>
                   <Trophy className="h-6 w-6 text-muted-foreground" />
@@ -230,7 +242,7 @@ export default function Profile() {
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-2xl font-bold">0s</p>
+                    <p className="text-2xl font-bold">{formatTime(profile?.total_time_contributed || 0)}</p> {/* Remplacer par profile?.total_time_contributed ou similaire */}
                     <p className="text-xs text-muted-foreground">Temps contribué</p>
                   </div>
                   <Clock className="h-6 w-6 text-muted-foreground" />
@@ -246,7 +258,7 @@ export default function Profile() {
             </CardHeader>
             <CardContent>
               <div className="text-center py-8">
-                <Trophy className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                <Star className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
                 <h3 className="text-lg font-semibold mb-2">
                   Aucune activité récente
                 </h3>

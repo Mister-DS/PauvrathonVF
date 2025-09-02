@@ -61,6 +61,7 @@ interface StreamerSettings {
   pause_started_at: string | null;
   total_elapsed_time: number;
   total_paused_duration: number;
+  total_clicks?: number; // Ajouté pour correspondre à la logique de handleStatusChange
 }
 
 const formatTime = (seconds: number) => {
@@ -179,7 +180,7 @@ export default function StreamerPanel() {
         setInitialMinutes(Math.floor(((data.initial_duration || 7200) % 3600) / 60));
         setTimeMode(data.time_mode || 'fixed');
         setFixedTime(data.time_increment || 30);
-        setMinRandomTime((data as any).min_random_time ?? data.time_increment ?? 10);
+        setMinRandomTime(data.min_random_time ?? data.time_increment ?? 10); // Utilisation de ?? pour une meilleure gestion des valeurs null/undefined
         setMaxRandomTime(data.max_random_time || 60);
         setClicksRequired(data.clicks_required || 100);
         setCooldownTime(data.cooldown_seconds || 30);
@@ -296,7 +297,7 @@ export default function StreamerPanel() {
       stream_title: originalStreamerData.stream_title,
       time_mode: originalStreamerData.time_mode || 'fixed',
       time_increment: originalStreamerData.time_increment || 30,
-      min_random_time: originalStreamerData.min_random_time || 10,
+      min_random_time: originalStreamerData.min_random_time ?? 10, // Utilisation de ??
       max_random_time: originalStreamerData.max_random_time || 60,
       clicks_required: originalStreamerData.clicks_required || 100,
       cooldown_seconds: originalStreamerData.cooldown_seconds || 30,
@@ -390,11 +391,10 @@ export default function StreamerPanel() {
           pause_started_at: null
         };
       } else {
-        // Ajout de la réinitialisation de total_clicks ici
         updateData.stream_started_at = new Date().toISOString();
         updateData.total_elapsed_time = 0;
         updateData.total_paused_duration = 0;
-        updateData.total_clicks = 0; // <-- AJOUTEZ CETTE LIGNE
+        updateData.total_clicks = 0; 
       }
 
       if (!selectedGames.length) {
@@ -422,7 +422,7 @@ export default function StreamerPanel() {
       updateData.total_paused_duration = 0;
       updateData.stream_started_at = null;
       updateData.pause_started_at = null;
-      updateData.total_clicks = 0; // <-- AJOUTEZ CETTE LIGNE AUSSI POUR LES STATUTS 'ended'/'offline'
+      updateData.total_clicks = 0; 
     }
 
     const { data, error } = await supabase
@@ -937,7 +937,7 @@ export default function StreamerPanel() {
                     </Card>
                   )}
 
-                  {/* Top contributeurs */}
+                  {/* Top 10 Contributeurs */}
                   <Card>
                     <CardHeader>
                       <CardTitle className="flex items-center">

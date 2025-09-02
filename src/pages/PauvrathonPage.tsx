@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -50,123 +50,6 @@ const PauvrathonPage = () => {
   const [globalCooldownRemaining, setGlobalCooldownRemaining] = useState(0);
   const [cooldownSeconds, setCooldownSeconds] = useState(60); // Valeur par défaut
 
- const fetchStreamer = async (streamerId: string) => {
-  try {
-    const { data, error } = await supabase
-      .from('streamers')
-      .select(`
-          *,
-          profiles (
-            twitch_username,
-            twitch_display_name,
-            avatar_url
-          )
-        `)
-      .eq('id', streamerId)
-      .single();
-
-    if (error) throw error;
-
-    if (!data || data.status !== 'live') {
-      toast({
-        title: "Pauvrathon non disponible",
-        description: "Ce streamer n'est pas en direct en ce moment.",
-        variant: "destructive",
-      });
-      navigate('/discovery', { replace: true });
-      return;
-    }
-
-    setStreamer(data as Streamer);
-    setIsStreamerOwner(user?.id === data.user_id);
-
-    // Initialiser la configuration de référence et la valeur du cooldown
-    const initialConfig = JSON.stringify({
-      time_mode: data.time_mode,
-      time_increment: data.time_increment,
-      min_random_time: data.min_random_time,
-      max_random_time: data.max_random_time,
-      clicks_required: data.clicks_required,
-      active_minigames: data.active_minigames,
-      cooldown_seconds: data.cooldown_seconds // Inclure le cooldown
-    });
-    setLastStreamerConfig(initialConfig);
-
-    // Mettre à jour la valeur du cooldown
-    setCooldownSeconds(data.cooldown_seconds || 60);
-
-    // Gérer le délai initial pour les nouveaux streams
-    if (data.stream_started_at) {
-      const streamStartTime = new Date(data.stream_started_at).getTime();
-      const now = Date.now();
-      const timeSinceStart = now - streamStartTime;
-      const initialDelayMs = 120000; // 2 minutes de délai (au lieu de 10 secondes)
-
-      if (timeSinceStart < initialDelayMs) {
-        setStreamStartDelay(true);
-        const remainingTime = Math.ceil((initialDelayMs - timeSinceStart) / 1000);
-
-        // Countdown timer avec state update
-        const countdownInterval = setInterval(() => {
-          const currentTime = Date.now();
-          const remaining = Math.ceil((initialDelayMs - (currentTime - streamStartTime)) / 1000);
-
-          setCountdownSeconds(remaining);
-
-          if (remaining <= 0) {
-            clearInterval(countdownInterval);
-            setStreamStartDelay(false);
-            setCountdownSeconds(0);
-            toast({
-              title: "Stream prêt !",
-              description: "Vous pouvez maintenant participer aux clics.",
-            });
-            window.location.reload(); // Ajout du rechargement ici
-          }
-        }, 1000);
-
-        // S'assurer que l'intervalle est nettoyé même si l'utilisateur quitte la page avant la fin du délai
-        setTimeout(() => {
-          clearInterval(countdownInterval);
-        }, initialDelayMs - timeSinceStart);
-      } else {
-        setStreamStartDelay(false);
-      }
-    }
-
-  } catch (error) {
-    console.error('Error fetching streamer:', error);
-    toast({
-      title: "Erreur",
-      description: "Impossible de charger les données du Pauvrathon.",
-      variant: "destructive",
-    });
-    navigate('/discovery', { replace: true });
-  } finally {
-    setLoading(false);
-  }
-};
-
-  const calculateTimeToAdd = (streamer: Streamer): number => {
-    if (streamer.time_mode === 'random') {
-      // Générer un temps aléatoire entre min et max avec gestion des erreurs
-      const minTime = Math.max(1, streamer.min_random_time || streamer.time_increment || 10);
-      const maxTime = Math.max(minTime, streamer.max_random_time || 60);
-
-      console.log(`🎲 Mode aléatoire: min=${minTime}s, max=${maxTime}s`);
-
-      const randomTime = Math.floor(Math.random() * (maxTime - minTime + 1)) + minTime;
-      console.log(`🎲 Temps généré: ${randomTime}s`);
-
-      return randomTime;
-    } else {
-      // Temps fixe
-      const fixedTime = streamer.time_increment || 30;
-      console.log(`⚡ Mode fixe: ${fixedTime}s`);
-      return fixedTime;
-    }
-  };
-
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -176,12 +59,22 @@ const PauvrathonPage = () => {
     return `${secs}s`;
   };
 
-  // NOUVELLE FONCTION pour démarrer le cooldown global et le persister
-  const startGlobalCooldown = (duration: number) => {
+  const calculateTimeToAdd = useCallback((streamer: Streamer): number => {
+    if (streamer.time_mode === 'random') {
+      const minTime = Math.max(1, streamer.min_random_time || streamer.time_increment || 10);
+      const maxTime = Math.max(minTime, streamer.max_random_time || 60);
+      const randomTime = Math.floor(Math.random() * (maxTime - minTime + 1)) + minTime;
+      return randomTime;
+    } else {
+      const fixedTime = streamer.time_increment || 30;
+      return fixedTime;
+    }
+  }, []);
+
+  const startGlobalCooldown = useCallback((duration: number) => {
     setIsGlobalCooldownActive(true);
     setGlobalCooldownRemaining(duration);
 
-    // Persister la fin du cooldown dans localStorage
     if (user) {
       const endTime = Date.now() + duration * 1000;
       localStorage.setItem(`pauvrathon_cooldown_end_${id}_${user.id}`, endTime.toString());
@@ -192,7 +85,6 @@ const PauvrathonPage = () => {
         if (prev <= 1) {
           clearInterval(intervalId);
           setIsGlobalCooldownActive(false);
-          // Nettoyer le localStorage
           if (user) {
             localStorage.removeItem(`pauvrathon_cooldown_end_${id}_${user.id}`);
           }
@@ -205,203 +97,12 @@ const PauvrathonPage = () => {
         return prev - 1;
       });
     }, 1000);
-  };
+  }, [user, id]);
 
-  const handleViewerClick = async () => {
-    // AJOUT DE LA CONDITION isGlobalCooldownActive
-    if (!streamer || !user || isClicking || isGameActive || clickCooldown || streamStartDelay || isGlobalCooldownActive) return;
-
-    // Protection contre le dépassement INDIVIDUEL
-    if (userClicks >= streamer.clicks_required) {
-      toast({
-        title: "Votre limite atteinte !",
-        description: "Vous avez atteint votre quota de clics pour déclencher un mini-jeu.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Vérifier le cooldown local (évite le spam de clics)
-    const now = Date.now();
-    const timeSinceLastClick = now - lastClickTime;
-    const minClickInterval = 1000; // 1 seconde minimum entre les clics
-
-    if (timeSinceLastClick < minClickInterval) {
-      toast({
-        title: "Trop rapide !",
-        description: `Attendez ${Math.ceil((minClickInterval - timeSinceLastClick) / 1000)}s avant de recliquer.`,
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsClicking(true);
-    setClickCooldown(true);
-    setLastClickTime(now);
-
-    try {
-      // CLICS INDIVIDUELS : on incrémente seulement les clics de ce viewer
-      const newUserClicks = userClicks + 1;
-      setUserClicks(newUserClicks);
-
-      // Aussi incrémenter le compteur global pour les statistiques générales
-      const { error: globalError } = await supabase
-        .from('streamers')
-        .update({
-          total_clicks: (streamer.total_clicks || 0) + 1,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', streamer.id);
-
-      if (globalError) {
-        console.warn('Erreur mise à jour stats globales:', globalError);
-      }
-
-      // Vérifier si ce viewer peut déclencher un mini-jeu
-      if (newUserClicks >= streamer.clicks_required) {
-        console.log(`🎮 Seuil atteint pour ce viewer : ${newUserClicks}/${streamer.clicks_required}`);
-        setTimeout(() => {
-          if (!isGameActive && !showValidateTimeButton && !streamStartDelay && !isGlobalCooldownActive) {
-            launchRandomMinigame();
-          }
-        }, 200);
-      }
-
-      toast({
-        title: "Clic enregistré !",
-        description: `Vos clics : ${newUserClicks}/${streamer.clicks_required}`,
-      });
-
-    } catch (error) {
-      console.error('Error handling click:', error);
-      toast({
-        title: "Erreur",
-        description: "Impossible d'enregistrer votre clic.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsClicking(false);
-      // Cooldown de 1 seconde pour éviter le spam
-      setTimeout(() => {
-        setClickCooldown(false);
-
-        // Message de rafraîchissement si le cooldown se termine et qu'on ne peut plus cliquer
-        if (!isGameActive && !showValidateTimeButton && !streamStartDelay && !isGlobalCooldownActive) {
-          toast({
-            title: "Clics disponibles",
-            description: "Vous pouvez maintenant cliquer à nouveau.",
-          });
-        }
-      }, 1000);
-    }
-  };
-
-  const handleGameEnd = async (victory: boolean) => {
-    setIsGameActive(false);
-    setMinigameState({ component: null, props: {}, name: '' });
-
-    if (victory) {
-      // Calculer le temps à ajouter selon les paramètres du streamer
-      const calculatedTime = calculateTimeToAdd(streamer!);
-      setTimeToAdd(calculatedTime);
-
-      toast({
-        title: "Victoire !",
-        description: `Vous avez gagné ! Validez pour ajouter ${formatTime(calculatedTime)} au Pauvrathon.`,
-      });
-      setShowValidateTimeButton(true);
-
-      // Réinitialiser les essais et chances pour la prochaine fois
-      setMinigameAttempts(0);
-      setMinigameChances(3);
-      // Réinitialiser les clics de l'utilisateur après une victoire
-      setUserClicks(0);
-
-    } else {
-      setMinigameAttempts(prev => prev + 1);
-
-      if (minigameAttempts + 1 < 12) {
-        toast({
-          title: "Défaite !",
-          description: `Il vous reste ${12 - (minigameAttempts + 1)} essais sur cette chance. Relance du jeu dans 5 secondes.`,
-          variant: "destructive",
-        });
-        setTimeout(launchRandomMinigame, 5000);
-      } else {
-        setMinigameChances(prev => {
-          const newChances = prev - 1;
-          console.log(`❌ Chance perdue ! Nouvelles chances restantes: ${newChances}`);
-          return newChances;
-        });
-
-        if (minigameChances - 1 > 0) {
-          setMinigameAttempts(0);
-          toast({
-            title: "Chance perdue !",
-            description: `Vous avez épuisé vos 12 essais. Il vous reste ${minigameChances - 1} chance(s). Nouvelle chance dans 5 secondes.`,
-            variant: "destructive",
-          });
-          setTimeout(launchRandomMinigame, 5000);
-        } else {
-          toast({
-            title: "Toutes les chances épuisées !",
-            description: "Vos clics ont été remis à zéro. Recommencez à cliquer pour déclencher un nouveau mini-jeu.",
-            variant: "destructive",
-          });
-          // Réinitialisation complète
-          setMinigameAttempts(0);
-          setMinigameChances(3);
-          setUserClicks(0); // Remise à zéro des clics utilisateur
-
-          // DÉMARRER LE COOLDOWN APRÈS L'ÉCHEC COMPLET
-          if (streamer) {
-            startGlobalCooldown(streamer.cooldown_seconds || 60);
-          }
-
-          // Enregistrer la tentative dans les stats même en cas d'échec complet
-          if (user) {
-            const { data: existingStats } = await supabase
-              .from('subathon_stats')
-              .select('*')
-              .eq('streamer_id', streamer.id)
-              .eq('player_twitch_username', user.user_metadata?.twitch_username || user.email)
-              .single();
-
-            if (existingStats) {
-              await supabase
-                .from('subathon_stats')
-                .update({
-                  games_played: (existingStats.games_played || 0) + 1,
-                  clicks_contributed: (existingStats.clicks_contributed || 0) + userClicks,
-                  last_activity: new Date().toISOString()
-                })
-                .eq('id', existingStats.id);
-            } else {
-              await supabase
-                .from('subathon_stats')
-                .insert({
-                  streamer_id: streamer.id,
-                  player_twitch_username: user.user_metadata?.twitch_username || user.email || 'Viewer anonyme',
-                  time_contributed: 0,
-                  games_won: 0,
-                  games_played: 1,
-                  clicks_contributed: userClicks,
-                  last_activity: new Date().toISOString()
-                });
-            }
-          }
-        }
-      }
-    }
-  };
-
-  const launchRandomMinigame = async () => {
+  const launchRandomMinigame = useCallback(async () => {
     if (!streamer || isGameActive) return;
 
     setIsGameActive(true);
-
-    // Plus besoin de remettre à zéro current_clicks car les clics sont individuels
-    console.log(`🎮 Lancement du mini-jeu pour ce viewer après ${userClicks} clics`);
 
     const activeGames = streamer.active_minigames;
     if (!activeGames || activeGames.length === 0) {
@@ -437,9 +138,101 @@ const PauvrathonPage = () => {
       });
       setIsGameActive(false);
     }
-  };
+  }, [streamer, isGameActive, minigameAttempts]);
 
-  const handleValidateTime = async () => {
+  const handleGameEnd = useCallback(async (victory: boolean) => {
+    setIsGameActive(false);
+    setMinigameState({ component: null, props: {}, name: '' });
+
+    if (!streamer) return; // Ensure streamer is not null
+
+    if (victory) {
+      const calculatedTime = calculateTimeToAdd(streamer);
+      setTimeToAdd(calculatedTime);
+
+      toast({
+        title: "Victoire !",
+        description: `Vous avez gagné ! Validez pour ajouter ${formatTime(calculatedTime)} au Pauvrathon.`,
+      });
+      setShowValidateTimeButton(true);
+
+      setMinigameAttempts(0);
+      setMinigameChances(3);
+      setUserClicks(0);
+
+    } else {
+      setMinigameAttempts(prev => prev + 1);
+
+      if (minigameAttempts + 1 < 12) {
+        toast({
+          title: "Défaite !",
+          description: `Il vous reste ${12 - (minigameAttempts + 1)} essais sur cette chance. Relance du jeu dans 5 secondes.`,
+          variant: "destructive",
+        });
+        setTimeout(launchRandomMinigame, 5000);
+      } else {
+        setMinigameChances(prev => {
+          const newChances = prev - 1;
+          return newChances;
+        });
+
+        if (minigameChances - 1 > 0) {
+          setMinigameAttempts(0);
+          toast({
+            title: "Chance perdue !",
+            description: `Vous avez épuisé vos 12 essais. Il vous reste ${minigameChances - 1} chance(s). Nouvelle chance dans 5 secondes.`,
+            variant: "destructive",
+          });
+          setTimeout(launchRandomMinigame, 5000);
+        } else {
+          toast({
+            title: "Toutes les chances épuisées !",
+            description: "Vos clics ont été remis à zéro. Recommencez à cliquer pour déclencher un nouveau mini-jeu.",
+            variant: "destructive",
+          });
+          setMinigameAttempts(0);
+          setMinigameChances(3);
+          setUserClicks(0);
+
+          startGlobalCooldown(streamer.cooldown_seconds || 60);
+
+          if (user) {
+            const { data: existingStats } = await supabase
+              .from('subathon_stats')
+              .select('*')
+              .eq('streamer_id', streamer.id)
+              .eq('player_twitch_username', user.user_metadata?.twitch_username || user.email)
+              .single();
+
+            if (existingStats) {
+              await supabase
+                .from('subathon_stats')
+                .update({
+                  games_played: (existingStats.games_played || 0) + 1,
+                  clicks_contributed: (existingStats.clicks_contributed || 0) + userClicks,
+                  last_activity: new Date().toISOString()
+                })
+                .eq('id', existingStats.id);
+            } else {
+              await supabase
+                .from('subathon_stats')
+                .insert({
+                  streamer_id: streamer.id,
+                  player_twitch_username: user.user_metadata?.twitch_username || user.email || 'Viewer anonyme',
+                  time_contributed: 0,
+                  games_won: 0,
+                  games_played: 1,
+                  clicks_contributed: userClicks,
+                  last_activity: new Date().toISOString()
+                });
+            }
+          }
+        }
+      }
+    }
+  }, [minigameAttempts, minigameChances, streamer, user, calculateTimeToAdd, launchRandomMinigame, startGlobalCooldown, userClicks]);
+
+  const handleValidateTime = useCallback(async () => {
     if (!streamer) return;
 
     try {
@@ -453,7 +246,6 @@ const PauvrathonPage = () => {
 
       if (error) throw error;
 
-      // Enregistrer ou mettre à jour les statistiques utilisateur dans subathon_stats
       if (user) {
         const { data: existingStats, error: fetchError } = await supabase
           .from('subathon_stats')
@@ -467,7 +259,6 @@ const PauvrathonPage = () => {
         }
 
         if (existingStats) {
-          // Mettre à jour les stats existantes
           const { error: updateError } = await supabase
             .from('subathon_stats')
             .update({
@@ -483,7 +274,6 @@ const PauvrathonPage = () => {
             console.error('Error updating stats:', updateError);
           }
         } else {
-          // Créer de nouvelles stats
           const { error: insertError } = await supabase
             .from('subathon_stats')
             .insert({
@@ -509,8 +299,6 @@ const PauvrathonPage = () => {
 
       setShowValidateTimeButton(false);
       setTimeToAdd(0);
-
-      // DÉMARRER LE COOLDOWN APRÈS LA VALIDATION
       startGlobalCooldown(cooldownSeconds);
 
     } catch (error) {
@@ -521,10 +309,182 @@ const PauvrathonPage = () => {
         variant: "destructive",
       });
     }
-  };
+  }, [streamer, timeToAdd, user, cooldownSeconds, startGlobalCooldown, userClicks]);
+
+  const handleViewerClick = useCallback(async () => {
+    if (!streamer || !user || isClicking || isGameActive || clickCooldown || streamStartDelay || isGlobalCooldownActive) return;
+
+    if (userClicks >= streamer.clicks_required) {
+      toast({
+        title: "Votre limite atteinte !",
+        description: "Vous avez atteint votre quota de clics pour déclencher un mini-jeu.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const now = Date.now();
+    const timeSinceLastClick = now - lastClickTime;
+    const minClickInterval = 1000;
+
+    if (timeSinceLastClick < minClickInterval) {
+      toast({
+        title: "Trop rapide !",
+        description: `Attendez ${Math.ceil((minClickInterval - timeSinceLastClick) / 1000)}s avant de recliquer.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsClicking(true);
+    setClickCooldown(true);
+    setLastClickTime(now);
+
+    try {
+      const newUserClicks = userClicks + 1;
+      setUserClicks(newUserClicks);
+
+      const { error: globalError } = await supabase
+        .from('streamers')
+        .update({
+          total_clicks: (streamer.total_clicks || 0) + 1,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', streamer.id);
+
+      if (globalError) {
+        console.warn('Erreur mise à jour stats globales:', globalError);
+      }
+
+      if (newUserClicks >= streamer.clicks_required) {
+        setTimeout(() => {
+          if (!isGameActive && !showValidateTimeButton && !streamStartDelay && !isGlobalCooldownActive) {
+            launchRandomMinigame();
+          }
+        }, 200);
+      }
+
+      toast({
+        title: "Clic enregistré !",
+        description: `Vos clics : ${newUserClicks}/${streamer.clicks_required}`,
+      });
+
+    } catch (error) {
+      console.error('Error handling click:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible d'enregistrer votre clic.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsClicking(false);
+      setTimeout(() => {
+        setClickCooldown(false);
+        if (!isGameActive && !showValidateTimeButton && !streamStartDelay && !isGlobalCooldownActive) {
+          toast({
+            title: "Clics disponibles",
+            description: "Vous pouvez maintenant cliquer à nouveau.",
+          });
+        }
+      }, 1000);
+    }
+  }, [streamer, user, isClicking, isGameActive, clickCooldown, streamStartDelay, isGlobalCooldownActive, userClicks, lastClickTime, showValidateTimeButton, launchRandomMinigame]);
+
+  const fetchStreamer = useCallback(async (streamerId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('streamers')
+        .select(`
+            *,
+            profiles (
+              twitch_username,
+              twitch_display_name,
+              avatar_url
+            )
+          `)
+        .eq('id', streamerId)
+        .single();
+
+      if (error) throw error;
+
+      if (!data || data.status !== 'live') {
+        toast({
+          title: "Pauvrathon non disponible",
+          description: "Ce streamer n'est pas en direct en ce moment.",
+          variant: "destructive",
+        });
+        navigate('/discovery', { replace: true });
+        return;
+      }
+
+      setStreamer(data as Streamer);
+      setIsStreamerOwner(user?.id === data.user_id);
+
+      const initialConfig = JSON.stringify({
+        time_mode: data.time_mode,
+        time_increment: data.time_increment,
+        min_random_time: data.min_random_time,
+        max_random_time: data.max_random_time,
+        clicks_required: data.clicks_required,
+        active_minigames: data.active_minigames,
+        cooldown_seconds: data.cooldown_seconds
+      });
+      setLastStreamerConfig(initialConfig);
+
+      setCooldownSeconds(data.cooldown_seconds || 60);
+
+      if (data.stream_started_at) {
+        const streamStartTime = new Date(data.stream_started_at).getTime();
+        const now = Date.now();
+        const initialDelayMs = 120000; // 2 minutes
+        const timeSinceStart = now - streamStartTime;
+
+        if (timeSinceStart < initialDelayMs) {
+          setStreamStartDelay(true);
+          let countdownInterval: NodeJS.Timeout;
+
+          const updateCountdown = () => {
+            const currentTime = Date.now();
+            const remaining = Math.ceil((initialDelayMs - (currentTime - streamStartTime)) / 1000);
+            setCountdownSeconds(remaining);
+
+            if (remaining <= 0) {
+              clearInterval(countdownInterval);
+              setStreamStartDelay(false);
+              setCountdownSeconds(0);
+              toast({
+                title: "Stream prêt !",
+                description: "Vous pouvez maintenant participer aux clics.",
+              });
+              // No window.location.reload() here. State updates should be sufficient.
+            }
+          };
+
+          countdownInterval = setInterval(updateCountdown, 1000);
+          updateCountdown(); // Call immediately to avoid 1-second delay on first render
+
+          // Ensure interval is cleared if component unmounts or delay ends
+          return () => clearInterval(countdownInterval);
+
+        } else {
+          setStreamStartDelay(false);
+        }
+      }
+
+    } catch (error) {
+      console.error('Error fetching streamer:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de charger les données du Pauvrathon.",
+        variant: "destructive",
+      });
+      navigate('/discovery', { replace: true });
+    } finally {
+      setLoading(false);
+    }
+  }, [navigate, user]);
 
   useEffect(() => {
-    // NOUVEAU LOGIC POUR PERSISTER LE COOLDOWN
     if (user && id) {
       const storedEndTime = localStorage.getItem(`pauvrathon_cooldown_end_${id}_${user.id}`);
       if (storedEndTime) {
@@ -532,7 +492,6 @@ const PauvrathonPage = () => {
         const remainingTime = Math.ceil((endTime - Date.now()) / 1000);
 
         if (remainingTime > 0) {
-          // Un cooldown existant est trouvé
           setIsGlobalCooldownActive(true);
           setGlobalCooldownRemaining(remainingTime);
 
@@ -552,7 +511,6 @@ const PauvrathonPage = () => {
             });
           }, 1000);
         } else {
-          // Cooldown est déjà terminé, on nettoie
           localStorage.removeItem(`pauvrathon_cooldown_end_${id}_${user.id}`);
         }
       }
@@ -569,7 +527,6 @@ const PauvrathonPage = () => {
           (payload) => {
             const updatedStreamer = payload.new as Streamer;
 
-            // Détecter les changements de configuration
             const newConfig = JSON.stringify({
               time_mode: updatedStreamer.time_mode,
               time_increment: updatedStreamer.time_increment,
@@ -577,7 +534,7 @@ const PauvrathonPage = () => {
               max_random_time: updatedStreamer.max_random_time,
               clicks_required: updatedStreamer.clicks_required,
               active_minigames: updatedStreamer.active_minigames,
-              cooldown_seconds: updatedStreamer.cooldown_seconds // Inclure le cooldown
+              cooldown_seconds: updatedStreamer.cooldown_seconds
             });
 
             if (lastStreamerConfig && lastStreamerConfig !== newConfig) {
@@ -590,30 +547,20 @@ const PauvrathonPage = () => {
 
             setLastStreamerConfig(newConfig);
 
-            // Mise à jour CONSERVATIVE du streamer - préserver les données existantes
             setStreamer(prev => {
               if (!prev) return updatedStreamer;
-
-              // Conserver les informations importantes si elles ne sont pas dans l'update
               const mergedStreamer = {
                 ...prev,
                 ...updatedStreamer,
-                // S'assurer que les profils ne disparaissent pas
                 profile: updatedStreamer.profile || prev.profile,
                 profiles: updatedStreamer.profiles || prev.profiles,
               };
-
               return mergedStreamer;
             });
 
-            // Mettre à jour la valeur du cooldown si elle change en direct
             if (updatedStreamer.cooldown_seconds !== cooldownSeconds) {
               setCooldownSeconds(updatedStreamer.cooldown_seconds || 60);
             }
-
-            // Déclencher le mini-jeu IMMÉDIATEMENT si les conditions sont remplies pour CE VIEWER
-            // Plus besoin de surveiller current_clicks car c'est individuel maintenant
-            // Le déclenchement se fait dans handleViewerClick quand userClicks atteint la limite
           }
         )
         .subscribe();
@@ -622,7 +569,7 @@ const PauvrathonPage = () => {
         supabase.removeChannel(channel);
       };
     }
-  }, [id, navigate, user, isGameActive, showValidateTimeButton, streamStartDelay, lastStreamerConfig, cooldownSeconds]);
+  }, [id, navigate, user, isGameActive, showValidateTimeButton, streamStartDelay, lastStreamerConfig, cooldownSeconds, fetchStreamer]);
 
   if (loading) {
     return (
@@ -760,7 +707,7 @@ const PauvrathonPage = () => {
                       className="h-4"
                     />
 
-                    {streamer.status === 'live' && user && (
+                    {streamer.status === 'live' && user ? (
                       <>
                         {isGlobalCooldownActive ? (
                           <div className="mt-4 p-4 bg-purple-500/10 border border-purple-500/20 rounded-lg text-center">
@@ -787,7 +734,7 @@ const PauvrathonPage = () => {
                             <p className="text-xs text-muted-foreground mt-1">
                               {countdownSeconds > 0
                                 ? `Clics disponibles dans ${countdownSeconds} secondes`
-                                : "Temps écoulé ! Rafraîchissez la page si les clics ne fonctionnent pas."
+                                : "Temps écoulé ! Vous pouvez maintenant cliquer."
                               }
                             </p>
                             <div className="mt-2 w-full bg-yellow-200 dark:bg-yellow-800 rounded-full h-2">
@@ -811,9 +758,7 @@ const PauvrathonPage = () => {
                           </Button>
                         )}
                       </>
-                    )}
-
-                    {!user && (
+                    ) : (
                       <div className="mt-4 p-3 bg-muted rounded-lg text-center">
                         <p className="text-sm text-muted-foreground">
                           Connectez-vous pour participer au Pauvrathon !
