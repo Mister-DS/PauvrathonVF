@@ -369,90 +369,93 @@ export default function StreamerPanel() {
   };
 
   const handleStatusChange = async (newStatus: 'live' | 'paused' | 'ended' | 'offline') => {
-    if (!streamer || !streamer.id) {
-      console.error("Mise à jour du statut impossible: Streamer ID invalide.");
-      return;
-    }
+  if (!streamer || !streamer.id) {
+    console.error("Mise à jour du statut impossible: Streamer ID invalide.");
+    return;
+  }
 
-    try {
-      let updateData: any = { 
-        status: newStatus,
-        is_live: newStatus === 'live',
-        updated_at: new Date().toISOString()
-      };
+  try {
+    let updateData: any = {
+      status: newStatus,
+      is_live: newStatus === 'live',
+      updated_at: new Date().toISOString()
+    };
 
-      if (newStatus === 'live') {
-        if (streamer.status === 'paused') {
-            const pauseDuration = Math.floor((new Date().getTime() - new Date(streamer.pause_started_at!).getTime()) / 1000);
-            updateData = {
-                ...updateData,
-                total_paused_duration: streamer.total_paused_duration + pauseDuration,
-                pause_started_at: null
-            };
-        } else {
-            updateData.stream_started_at = new Date().toISOString();
-            updateData.total_elapsed_time = 0;
-            updateData.total_paused_duration = 0;
-        }
-
-        if (!selectedGames.length) {
-            toast({
-                title: "Attention",
-                description: "Aucun mini-jeu n'a été sélectionné. Les viewers ne pourront pas jouer.",
-                variant: "destructive",
-            });
-        }
-      } else if (newStatus === 'paused') {
-          if (streamer.stream_started_at) {
-              const elapsedTimeBeforePause = Math.floor(
-                  (new Date().getTime() - new Date(streamer.stream_started_at!).getTime()) / 1000
-              );
-              updateData = {
-                  ...updateData,
-                  pause_started_at: new Date().toISOString(),
-                  total_elapsed_time: streamer.total_elapsed_time + elapsedTimeBeforePause,
-              };
-          }
-      } else if (newStatus === 'ended' || newStatus === 'offline') {
-        updateData.current_clicks = 0;
-        updateData.total_time_added = 0;
+    if (newStatus === 'live') {
+      if (streamer.status === 'paused') {
+        const pauseDuration = Math.floor((new Date().getTime() - new Date(streamer.pause_started_at!).getTime()) / 1000);
+        updateData = {
+          ...updateData,
+          total_paused_duration: streamer.total_paused_duration + pauseDuration,
+          pause_started_at: null
+        };
+      } else {
+        // Ajout de la réinitialisation de total_clicks ici
+        updateData.stream_started_at = new Date().toISOString();
         updateData.total_elapsed_time = 0;
         updateData.total_paused_duration = 0;
-        updateData.stream_started_at = null;
-        updateData.pause_started_at = null;
+        updateData.total_clicks = 0; // <-- AJOUTEZ CETTE LIGNE
       }
 
-      const { data, error } = await supabase
-        .from('streamers')
-        .update(updateData)
-        .eq('id', streamer.id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      setStreamer(data as any);
-      
-      const statusMessages = {
-        live: streamer.status === 'paused' ? "Pauvrathon repris" : "Pauvrathon démarré",
-        paused: "Pauvrathon en pause", 
-        ended: "Pauvrathon terminé",
-        offline: "Pauvrathon arrêté"
-      };
-
-      toast({
-        title: statusMessages[newStatus],
-        description: `Le Pauvrathon est maintenant ${newStatus === 'live' ? 'en direct' : newStatus === 'paused' ? 'en pause' : 'terminé'}.`,
-      });
-      
-    } catch (error: any) {
-      console.error('Error updating status:', error);
-      toast({
-        title: "Erreur",
-        description: `Impossible de mettre à jour le statut: ${error.message || 'Erreur inconnue'}`,
-        variant: "destructive",
-      });
+      if (!selectedGames.length) {
+        toast({
+          title: "Attention",
+          description: "Aucun mini-jeu n'a été sélectionné. Les viewers ne pourront pas jouer.",
+          variant: "destructive",
+        });
+      }
+    } else if (newStatus === 'paused') {
+      if (streamer.stream_started_at) {
+        const elapsedTimeBeforePause = Math.floor(
+          (new Date().getTime() - new Date(streamer.stream_started_at!).getTime()) / 1000
+        );
+        updateData = {
+          ...updateData,
+          pause_started_at: new Date().toISOString(),
+          total_elapsed_time: streamer.total_elapsed_time + elapsedTimeBeforePause,
+        };
+      }
+    } else if (newStatus === 'ended' || newStatus === 'offline') {
+      updateData.current_clicks = 0;
+      updateData.total_time_added = 0;
+      updateData.total_elapsed_time = 0;
+      updateData.total_paused_duration = 0;
+      updateData.stream_started_at = null;
+      updateData.pause_started_at = null;
+      updateData.total_clicks = 0; // <-- AJOUTEZ CETTE LIGNE AUSSI POUR LES STATUTS 'ended'/'offline'
     }
-  };
+
+    const { data, error } = await supabase
+      .from('streamers')
+      .update(updateData)
+      .eq('id', streamer.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    setStreamer(data as any);
+
+    const statusMessages = {
+      live: streamer.status === 'paused' ? "Pauvrathon repris" : "Pauvrathon démarré",
+      paused: "Pauvrathon en pause",
+      ended: "Pauvrathon terminé",
+      offline: "Pauvrathon arrêté"
+    };
+
+    toast({
+      title: statusMessages[newStatus],
+      description: `Le Pauvrathon est maintenant ${newStatus === 'live' ? 'en direct' : newStatus === 'paused' ? 'en pause' : 'terminé'}.`,
+    });
+
+  } catch (error: any) {
+    console.error('Error updating status:', error);
+    toast({
+      title: "Erreur",
+      description: `Impossible de mettre à jour le statut: ${error.message || 'Erreur inconnue'}`,
+      variant: "destructive",
+    });
+  }
+};
   
   const handleMinigameToggle = (minigameId: string, checked: boolean | 'indeterminate') => {
     if (checked === true) {
