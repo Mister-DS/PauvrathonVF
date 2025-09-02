@@ -112,6 +112,7 @@ const PauvrathonPage = () => {
                 title: "Stream prêt !",
                 description: "Vous pouvez maintenant participer aux clics.",
               });
+              window.location.reload(); // Ajout du rechargement ici
             }
           }, 1000);
           
@@ -201,7 +202,18 @@ const PauvrathonPage = () => {
       const newUserClicks = userClicks + 1;
       setUserClicks(newUserClicks);
       
-      // Le compteur global n'est plus mis à jour ici
+      // Aussi incrémenter le compteur global pour les statistiques générales
+      const { error: globalError } = await supabase
+        .from('streamers')
+        .update({
+          total_clicks: (streamer.total_clicks || 0) + 1,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', streamer.id);
+        
+      if (globalError) {
+        console.warn('Erreur mise à jour stats globales:', globalError);
+      }
       
       // Vérifier si ce viewer peut déclencher un mini-jeu
       if (newUserClicks >= streamer.clicks_required) {
@@ -228,7 +240,7 @@ const PauvrathonPage = () => {
     } finally {
       setIsClicking(false);
       // Cooldown de 1 seconde pour éviter le spam
-      const cooldownTimer = setTimeout(() => {
+      setTimeout(() => {
         setClickCooldown(false);
         
         // Message de rafraîchissement si le cooldown se termine et qu'on ne peut plus cliquer
@@ -238,18 +250,7 @@ const PauvrathonPage = () => {
             description: "Vous pouvez maintenant cliquer à nouveau.",
           });
         }
-        
       }, 1000);
-      
-      // Ajout de la logique de rechargement
-      const refreshCheckInterval = setInterval(() => {
-        const timeRemaining = Math.ceil((1000 - (Date.now() - now)) / 1000);
-        if (timeRemaining <= 1) {
-          console.log("Cooldown at 1 second. Refreshing page...");
-          window.location.reload();
-          clearInterval(refreshCheckInterval);
-        }
-      }, 100); // Vérifie toutes les 100ms
     }
   };
 
@@ -395,7 +396,6 @@ const PauvrathonPage = () => {
     if (!streamer) return;
     
     try {
-      // Mise à jour du temps total. La mise à jour des clics totaux est désactivée car la colonne n'existe pas.
       const { error } = await supabase
         .from('streamers')
         .update({
