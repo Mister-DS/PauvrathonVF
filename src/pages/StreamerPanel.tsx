@@ -63,6 +63,17 @@ interface StreamerSettings {
   total_clicks?: number;
 }
 
+// Interface pour les statistiques des contributeurs
+interface SubathonStat {
+  id: string;
+  streamer_id: string;
+  profile_id: string;
+  profile_twitch_display_name: string; // Ajout de cette propriété pour le nom
+  time_contributed: number;
+  clicks_contributed: number;
+  created_at: string;
+}
+
 const formatTime = (seconds: number) => {
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
@@ -133,7 +144,7 @@ export default function StreamerPanel() {
   const [streamer, setStreamer] = useState<StreamerSettings | null>(null);
   const [originalStreamerData, setOriginalStreamerData] = useState<StreamerSettings | null>(null);
   const [availableMinigames, setAvailableMinigames] = useState<any[]>([]);
-  const [stats, setStats] = useState<any[]>([]);
+  const [stats, setStats] = useState<SubathonStat[]>([]); // Utilisation de l'interface SubathonStat
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -219,15 +230,23 @@ export default function StreamerPanel() {
     }
 
     try {
+      // Sélectionne également le nom d'affichage Twitch du profil lié
       const { data, error } = await supabase
         .from('subathon_stats')
-        .select('*')
+        .select(`
+          *,
+          profiles (twitch_display_name)
+        `)
         .eq('streamer_id', streamer.id)
         .order('time_contributed', { ascending: false });
 
       if (error) throw error;
       
-      setStats(data || []);
+      // Mappe les données pour inclure le nom d'affichage Twitch directement dans l'objet stat
+      setStats((data || []).map(stat => ({
+        ...stat,
+        profile_twitch_display_name: stat.profiles?.twitch_display_name || 'Inconnu'
+      })) as SubathonStat[]);
     } catch (error: any) {
       console.error('Error fetching stats:', error);
     }
@@ -971,6 +990,7 @@ export default function StreamerPanel() {
                                   </div>
                                   
                                   <div className="flex-1 min-w-0">
+                                    {/* Affichage du nom d'utilisateur Twitch */}
                                     <p className="font-semibold truncate">{stat.profile_twitch_display_name}</p>
                                     <div className="flex items-center space-x-4 text-sm text-muted-foreground">
                                       <span className="flex items-center">
