@@ -261,14 +261,16 @@ const PauvrathonPage = () => {
   };
 
   const handleGameEnd = async (victory: boolean) => {
+    if (!streamer) return;
+    
     setIsGameActive(false);
     setMinigameState({ component: null, props: {}, name: '' });
 
-    const cooldownInSeconds = streamer?.cooldown_seconds || 300;
+    const cooldownInSeconds = streamer.cooldown_seconds || 300;
 
     if (victory) {
       // Calculer le temps à ajouter selon les paramètres du streamer
-      const calculatedTime = calculateTimeToAdd(streamer!);
+      const calculatedTime = calculateTimeToAdd(streamer);
       setTimeToAdd(calculatedTime);
       
       toast({
@@ -480,7 +482,7 @@ const PauvrathonPage = () => {
       setTimeToAdd(0);
       
       // Active le cooldown APRÈS la validation du temps
-      const cooldownInSeconds = streamer?.cooldown_seconds || 300;
+      const cooldownInSeconds = streamer.cooldown_seconds || 300;
       setIsGameCooldownActive(true);
       setTimeout(() => {
         setIsGameCooldownActive(false);
