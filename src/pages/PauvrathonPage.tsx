@@ -42,6 +42,7 @@ const PauvrathonPage = () => {
   const [lastClickTime, setLastClickTime] = useState<number>(0);
   const [streamStartDelay, setStreamStartDelay] = useState(true); // Nouveau: délai initial
   const [countdownSeconds, setCountdownSeconds] = useState(0); // Pour afficher le countdown
+  const [lastStreamerConfig, setLastStreamerConfig] = useState<string>(''); // Pour détecter les changements
 
   const fetchStreamer = async (streamerId: string) => {
     try {
@@ -72,6 +73,17 @@ const PauvrathonPage = () => {
       
       setStreamer(data as Streamer);
       setIsStreamerOwner(user?.id === data.user_id);
+      
+      // Initialiser la configuration de référence
+      const initialConfig = JSON.stringify({
+        time_mode: data.time_mode,
+        time_increment: data.time_increment,
+        min_random_time: data.min_random_time,
+        max_random_time: data.max_random_time,
+        clicks_required: data.clicks_required,
+        active_minigames: data.active_minigames
+      });
+      setLastStreamerConfig(initialConfig);
       
       // Gérer le délai initial pour les nouveaux streams
       if (data.stream_started_at) {
@@ -125,13 +137,21 @@ const PauvrathonPage = () => {
 
   const calculateTimeToAdd = (streamer: Streamer): number => {
     if (streamer.time_mode === 'random') {
-      // Générer un temps aléatoire entre min et max
-      const minTime = streamer.min_random_time || streamer.time_increment || 10;
-      const maxTime = streamer.max_random_time || 60;
-      return Math.floor(Math.random() * (maxTime - minTime + 1)) + minTime;
+      // Générer un temps aléatoire entre min et max avec gestion des erreurs
+      const minTime = Math.max(1, streamer.min_random_time || streamer.time_increment || 10);
+      const maxTime = Math.max(minTime, streamer.max_random_time || 60);
+      
+      console.log(`🎲 Mode aléatoire: min=${minTime}s, max=${maxTime}s`);
+      
+      const randomTime = Math.floor(Math.random() * (maxTime - minTime + 1)) + minTime;
+      console.log(`🎲 Temps généré: ${randomTime}s`);
+      
+      return randomTime;
     } else {
       // Temps fixe
-      return streamer.time_increment || 30;
+      const fixedTime = streamer.time_increment || 30;
+      console.log(`⚡ Mode fixe: ${fixedTime}s`);
+      return fixedTime;
     }
   };
 
@@ -242,7 +262,22 @@ const PauvrathonPage = () => {
     } finally {
       setIsClicking(false);
       // Cooldown de 1 seconde pour éviter le spam
-      setTimeout(() => setClickCooldown(false), 1000);
+      setTimeout(() => {
+        setClickCooldown(false);
+        
+        // Message de rafraîchissement si le cooldown se termine à 1s
+        if (!isGameActive && !showValidateTimeButton) {
+          const currentTime = Date.now();
+          const timeSinceClick = currentTime - lastClickTime;
+          if (timeSinceClick >= 1000) {
+            toast({
+              title: "Temps écoulé",
+              description: "Si les clics ne fonctionnent pas, rafraîchissez la page.",
+              variant: "default",
+            });
+          }
+        }
+      }, 1000);
     }
   };
 
@@ -276,7 +311,12 @@ const PauvrathonPage = () => {
         });
         setTimeout(launchRandomMinigame, 5000);
       } else {
-        setMinigameChances(prev => prev - 1);
+        setMinigameChances(prev => {
+          const newChances = prev - 1;
+          console.log(`❌ Chance perdue ! Nouvelles chances restantes: ${newChances}`);
+          return newChances;
+        });
+        
         if (minigameChances - 1 > 0) {
           setMinigameAttempts(0);
           toast({
@@ -422,6 +462,27 @@ const PauvrathonPage = () => {
           { event: '*', schema: 'public', table: 'streamers', filter: `id=eq.${id}` },
           (payload) => {
             const updatedStreamer = payload.new as Streamer;
+            
+            // Détecter les changements de configuration
+            const newConfig = JSON.stringify({
+              time_mode: updatedStreamer.time_mode,
+              time_increment: updatedStreamer.time_increment,
+              min_random_time: updatedStreamer.min_random_time,
+              max_random_time: updatedStreamer.max_random_time,
+              clicks_required: updatedStreamer.clicks_required,
+              active_minigames: updatedStreamer.active_minigames
+            });
+            
+            if (lastStreamerConfig && lastStreamerConfig !== newConfig) {
+              toast({
+                title: "Configuration mise à jour",
+                description: "Les paramètres du stream ont été modifiés. Rafraîchissez la page pour les appliquer.",
+                variant: "default",
+              });
+            }
+            
+            setLastStreamerConfig(newConfig);
+            
             setStreamer(prev => {
               // Éviter les mises à jour inutiles si les données sont identiques
               if (prev && JSON.stringify(prev) === JSON.stringify(updatedStreamer)) {
@@ -733,7 +794,7 @@ const PauvrathonPage = () => {
           {minigameState.component && (
             <div className="p-2 lg:p-4">
               <div className="mb-4 text-center">
-                <p className="text-xs lg:text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground">
                   Tentative {minigameAttempts + 1} sur 12 • Chance {4 - minigameChances} sur 3
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">

@@ -72,30 +72,30 @@ export default function Profile() {
 
         // 3. Supprimer les follows où cet utilisateur est le streamer suivi
         const { error: followedError } = await supabase
-          .from('follows')
+          .from('user_follows')
           .delete()
           .eq('streamer_id', streamerData.id);
         
         if (followedError) {
-          console.error('❌ Erreur suppression follows (being followed):', followedError);
+          console.error('❌ Erreur suppression user_follows (being followed):', followedError);
           throw new Error(`Erreur lors de la suppression des follows entrants: ${followedError.message}`);
         }
-        console.log('✅ follows (en tant que streamer suivi) supprimés');
+        console.log('✅ user_follows (en tant que streamer suivi) supprimés');
       } else {
         console.log('ℹ️ Utilisateur n\'est pas un streamer, pas de subathon_stats à supprimer');
       }
 
       // 4. Supprimer les follows de l'utilisateur (en tant que follower)
       const { error: followsError } = await supabase
-        .from('follows')
+        .from('user_follows')
         .delete()
-        .eq('follower_id', user.id);
+        .eq('follower_user_id', user.id);
       
       if (followsError) {
-        console.error('❌ Erreur suppression follows (follower):', followsError);
+        console.error('❌ Erreur suppression user_follows (follower):', followsError);
         throw new Error(`Erreur lors de la suppression des follows: ${followsError.message}`);
       }
-      console.log('✅ follows (en tant que follower) supprimés');
+      console.log('✅ user_follows (en tant que follower) supprimés');
 
       // 5. Supprimer l'entrée streamer si elle existe
       const { error: streamerError } = await supabase
