@@ -1,887 +1,1227 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/contexts/AuthContext';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { minigameComponents } from '@/components/minigames';
-import { TwitchPlayer } from '@/components/TwitchPlayer';
-import { Navigation } from '@/components/Navigation';
 import { UniversalTimer } from '@/components/UniversalTimer';
+import { Navigate, useNavigate } from 'react-router-dom';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Slider } from '@/components/ui/slider';
+import { Separator } from '@/components/ui/separator';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Navigation } from '@/components/Navigation';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
-import { Streamer } from '@/types';
 import {
-  Trophy, AlertTriangle, Clock, Settings, Gamepad2, Loader2, Zap, Hourglass, CheckCircle, Users, Eye
+  Settings,
+  Clock,
+  Timer,
+  Gamepad2,
+  Radio,
+  Play,
+  Pause,
+  RotateCcw,
+  Square,
+  Eye,
+  BarChart3,
+  Link,
+  ExternalLink,
+  ClipboardCheck,
+  Copy,
+  Loader2,
+  Star,
+  Monitor,
+  AlertCircle,
+  Trophy
 } from 'lucide-react';
 
-const PauvrathonPage = () => {
-  const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
-  const { user } = useAuth();
-  const [streamer, setStreamer] = useState<Streamer | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [isStreamerOwner, setIsStreamerOwner] = useState(false);
+interface StreamerSettings {
+  id: string;
+  user_id: string;
+  stream_title: string;
+  twitch_id: string;
+  time_mode: 'fixed' | 'random';
+  time_increment: number;
+  min_random_time?: number;
+  max_random_time: number;
+  clicks_required: number;
+  cooldown_seconds: number;
+  initial_duration: number;
+  active_minigames: string[];
+  status: 'offline' | 'live' | 'paused' | 'ended';
+  is_live: boolean;
+  total_time_added: number;
+  current_clicks: number;
+  stream_started_at: string | null;
+  pause_started_at: string | null;
+  total_elapsed_time: number;
+  total_paused_duration: number;
+  total_clicks?: number;
+}
 
-  // États pour le jeu
-  const [isGameActive, setIsGameActive] = useState(false);
-  const [minigameState, setMinigameState] = useState<{
-    component: React.ComponentType<any> | null;
-    props: any;
-    name: string;
-  }>({ component: null, props: {}, name: '' });
-  const [minigameAttempts, setMinigameAttempts] = useState(0);
-  const [minigameChances, setMinigameChances] = useState(3);
-  const [showValidateTimeButton, setShowValidateTimeButton] = useState(false);
-  const [timeToAdd, setTimeToAdd] = useState(0);
-  const [isClicking, setIsClicking] = useState(false);
-  const [clickCooldown, setClickCooldown] = useState(false);
-  const [lastClickTime, setLastClickTime] = useState<number>(0);
-  const [streamStartDelay, setStreamStartDelay] = useState(true);
-  const [countdownSeconds, setCountdownSeconds] = useState(0);
-  const [lastStreamerConfig, setLastStreamerConfig] = useState<string>('');
-  const [userClicks, setUserClicks] = useState(0);
+const formatTime = (seconds: number) => {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}m ${secs}s`;
+};
 
-  // États pour le cooldown global
-  const [isGlobalCooldownActive, setIsGlobalCooldownActive] = useState(false);
-  const [globalCooldownRemaining, setGlobalCooldownRemaining] = useState(0);
-  const [cooldownSeconds, setCooldownSeconds] = useState(60);
-
-  const formatTime = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    if (mins > 0) {
-      return `${mins}m ${secs}s`;
-    }
-    return `${secs}s`;
-  };
-
-  const calculateTimeToAdd = useCallback((streamer: Streamer): number => {
-    if (streamer.time_mode === 'random') {
-      const minTime = Math.max(1, streamer.min_random_time || streamer.time_increment || 10);
-      const maxTime = Math.max(minTime, streamer.max_random_time || 60);
-      const randomTime = Math.floor(Math.random() * (maxTime - minTime + 1)) + minTime;
-      return randomTime;
-    } else {
-      const fixedTime = streamer.time_increment || 30;
-      return fixedTime;
-    }
-  }, []);
-
-  const startGlobalCooldown = useCallback((duration: number) => {
-    setIsGlobalCooldownActive(true);
-    setGlobalCooldownRemaining(duration);
-
-    if (user) {
-      const endTime = Date.now() + duration * 1000;
-      localStorage.setItem(`pauvrathon_cooldown_end_${id}_${user.id}`, endTime.toString());
-    }
-
-    const intervalId = setInterval(() => {
-      setGlobalCooldownRemaining(prev => {
-        if (prev <= 1) {
-          clearInterval(intervalId);
-          setIsGlobalCooldownActive(false);
-          if (user) {
-            localStorage.removeItem(`pauvrathon_cooldown_end_${id}_${user.id}`);
-          }
-          toast({
-            title: "Cooldown terminé !",
-            description: "Vous pouvez de nouveau cliquer pour lancer un mini-jeu.",
-          });
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  }, [user, id]);
-
-  const launchRandomMinigame = useCallback(async () => {
-    if (!streamer || isGameActive) return;
-
-    setIsGameActive(true);
-
-    const activeGames = streamer.active_minigames;
-    if (!activeGames || activeGames.length === 0) {
-      toast({
-        title: "Pas de mini-jeu",
-        description: "Aucun mini-jeu actif n'est configuré pour ce streamer.",
-        variant: "destructive",
-      });
-      setIsGameActive(false);
-      return;
-    }
-
-    const randomGameCode = activeGames[Math.floor(Math.random() * activeGames.length)];
-    const gameComponent = minigameComponents[randomGameCode];
-
-    if (gameComponent) {
-      setMinigameState({
-        component: gameComponent,
-        name: randomGameCode,
-        props: {
-          streamerId: streamer.id,
-          onWin: () => handleGameEnd(true),
-          onLose: () => handleGameEnd(false),
-          attempts: minigameAttempts,
-          maxAttempts: 12,
-        },
-      });
-    } else {
-      toast({
-        title: "Erreur",
-        description: `Le composant du mini-jeu '${randomGameCode}' est introuvable.`,
-        variant: "destructive",
-      });
-      setIsGameActive(false);
-    }
-  }, [streamer, isGameActive, minigameAttempts]);
-
-  const handleGameEnd = useCallback(async (victory: boolean) => {
-    setIsGameActive(false);
-    setMinigameState({ component: null, props: {}, name: '' });
-
-    if (!streamer) return;
-
-    if (victory) {
-      const calculatedTime = calculateTimeToAdd(streamer);
-      setTimeToAdd(calculatedTime);
-
-      toast({
-        title: "Victoire !",
-        description: `Vous avez gagné ! Validez pour ajouter ${formatTime(calculatedTime)} au Pauvrathon.`,
-      });
-      setShowValidateTimeButton(true);
-
-      setMinigameAttempts(0);
-      setMinigameChances(3);
-      setUserClicks(0);
-
-    } else {
-      setMinigameAttempts(prev => prev + 1);
-
-      if (minigameAttempts + 1 < 12) {
-        toast({
-          title: "Défaite !",
-          description: `Il vous reste ${12 - (minigameAttempts + 1)} essais sur cette chance. Relance du jeu dans 5 secondes.`,
-          variant: "destructive",
-        });
-        setTimeout(launchRandomMinigame, 5000);
-      } else {
-        setMinigameChances(prev => {
-          const newChances = prev - 1;
-          return newChances;
-        });
-
-        if (minigameChances - 1 > 0) {
-          setMinigameAttempts(0);
-          toast({
-            title: "Chance perdue !",
-            description: `Vous avez épuisé vos 12 essais. Il vous reste ${minigameChances - 1} chance(s). Nouvelle chance dans 5 secondes.`,
-            variant: "destructive",
-          });
-          setTimeout(launchRandomMinigame, 5000);
-        } else {
-          toast({
-            title: "Toutes les chances épuisées !",
-            description: "Vos clics ont été remis à zéro. Recommencez à cliquer pour déclencher un nouveau mini-jeu.",
-            variant: "destructive",
-          });
-          
-          setMinigameAttempts(0);
-          setMinigameChances(3);
-          setUserClicks(0);
-
-          startGlobalCooldown(streamer.cooldown_seconds || 60);
-
-          // CORRIGÉ: Utilisation de la fonction atomique pour les stats
-          if (user) {
-            const username = user.user_metadata?.twitch_username || user.email || 'Viewer anonyme';
-            
-            try {
-              const { error: statsError } = await supabase.rpc('upsert_user_stats', {
-                p_streamer_id: streamer.id,
-                p_player_username: username,
-                p_time_contributed: 0,
-                p_games_won: 0,
-                p_games_played: 1,
-                p_clicks_contributed: userClicks
-              });
-
-              if (statsError) {
-                console.error('Error updating user stats:', statsError);
-              }
-            } catch (error) {
-              console.error('Error in upsert_user_stats:', error);
-            }
-          }
-        }
-      }
-    }
-  }, [minigameAttempts, minigameChances, streamer, user, calculateTimeToAdd, launchRandomMinigame, startGlobalCooldown, userClicks]);
-
-  // CORRIGÉ: Utilisation de la fonction atomique pour valider le temps
-  const handleValidateTime = useCallback(async () => {
-    if (!streamer || !user) return;
-
-    // Validation des données
-    if (timeToAdd < 1 || timeToAdd > 300) {
-      toast({
-        title: "Erreur",
-        description: "Temps invalide détecté.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      // CORRIGÉ: Utilisation de la fonction atomique pour ajouter du temps
-      const { error: timeError } = await supabase.rpc('add_time_to_streamer', {
-        streamer_id: streamer.id,
-        time_to_add: timeToAdd
-      });
-
-      if (timeError) {
-        console.error('Error adding time:', timeError);
-        throw timeError;
-      }
-
-      // CORRIGÉ: Utilisation de la fonction atomique pour les stats utilisateur
-      const username = user.user_metadata?.twitch_username || user.email || 'Viewer anonyme';
-      
-      const { error: statsError } = await supabase.rpc('upsert_user_stats', {
-        p_streamer_id: streamer.id,
-        p_player_username: username,
-        p_time_contributed: timeToAdd,
-        p_games_won: 1,
-        p_games_played: 1,
-        p_clicks_contributed: userClicks
-      });
-
-      if (statsError) {
-        console.error('Error updating user stats:', statsError);
-      }
-
-      toast({
-        title: "Temps ajouté !",
-        description: `${formatTime(timeToAdd)} ont été ajoutés au compteur du Pauvrathon.`,
-      });
-
-      setShowValidateTimeButton(false);
-      setTimeToAdd(0);
-      startGlobalCooldown(cooldownSeconds);
-
-    } catch (error) {
-      console.error('Error validating time:', error);
-      toast({
-        title: "Erreur",
-        description: "Impossible d'ajouter le temps au Pauvrathon.",
-        variant: "destructive",
-      });
-    }
-  }, [streamer, timeToAdd, user, cooldownSeconds, startGlobalCooldown, userClicks]);
-
-  // CORRIGÉ: Utilisation de la fonction atomique pour les clics
-  const handleViewerClick = useCallback(async () => {
-    if (!streamer || !user || isClicking || isGameActive || clickCooldown || streamStartDelay || isGlobalCooldownActive) {
-      return;
-    }
-
-    // Validation des données utilisateur
-    if (!user.user_metadata?.twitch_username && !user.email) {
-      toast({
-        title: "Erreur",
-        description: "Profil utilisateur requis.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (userClicks >= streamer.clicks_required) {
-      toast({
-        title: "Votre limite atteinte !",
-        description: "Vous avez atteint votre quota de clics pour déclencher un mini-jeu.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const now = Date.now();
-    const timeSinceLastClick = now - lastClickTime;
-    const minClickInterval = 1000;
-
-    if (timeSinceLastClick < minClickInterval) {
-      toast({
-        title: "Trop rapide !",
-        description: `Attendez ${Math.ceil((minClickInterval - timeSinceLastClick) / 1000)}s avant de recliquer.`,
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsClicking(true);
-    setClickCooldown(true);
-    setLastClickTime(now);
-
-    try {
-      // CORRIGÉ: Utilisation de la fonction atomique pour incrémenter les clics
-      const { error: clickError } = await supabase.rpc('increment_clicks', {
-        streamer_id: streamer.id
-      });
-
-      if (clickError) {
-        console.error('Error incrementing clicks:', clickError);
-        // On continue quand même car c'est pas critique pour l'expérience utilisateur
-      }
-
-      const newUserClicks = userClicks + 1;
-      setUserClicks(newUserClicks);
-
-      if (newUserClicks >= streamer.clicks_required) {
-        setTimeout(() => {
-          if (!isGameActive && !showValidateTimeButton && !streamStartDelay && !isGlobalCooldownActive) {
-            launchRandomMinigame();
-          }
-        }, 200);
-      }
-
-      toast({
-        title: "Clic enregistré !",
-        description: `Vos clics : ${newUserClicks}/${streamer.clicks_required}`,
-      });
-
-    } catch (error) {
-      console.error('Error handling click:', error);
-      toast({
-        title: "Erreur",
-        description: "Impossible d'enregistrer votre clic.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsClicking(false);
-      setTimeout(() => {
-        setClickCooldown(false);
-        if (!isGameActive && !showValidateTimeButton && !streamStartDelay && !isGlobalCooldownActive) {
-          toast({
-            title: "Clics disponibles",
-            description: "Vous pouvez maintenant cliquer à nouveau.",
-          });
-        }
-      }, 1000);
-    }
-  }, [streamer, user, isClicking, isGameActive, clickCooldown, streamStartDelay, isGlobalCooldownActive, userClicks, lastClickTime, showValidateTimeButton, launchRandomMinigame]);
-
-  const fetchStreamer = useCallback(async (streamerId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('streamers')
-        .select(`
-            *,
-            profiles (
-              twitch_username,
-              twitch_display_name,
-              avatar_url
-            )
-          `)
-        .eq('id', streamerId)
-        .single();
-
-      if (error) throw error;
-
-      if (!data || data.status !== 'live') {
-        toast({
-          title: "Pauvrathon non disponible",
-          description: "Ce streamer n'est pas en direct en ce moment.",
-          variant: "destructive",
-        });
-        navigate('/discovery', { replace: true });
-        return;
-      }
-
-      setStreamer(data as Streamer);
-      setIsStreamerOwner(user?.id === data.user_id);
-
-      const initialConfig = JSON.stringify({
-        time_mode: data.time_mode,
-        time_increment: data.time_increment,
-        min_random_time: data.min_random_time,
-        max_random_time: data.max_random_time,
-        clicks_required: data.clicks_required,
-        active_minigames: data.active_minigames,
-        cooldown_seconds: data.cooldown_seconds
-      });
-      setLastStreamerConfig(initialConfig);
-
-      setCooldownSeconds(data.cooldown_seconds || 60);
-
-      if (data.stream_started_at) {
-        const streamStartTime = new Date(data.stream_started_at).getTime();
-        const now = Date.now();
-        const initialDelayMs = 120000;
-        const timeSinceStart = now - streamStartTime;
-
-        if (timeSinceStart < initialDelayMs) {
-          setStreamStartDelay(true);
-          let countdownInterval: NodeJS.Timeout;
-
-          const updateCountdown = () => {
-            const currentTime = Date.now();
-            const remaining = Math.ceil((initialDelayMs - (currentTime - streamStartTime)) / 1000);
-            setCountdownSeconds(remaining);
-
-            if (remaining <= 0) {
-              clearInterval(countdownInterval);
-              setStreamStartDelay(false);
-              setCountdownSeconds(0);
-              toast({
-                title: "Stream prêt !",
-                description: "Vous pouvez maintenant participer aux clics.",
-              });
-            }
-          };
-
-          countdownInterval = setInterval(updateCountdown, 1000);
-          updateCountdown();
-
-          return () => clearInterval(countdownInterval);
-        } else {
-          setStreamStartDelay(false);
-        }
-      }
-
-    } catch (error) {
-      console.error('Error fetching streamer:', error);
-      toast({
-        title: "Erreur",
-        description: "Impossible de charger les données du Pauvrathon.",
-        variant: "destructive",
-      });
-      navigate('/discovery', { replace: true });
-    } finally {
-      setLoading(false);
-    }
-  }, [navigate, user]);
-
+// Lecteur vidéo Twitch
+const TwitchPlayer = ({ twitchUsername }: { twitchUsername: string | undefined }) => {
   useEffect(() => {
-    // Restauration du cooldown depuis localStorage
-    if (user && id) {
-      const storedEndTime = localStorage.getItem(`pauvrathon_cooldown_end_${id}_${user.id}`);
-      if (storedEndTime) {
-        const endTime = parseInt(storedEndTime, 10);
-        const remainingTime = Math.ceil((endTime - Date.now()) / 1000);
+    if (!twitchUsername) return;
 
-        if (remainingTime > 0) {
-          setIsGlobalCooldownActive(true);
-          setGlobalCooldownRemaining(remainingTime);
-
-          const intervalId = setInterval(() => {
-            setGlobalCooldownRemaining(prev => {
-              if (prev <= 1) {
-                clearInterval(intervalId);
-                setIsGlobalCooldownActive(false);
-                localStorage.removeItem(`pauvrathon_cooldown_end_${id}_${user.id}`);
-                toast({
-                  title: "Cooldown terminé !",
-                  description: "Vous pouvez de nouveau cliquer pour lancer un mini-jeu.",
-                });
-                return 0;
-              }
-              return prev - 1;
-            });
-          }, 1000);
-        } else {
-          localStorage.removeItem(`pauvrathon_cooldown_end_${id}_${user.id}`);
-        }
-      }
+    // Nettoie l'ancien embed s'il existe
+    const existingEmbed = document.getElementById('twitch-embed');
+    if (existingEmbed) {
+      existingEmbed.innerHTML = '';
     }
 
-    if (id) {
-      fetchStreamer(id);
+    // S'assure que le script de l'API Twitch est chargé
+    if (!(window as any).Twitch) {
+      const script = document.createElement('script');
+      script.src = 'https://embed.twitch.tv/embed/v1.js';
+      script.async = true;
+      document.body.appendChild(script);
 
-      const channel = supabase
-        .channel(`public:streamers:id=eq.${id}`)
-        .on(
-          'postgres_changes',
-          { event: '*', schema: 'public', table: 'streamers', filter: `id=eq.${id}` },
-          (payload) => {
-            const updatedStreamer = payload.new as Streamer;
-
-            const newConfig = JSON.stringify({
-              time_mode: updatedStreamer.time_mode,
-              time_increment: updatedStreamer.time_increment,
-              min_random_time: updatedStreamer.min_random_time,
-              max_random_time: updatedStreamer.max_random_time,
-              clicks_required: updatedStreamer.clicks_required,
-              active_minigames: updatedStreamer.active_minigames,
-              cooldown_seconds: updatedStreamer.cooldown_seconds
-            });
-
-            if (lastStreamerConfig && lastStreamerConfig !== newConfig) {
-              toast({
-                title: "Configuration mise à jour",
-                description: "Les paramètres du stream ont été modifiés. Rafraîchissez la page pour les appliquer.",
-                variant: "default",
-              });
-            }
-
-            setLastStreamerConfig(newConfig);
-
-            setStreamer(prev => {
-              if (!prev) return updatedStreamer;
-              const mergedStreamer = {
-                ...prev,
-                ...updatedStreamer,
-                profile: updatedStreamer.profile || prev.profile,
-                profiles: updatedStreamer.profiles || prev.profiles,
-              };
-              return mergedStreamer;
-            });
-
-            if (updatedStreamer.cooldown_seconds !== cooldownSeconds) {
-              setCooldownSeconds(updatedStreamer.cooldown_seconds || 60);
-            }
-          }
-        )
-        .subscribe();
-
-      return () => {
-        supabase.removeChannel(channel);
+      script.onload = () => {
+        new (window as any).Twitch.Embed("twitch-embed", {
+          width: '100%',
+          height: '400',
+          channel: twitchUsername,
+          layout: 'video',
+          autoplay: true,
+          muted: false,
+          theme: 'dark'
+        });
       };
+    } else {
+      // Si le script est déjà là, initialise le lecteur directement
+      new (window as any).Twitch.Embed("twitch-embed", {
+        width: '100%',
+        height: '400',
+        channel: twitchUsername,
+        layout: 'video',
+        autoplay: true,
+        muted: false,
+        theme: 'dark'
+      });
     }
-  }, [id, navigate, user, isGameActive, showValidateTimeButton, streamStartDelay, lastStreamerConfig, cooldownSeconds, fetchStreamer]);
+  }, [twitchUsername]);
 
-  if (loading) {
+  if (!twitchUsername) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
+      <div className="flex items-center justify-center h-full text-muted-foreground p-8">
+        <AlertCircle className="mr-2 h-5 w-5" />
+        Nom d'utilisateur Twitch non trouvé. Assurez-vous d'avoir lié votre compte Twitch.
       </div>
     );
   }
 
-  if (!streamer) {
-    return null;
-  }
-
   return (
-    <div className="flex flex-col min-h-screen bg-background text-foreground">
-      <Navigation />
-      <div className="flex-1 container mx-auto px-2 lg:px-4 py-4 lg:py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-8">
-          <div className="lg:col-span-2 space-y-4 lg:space-y-8 order-2 lg:order-1">
-            <Card>
-              <CardHeader className="flex flex-row items-center space-x-4">
-                <Avatar className="h-16 w-16">
-                  <AvatarImage src={streamer.profile?.avatar_url || streamer.profiles?.avatar_url} />
-                  <AvatarFallback>{(streamer.profile?.twitch_display_name || streamer.profiles?.twitch_display_name)?.substring(0, 2)}</AvatarFallback>
-                </Avatar>
-                <div className="flex-1">
-                  <CardTitle className="text-2xl">{streamer.profile?.twitch_display_name || streamer.profiles?.twitch_display_name}</CardTitle>
-                  <p className="text-muted-foreground">{streamer.stream_title || 'Titre du stream non défini'}</p>
-                  <div className="flex items-center space-x-4 mt-2">
-                    <div className="flex items-center text-sm">
-                      <Users className="h-4 w-4 mr-1" />
-                      <span>{streamer.viewer_count || 0} viewers</span>
-                    </div>
-                    <div className="flex items-center text-sm">
-                      <Eye className="h-4 w-4 mr-1" />
-                      <span>{streamer.total_clicks || 0} clics communauté</span>
-                    </div>
-                  </div>
-                </div>
-              </CardHeader>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Stream en direct</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <TwitchPlayer channel={streamer.profile?.twitch_username || streamer.profiles?.twitch_username} />
-              </CardContent>
-            </Card>
-          </div>
-
-          <div className="lg:col-span-1 space-y-4 lg:space-y-8 order-1 lg:order-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Clock className="mr-2 h-5 w-5" />
-                  Statistiques en direct
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <p className="text-sm text-muted-foreground">Temps restant</p>
-                    <UniversalTimer
-                      status={streamer.status}
-                      streamStartedAt={streamer.stream_started_at}
-                      pauseStartedAt={streamer.pause_started_at}
-                      initialDuration={streamer.initial_duration || 7200}
-                      totalTimeAdded={streamer.total_time_added || 0}
-                      totalElapsedTime={streamer.total_elapsed_time || 0}
-                    />
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <p className="text-sm text-muted-foreground">Temps ajouté</p>
-                    <span className="text-sm font-semibold">
-                      {Math.floor((streamer.total_time_added || 0) / 60)} minutes
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <p className="text-sm text-muted-foreground">Vos clics actuels</p>
-                    <span className="text-sm font-semibold">{userClicks}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <p className="text-sm text-muted-foreground">Clics requis</p>
-                    <span className="text-sm font-semibold">{streamer.clicks_required || 0}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <p className="text-sm text-muted-foreground">Temps par victoire</p>
-                    <span className="text-sm font-semibold">
-                      {streamer.time_mode === 'random'
-                        ? `${streamer.min_random_time || streamer.time_increment || 10}-${streamer.max_random_time || 60}s`
-                        : `${streamer.time_increment || 30}s`
-                      }
-                    </span>
-                  </div>
-                </div>
-
-                {isStreamerOwner && (
-                  <Button className="w-full mt-4" variant="outline" onClick={() => navigate('/streamer/panel')}>
-                    <Settings className="mr-2 h-4 w-4" />
-                    Panneau d'administration
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-
-            {!isGameActive && !showValidateTimeButton && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <Zap className="mr-2 h-5 w-5" />
-                    Progression vers le mini-jeu
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <Label htmlFor="progression" className="font-semibold">
-                        Vos clics : {userClicks} / {streamer.clicks_required}
-                      </Label>
-                      <span className="text-sm text-muted-foreground">
-                        {Math.round((userClicks / Math.max(1, streamer.clicks_required)) * 100)}%
-                      </span>
-                    </div>
-                    <Progress
-                      value={(userClicks / Math.max(1, streamer.clicks_required)) * 100}
-                      id="progression"
-                      className="h-4"
-                    />
-
-                    {streamer.status === 'live' && user ? (
-                      <>
-                        {isGlobalCooldownActive ? (
-                          <div className="mt-4 p-4 bg-purple-500/10 border border-purple-500/20 rounded-lg text-center">
-                            <Hourglass className="mx-auto h-8 w-8 text-purple-600 mb-2" />
-                            <p className="text-sm text-purple-600 dark:text-purple-400 font-medium">
-                              Cooldown global actif !
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Prochaine participation dans {globalCooldownRemaining} secondes
-                            </p>
-                            <div className="mt-2 w-full bg-purple-200 dark:bg-purple-800 rounded-full h-2">
-                              <div
-                                className="bg-purple-600 h-2 rounded-full transition-all duration-1000"
-                                style={{ width: `${((cooldownSeconds - globalCooldownRemaining) / cooldownSeconds) * 100}%` }}
-                              />
-                            </div>
-                          </div>
-                        ) : streamStartDelay ? (
-                          <div className="mt-4 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-center">
-                            <Clock className="mx-auto h-8 w-8 text-yellow-600 mb-2" />
-                            <p className="text-sm text-yellow-600 dark:text-yellow-400 font-medium">
-                              Stream en initialisation...
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {countdownSeconds > 0
-                                ? `Clics disponibles dans ${countdownSeconds} secondes`
-                                : "Temps écoulé ! Vous pouvez maintenant cliquer."
-                              }
-                            </p>
-                            <div className="mt-2 w-full bg-yellow-200 dark:bg-yellow-800 rounded-full h-2">
-                              <div
-                                className="bg-yellow-600 h-2 rounded-full transition-all duration-1000"
-                                style={{ width: `${((120 - countdownSeconds) / 120) * 100}%` }}
-                              />
-                            </div>
-                          </div>
-                        ) : (
-                          <Button
-                            className="w-full mt-4 touch-manipulation"
-                            onClick={handleViewerClick}
-                            disabled={isClicking || clickCooldown}
-                            size="lg"
-                          >
-                            <Zap className="mr-2 h-4 w-4" />
-                            {isClicking ? 'Clic en cours...' :
-                              clickCooldown ? 'Cooldown... (1s)' :
-                                'Cliquer pour le streamer'}
-                          </Button>
-                        )}
-                      </>
-                    ) : (
-                      <div className="mt-4 p-3 bg-muted rounded-lg text-center">
-                        <p className="text-sm text-muted-foreground">
-                          Connectez-vous pour participer au Pauvrathon !
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {showValidateTimeButton && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center text-green-600">
-                    <Trophy className="mr-2 h-5 w-5" />
-                    Victoire !
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex flex-col items-center justify-center p-4 text-center bg-green-500/10 border-2 border-green-500 rounded-lg">
-                    <div className="mb-4">
-                      <p className="text-sm mb-2">
-                        Vous avez réussi le mini-jeu !
-                      </p>
-                      <p className="text-lg font-bold text-green-600">
-                        +{formatTime(timeToAdd)} à ajouter
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {streamer.time_mode === 'random' ? 'Temps généré aléatoirement' : 'Temps fixe configuré'}
-                      </p>
-                    </div>
-                    <Button onClick={handleValidateTime} className="w-full">
-                      <CheckCircle className="mr-2 h-4 w-4" />
-                      Valider le temps
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Hourglass className="mr-2 h-5 w-5" />
-                  Mini-jeux & Chances
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <p className="text-sm text-muted-foreground">
-                      Mini-jeux actifs :
-                    </p>
-                    <span className="text-sm font-semibold">{streamer.active_minigames?.length || 0}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <p className="text-sm text-muted-foreground">
-                      Chances restantes :
-                    </p>
-                    <span className="text-sm font-semibold">{minigameChances} sur 3</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <p className="text-sm text-muted-foreground">
-                      Essais actuels :
-                    </p>
-                    <span className="text-sm font-semibold">{minigameAttempts} sur 12</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Users className="mr-2 h-5 w-5" />
-                  Statistiques Communauté
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <p className="text-sm text-muted-foreground">
-                      Clics totaux communauté :
-                    </p>
-                    <span className="text-sm font-semibold">{streamer.total_clicks || 0}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <p className="text-sm text-muted-foreground">
-                      Temps total ajouté :
-                    </p>
-                    <span className="text-sm font-semibold">
-                      {Math.floor((streamer.total_time_added || 0) / 60)}m {(streamer.total_time_added || 0) % 60}s
-                    </span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <AlertTriangle className="mr-2 h-5 w-5 text-yellow-500" />
-                  Règles du Pauvrathon
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm text-muted-foreground">
-                <p>• Chaque viewer a ses propres clics individuels</p>
-                <p>• Atteignez le quota requis pour déclencher votre mini-jeu</p>
-                <p>• Réussir le jeu ajoute du temps au timer global (pour tous)</p>
-                <p>• Vous avez 12 essais par chance et 3 chances maximum</p>
-                <p>• Vos clics se remettent à zéro après chaque jeu (victoire ou échec)</p>
-                <p>• Tous les viewers contribuent au temps total du Pauvrathon</p>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </div>
-
-      <Dialog open={isGameActive} onOpenChange={setIsGameActive}>
-        <DialogContent className="max-w-[95vw] lg:max-w-4xl max-h-[85vh] lg:max-h-[80vh] overflow-y-auto p-2 lg:p-6">
-          <DialogHeader>
-            <DialogTitle className="flex items-center text-sm lg:text-base">
-              <Gamepad2 className="mr-2 h-4 w-4 lg:h-5 lg:w-5" />
-              Mini-jeu: {minigameState.name}
-            </DialogTitle>
-          </DialogHeader>
-          {minigameState.component && (
-            <div className="p-2 lg:p-4">
-              <div className="mb-4 text-center">
-                <p className="text-sm text-muted-foreground">
-                  Tentative {minigameAttempts + 1} sur 12 • Chance {4 - minigameChances} sur 3
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Gain potentiel: {streamer.time_mode === 'random'
-                    ? `${streamer.min_random_time || streamer.time_increment || 10}-${streamer.max_random_time || 60}s`
-                    : `${streamer.time_increment || 30}s`
-                  }
-                </p>
-              </div>
-              <minigameState.component {...minigameState.props} />
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+    <div className="aspect-video w-full rounded-lg overflow-hidden shadow-lg neon-border p-2">
+      <div id="twitch-embed" className="w-full h-full"></div>
     </div>
   );
 };
 
-export default PauvrathonPage;
+export default function StreamerPanel() {
+  const { user, profile } = useAuth();
+  const [streamer, setStreamer] = useState<StreamerSettings | null>(null);
+  const [originalStreamerData, setOriginalStreamerData] = useState<StreamerSettings | null>(null);
+  const [availableMinigames, setAvailableMinigames] = useState<any[]>([]);
+  const [stats, setStats] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  
+  // États pour la configuration
+  const [timeMode, setTimeMode] = useState('fixed');
+  const [initialHours, setInitialHours] = useState(2);
+  const [initialMinutes, setInitialMinutes] = useState(0);
+  const [fixedTime, setFixedTime] = useState(30);
+  const [minRandomTime, setMinRandomTime] = useState(10);
+  const [maxRandomTime, setMaxRandomTime] = useState(60);
+  const [clicksRequired, setClicksRequired] = useState(100);
+  const [cooldownTime, setCooldownTime] = useState(30);
+  const [selectedGames, setSelectedGames] = useState<string[]>([]);
+  
+  // URLs
+  const [pauvrathonUrl, setPauvrathonUrl] = useState('');
+  const [overlayUrl, setOverlayUrl] = useState('');
+  const navigate = useNavigate();
+
+  if (!user || (profile?.role !== 'streamer' && profile?.role !== 'admin')) {
+    return <Navigate to="/" replace />;
+  }
+
+  const fetchStreamerData = useCallback(async () => {
+    if (!user) return;
+    
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('streamers')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+      if (error && error.code !== 'PGRST116') throw error;
+
+      if (data) {
+        setStreamer(data as any);
+        setOriginalStreamerData(data as any);
+        
+        setInitialHours(Math.floor((data.initial_duration || 7200) / 3600));
+        setInitialMinutes(Math.floor(((data.initial_duration || 7200) % 3600) / 60));
+        setTimeMode(data.time_mode || 'fixed');
+        setFixedTime(data.time_increment || 30);
+        setMinRandomTime(data.min_random_time ?? data.time_increment ?? 10);
+        setMaxRandomTime(data.max_random_time || 60);
+        setClicksRequired(data.clicks_required || 100);
+        setCooldownTime(data.cooldown_seconds || 30);
+        setSelectedGames(data.active_minigames || []);
+      }
+    } catch (error: any) {
+      console.error('Error fetching streamer data:', error);
+      toast({
+        title: "Erreur",
+        description: error.message || "Impossible de charger les données du streamer.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
+  const fetchAvailableMinigames = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('minigames')
+        .select('*')
+        .order('component_code');
+
+      if (error) throw error;
+      
+      setAvailableMinigames((data || []).map(item => ({ ...item, code: '' })));
+    } catch (error: any) {
+      console.error('Error fetching minigames:', error);
+    }
+  }, []);
+
+  const fetchStats = useCallback(async () => {
+    if (!streamer || !streamer.id) {
+      console.error("ID de streamer invalide pour les statistiques.");
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('subathon_stats')
+        .select('*')
+        .eq('streamer_id', streamer.id)
+        .order('time_contributed', { ascending: false });
+
+      if (error) throw error;
+      
+      setStats(data || []);
+    } catch (error: any) {
+      console.error('Error fetching stats:', error);
+    }
+  }, [streamer]);
+
+  useEffect(() => {
+    fetchStreamerData();
+    fetchAvailableMinigames();
+  }, [fetchStreamerData, fetchAvailableMinigames]);
+
+  useEffect(() => {
+    if (streamer) {
+      fetchStats();
+      const streamerChannel = supabase
+        .channel(`public:streamers:id=eq.${streamer.id}`)
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'streamers', filter: `id=eq.${streamer.id}` },
+          (payload) => {
+            setStreamer(payload.new as StreamerSettings);
+          }
+        )
+        .subscribe();
+      
+      const statsChannel = supabase
+        .channel(`public:subathon_stats:streamer_id=eq.${streamer.id}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'subathon_stats', filter: `streamer_id=eq.${streamer.id}` },
+          () => {
+            fetchStats();
+          }
+        )
+        .subscribe();
+        
+      return () => {
+        supabase.removeChannel(streamerChannel);
+        supabase.removeChannel(statsChannel);
+      };
+    }
+  }, [streamer, fetchStats]);
+
+  useEffect(() => {
+    if (streamer && streamer.id) {
+      setPauvrathonUrl(`${window.location.origin}/streamer/${streamer.id}`);
+      setOverlayUrl(`${window.location.origin}/overlay/${streamer.id}`);
+    }
+  }, [streamer]);
+
+  useEffect(() => {
+    if (!originalStreamerData) return;
+    
+    const currentConfig = {
+      stream_title: streamer?.stream_title,
+      time_mode: timeMode,
+      time_increment: fixedTime,
+      min_random_time: minRandomTime,
+      max_random_time: maxRandomTime,
+      clicks_required: clicksRequired,
+      cooldown_seconds: cooldownTime,
+      initial_duration: (initialHours * 3600) + (initialMinutes * 60),
+      active_minigames: selectedGames.sort(),
+    };
+    
+    const originalConfig = {
+      stream_title: originalStreamerData.stream_title,
+      time_mode: originalStreamerData.time_mode || 'fixed',
+      time_increment: originalStreamerData.time_increment || 30,
+      min_random_time: originalStreamerData.min_random_time ?? 10,
+      max_random_time: originalStreamerData.max_random_time || 60,
+      clicks_required: originalStreamerData.clicks_required || 100,
+      cooldown_seconds: originalStreamerData.cooldown_seconds || 30,
+      initial_duration: originalStreamerData.initial_duration || 7200,
+      active_minigames: (originalStreamerData.active_minigames || []).sort(),
+    };
+    
+    const hasChanges = JSON.stringify(currentConfig) !== JSON.stringify(originalConfig);
+    setHasUnsavedChanges(hasChanges);
+  }, [timeMode, fixedTime, minRandomTime, maxRandomTime, clicksRequired, cooldownTime, initialHours, initialMinutes, selectedGames, streamer, originalStreamerData]);
+
+  const handleSaveSettings = async () => {
+    if (!streamer || !streamer.id) {
+      console.error("Sauvegarde impossible: Streamer ID invalide.");
+      toast({
+        title: "Erreur de sauvegarde",
+        description: "ID de streamer invalide.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const calculatedDuration = (initialHours * 3600) + (initialMinutes * 60);
+      
+      const updatedSettings = {
+        stream_title: streamer.stream_title,
+        time_mode: timeMode,
+        time_increment: fixedTime,
+        max_random_time: maxRandomTime,
+        min_random_time: minRandomTime,
+        clicks_required: clicksRequired,
+        cooldown_seconds: cooldownTime,
+        initial_duration: calculatedDuration,
+        active_minigames: selectedGames,
+        updated_at: new Date().toISOString()
+      };
+      
+      const { data, error } = await supabase
+        .from('streamers')
+        .update(updatedSettings)
+        .eq('id', streamer.id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Erreur de sauvegarde Supabase:', error);
+        throw error;
+      }
+
+      setStreamer(data as any);
+      setOriginalStreamerData(data as any);
+      setHasUnsavedChanges(false);
+      
+      toast({
+        title: "Paramètres sauvegardés",
+        description: "Les paramètres du Pauvrathon ont été mis à jour avec succès.",
+      });
+    } catch (error: any) {
+      console.error('Erreur de sauvegarde:', error);
+      toast({
+        title: "Erreur de sauvegarde",
+        description: `Impossible de sauvegarder les paramètres: ${error.message || 'Erreur inconnue'}`,
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleStatusChange = async (newStatus: 'live' | 'paused' | 'ended' | 'offline') => {
+    if (!streamer || !streamer.id) {
+      console.error("Mise à jour du statut impossible: Streamer ID invalide.");
+      return;
+    }
+
+    try {
+      let updateData: any = {
+        status: newStatus,
+        is_live: newStatus === 'live',
+        updated_at: new Date().toISOString()
+      };
+
+      if (newStatus === 'live') {
+        if (streamer.status === 'paused') {
+          const pauseDuration = Math.floor((new Date().getTime() - new Date(streamer.pause_started_at!).getTime()) / 1000);
+          updateData = {
+            ...updateData,
+            total_paused_duration: streamer.total_paused_duration + pauseDuration,
+            pause_started_at: null
+          };
+        } else {
+          // Réinitialiser les statistiques des contributeurs au début d'un nouveau stream
+          const { error: deleteError } = await supabase
+            .from('subathon_stats')
+            .delete()
+            .eq('streamer_id', streamer.id);
+
+          if (deleteError) {
+            console.error('Erreur lors de la réinitialisation des statistiques:', deleteError);
+            toast({
+              title: "Avertissement",
+              description: "Le classement des contributeurs n'a pas pu être réinitialisé.",
+              variant: "destructive",
+            });
+          } else {
+            toast({
+              title: "Statistiques réinitialisées",
+              description: "Le classement des contributeurs a été remis à zéro.",
+            });
+          }
+          
+          updateData.stream_started_at = new Date().toISOString();
+          updateData.total_elapsed_time = 0;
+          updateData.total_paused_duration = 0;
+          updateData.total_clicks = 0;
+        }
+
+        if (!selectedGames.length) {
+          toast({
+            title: "Attention",
+            description: "Aucun mini-jeu n'a été sélectionné. Les viewers ne pourront pas jouer.",
+            variant: "destructive",
+          });
+        }
+      } else if (newStatus === 'paused') {
+        if (streamer.stream_started_at) {
+          const elapsedTimeBeforePause = Math.floor(
+            (new Date().getTime() - new Date(streamer.stream_started_at!).getTime()) / 1000
+          );
+          updateData = {
+            ...updateData,
+            pause_started_at: new Date().toISOString(),
+            total_elapsed_time: streamer.total_elapsed_time + elapsedTimeBeforePause,
+          };
+        }
+      } else if (newStatus === 'ended' || newStatus === 'offline') {
+        updateData.current_clicks = 0;
+        updateData.total_time_added = 0;
+        updateData.total_elapsed_time = 0;
+        updateData.total_paused_duration = 0;
+        updateData.stream_started_at = null;
+        updateData.pause_started_at = null;
+        updateData.total_clicks = 0;
+      }
+
+      const { data, error } = await supabase
+        .from('streamers')
+        .update(updateData)
+        .eq('id', streamer.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      setStreamer(data as any);
+
+      const statusMessages = {
+        live: streamer.status === 'paused' ? "Pauvrathon repris" : "Pauvrathon démarré",
+        paused: "Pauvrathon en pause",
+        ended: "Pauvrathon terminé",
+        offline: "Pauvrathon arrêté"
+      };
+
+      toast({
+        title: statusMessages[newStatus],
+        description: `Le Pauvrathon est maintenant ${newStatus === 'live' ? 'en direct' : newStatus === 'paused' ? 'en pause' : 'terminé'}.`,
+      });
+
+    } catch (error: any) {
+      console.error('Error updating status:', error);
+      toast({
+        title: "Erreur",
+        description: `Impossible de mettre à jour le statut: ${error.message || 'Erreur inconnue'}`,
+        variant: "destructive",
+      });
+    }
+  };
+  
+  const handleMinigameToggle = (minigameId: string, checked: boolean | 'indeterminate') => {
+    if (checked === true) {
+      setSelectedGames(prev => [...new Set([...prev, minigameId])]);
+    } else {
+      setSelectedGames(prev => prev.filter(id => id !== minigameId));
+    }
+  };
+  
+  const handleResetClicks = async () => {
+    if (!streamer || !streamer.id) {
+      console.error("Réinitialisation impossible: Streamer ID invalide.");
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('streamers')
+        .update({ 
+          current_clicks: 0,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', streamer.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setStreamer(data as any);
+      
+      toast({
+        title: "Clics remis à zéro",
+        description: "Le compteur de clics a été réinitialisé.",
+      });
+    } catch (error: any) {
+      console.error('Error resetting clicks:', error);
+      toast({
+        title: "Erreur",
+        description: `Impossible de remettre à zéro les clics: ${error.message || 'Erreur inconnue'}`,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const copyToClipboard = (url: string, type: string) => {
+    navigator.clipboard.writeText(url);
+    toast({
+      title: "Lien copié",
+      description: `Le lien ${type} a été copié dans le presse-papier.`,
+    });
+  };
+
+  const copyOverlayLink = () => {
+    copyToClipboard(overlayUrl, "de l'overlay");
+  };
+
+  const copyPauvrathonLink = () => {
+    copyToClipboard(pauvrathonUrl, "de la page Pauvrathon");
+  };
+  
+  const LoadingSpinner = () => (
+    <div className="flex justify-center items-center py-16">
+      <Loader2 className="h-12 w-12 animate-spin text-primary" />
+    </div>
+  );
+
+  if (loading || !streamer) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Navigation />
+        <div className="container mx-auto px-4 py-8">
+          <LoadingSpinner />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Navigation />
+      
+      <div className="container mx-auto px-4 py-8">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-purple-600 to-pink-600 text-transparent bg-clip-text">
+            Panneau de Streamer Pauvrathon
+          </h1>
+          <p className="text-muted-foreground">
+            Configurez et gérez votre Pauvrathon en temps réel
+          </p>
+        </div>
+
+        <div className="grid lg:grid-cols-4 gap-6">
+          {/* PARTIE GAUCHE - Configuration */}
+          <div className="lg:col-span-3 space-y-6">
+            <Tabs defaultValue="configuration">
+              <TabsList className="mb-4">
+                <TabsTrigger value="configuration">
+                  <Settings className="w-4 h-4 mr-2" />
+                  Configuration
+                  {hasUnsavedChanges && (
+                    <Badge variant="destructive" className="ml-2 text-xs">•</Badge>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="statistics">
+                  <BarChart3 className="w-4 h-4 mr-2" />
+                  Statistiques
+                </TabsTrigger>
+                <TabsTrigger value="links">
+                  <Link className="w-4 h-4 mr-2" />
+                  Liens & Overlay
+                </TabsTrigger>
+              </TabsList>
+              
+              <TabsContent value="configuration">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <Clock className="mr-2 h-5 w-5" />
+                      Configuration du temps
+                    </CardTitle>
+                    <CardDescription>
+                      Définissez les paramètres de temps pour le Pauvrathon
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {/* Temps initial */}
+                    <div className="space-y-4">
+                      <div className="flex items-center">
+                        <Timer className="h-5 w-5 mr-2 text-muted-foreground" />
+                        <h3 className="text-lg font-medium">Temps initial</h3>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="initial_hours">Heures</Label>
+                          <Input
+                            id="initial_hours"
+                            type="number"
+                            min="0"
+                            max="23"
+                            value={initialHours}
+                            onChange={(e) => setInitialHours(parseInt(e.target.value) || 0)}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="initial_minutes">Minutes</Label>
+                          <Input
+                            id="initial_minutes"
+                            type="number"
+                            min="0"
+                            max="59"
+                            value={initialMinutes}
+                            onChange={(e) => setInitialMinutes(parseInt(e.target.value) || 0)}
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="p-3 bg-muted/30 rounded-lg text-sm text-muted-foreground">
+                        Durée totale: <span className="font-medium">{initialHours}h {initialMinutes}m</span> ({(initialHours * 3600) + (initialMinutes * 60)} secondes)
+                      </div>
+                    </div>
+                    
+                    <Separator />
+                    
+                    {/* Configuration du temps ajouté */}
+                    <div className="space-y-4">
+                      <div className="flex items-center">
+                        <Clock className="h-5 w-5 mr-2 text-muted-foreground" />
+                        <h3 className="text-lg font-medium">Temps ajouté par victoire</h3>
+                      </div>
+                      
+                      <RadioGroup
+                        value={timeMode}
+                        onValueChange={setTimeMode}
+                        className="grid grid-cols-2 gap-4"
+                      >
+                        <div className="flex items-center space-x-2 p-4 rounded-lg border">
+                          <RadioGroupItem value="fixed" id="fixed" />
+                          <Label htmlFor="fixed" className="flex-1 cursor-pointer">
+                            <div className="flex items-center">
+                              <Clock className="mr-2 h-4 w-4" />
+                              Temps fixe
+                            </div>
+                          </Label>
+                        </div>
+                        
+                        <div className="flex items-center space-x-2 p-4 rounded-lg border">
+                          <RadioGroupItem value="random" id="random" />
+                          <Label htmlFor="random" className="flex-1 cursor-pointer">
+                            <div className="flex items-center">
+                              <Gamepad2 className="mr-2 h-4 w-4" />
+                              Temps aléatoire
+                            </div>
+                          </Label>
+                        </div>
+                      </RadioGroup>
+
+                      {timeMode === 'fixed' ? (
+                        <div>
+                          <Label htmlFor="fixed_time">Temps ajouté fixe (secondes)</Label>
+                          <div className="grid grid-cols-[1fr_80px] gap-4 items-center">
+                            <Slider
+                              value={[fixedTime]}
+                              min={1}
+                              max={300}
+                              step={1}
+                              onValueChange={(value) => setFixedTime(value[0])}
+                            />
+                            <Input
+                              id="fixed_time"
+                              type="number"
+                              min="1"
+                              max="300"
+                              value={fixedTime}
+                              onChange={(e) => setFixedTime(parseInt(e.target.value) || 1)}
+                            />
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-2">
+                            À chaque victoire, {fixedTime} secondes seront ajoutées au timer
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="space-y-4">
+                          <div>
+                            <Label>Plage de temps aléatoire (secondes)</Label>
+                            <div className="grid grid-cols-2 gap-4 mt-2">
+                              <div>
+                                <Label htmlFor="min_random_time" className="text-sm">Minimum</Label>
+                                <Input
+                                  id="min_random_time"
+                                  type="number"
+                                  min="1"
+                                  max={maxRandomTime}
+                                  value={minRandomTime}
+                                  onChange={(e) => setMinRandomTime(parseInt(e.target.value) || 1)}
+                                />
+                              </div>
+                              <div>
+                                <Label htmlFor="max_random_time" className="text-sm">Maximum</Label>
+                                <Input
+                                  id="max_random_time"
+                                  type="number"
+                                  min={minRandomTime}
+                                  max="300"
+                                  value={maxRandomTime}
+                                  onChange={(e) => setMaxRandomTime(parseInt(e.target.value) || minRandomTime)}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            À chaque victoire, entre {minRandomTime} et {maxRandomTime} secondes seront ajoutées aléatoirement
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <Separator />
+                    
+                    {/* Configuration des clics et du cooldown */}
+                    <div className="space-y-4">
+                      <div className="flex items-center">
+                        <ClipboardCheck className="h-5 w-5 mr-2 text-muted-foreground" />
+                        <h3 className="text-lg font-medium">Paramètres de jeu</h3>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="clicks_required">Clics requis pour déclencher un jeu</Label>
+                          <div className="grid grid-cols-[1fr_80px] gap-4 items-center mt-2">
+                            <Slider
+                              value={[clicksRequired]}
+                              min={10}
+                              max={500}
+                              step={10}
+                              onValueChange={(value) => setClicksRequired(value[0])}
+                            />
+                            <Input
+                              id="clicks_required"
+                              type="number"
+                              min="10"
+                              max="500"
+                              value={clicksRequired}
+                              onChange={(e) => setClicksRequired(parseInt(e.target.value) || 10)}
+                            />
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Nombre de clics nécessaires pour déclencher un mini-jeu
+                          </p>
+                        </div>
+                        
+                        <div>
+                          <Label htmlFor="cooldown_time">Temps de cooldown (secondes)</Label>
+                          <div className="grid grid-cols-[1fr_80px] gap-4 items-center mt-2">
+                            <Slider
+                              value={[cooldownTime]}
+                              min={0}
+                              max={300}
+                              step={5}
+                              onValueChange={(value) => setCooldownTime(value[0])}
+                            />
+                            <Input
+                              id="cooldown_time"
+                              type="number"
+                              min="0"
+                              max="300"
+                              value={cooldownTime}
+                              onChange={(e) => setCooldownTime(parseInt(e.target.value) || 0)}
+                            />
+                          </div>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Délai entre la fin d'un jeu et la possibilité d'en déclencher un nouveau
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                  <CardFooter className="flex justify-end pt-6">
+                    <Button 
+                      onClick={handleSaveSettings} 
+                      disabled={saving || !hasUnsavedChanges}
+                      variant={hasUnsavedChanges ? "default" : "outline"}
+                    >
+                      Sauvegarder les paramètres
+                    </Button>
+                  </CardFooter>
+                </Card>
+                
+                <Card className="mt-6">
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <Gamepad2 className="mr-2 h-5 w-5" />
+                      Sélection des mini-jeux
+                    </CardTitle>
+                    <CardDescription>
+                      Choisissez les mini-jeux qui seront disponibles pendant le Pauvrathon
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {availableMinigames.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <Gamepad2 className="mx-auto h-12 w-12 mb-4 opacity-50" />
+                        <p>Aucun mini-jeu disponible</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {availableMinigames.map((minigame) => (
+                          <div 
+                            key={minigame.id} 
+                            className="flex items-start space-x-2"
+                          >
+                            <Checkbox
+                              id={`minigame-${minigame.id}`}
+                              checked={selectedGames.includes(minigame.component_code)}
+                              onCheckedChange={(checked) => 
+                                handleMinigameToggle(minigame.component_code, checked)
+                              }
+                              className="mt-1"
+                            />
+                            <div className="flex-1">
+                              <Label 
+                                htmlFor={`minigame-${minigame.id}`} 
+                                className="cursor-pointer font-medium block mb-1"
+                              >
+                                {minigame.component_code}
+                                {!minigame.is_active && (
+                                  <Badge variant="outline" className="ml-2 text-xs">Inactif</Badge>
+                                )}
+                              </Label>
+                              {minigame.description && (
+                                <p className="text-sm text-muted-foreground">
+                                  {minigame.description}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                  <CardFooter className="flex justify-end border-t pt-6">
+                    <Button 
+                      onClick={handleSaveSettings} 
+                      disabled={saving || !hasUnsavedChanges}
+                      variant={hasUnsavedChanges ? "default" : "outline"}
+                    >
+                      Sauvegarder les jeux
+                    </Button>
+                  </CardFooter>
+                </Card>
+              </TabsContent>
+
+              {/* Contenu de l'onglet Statistiques SIMPLIFIÉ */}
+              <TabsContent value="statistics">
+                <div className="space-y-6">
+                  {/* Statistiques générales */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center space-x-2">
+                          <Clock className="h-5 w-5 text-blue-500" />
+                          <div>
+                            <p className="text-sm font-medium text-muted-foreground">Temps total ajouté</p>
+                            <p className="text-2xl font-bold text-blue-500">
+                              {formatTime(streamer?.total_time_added || 0)}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center space-x-2">
+                          <Star className="h-5 w-5 text-yellow-500" />
+                          <div>
+                            <p className="text-sm font-medium text-muted-foreground">Clics actuels</p>
+                            <p className="text-2xl font-bold text-yellow-500">
+                              {streamer?.current_clicks || 0}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center space-x-2">
+                          <Trophy className="h-5 w-5 text-green-500" />
+                          <div>
+                            <p className="text-sm font-medium text-muted-foreground">Total contributeurs</p>
+                            <p className="text-2xl font-bold text-green-500">
+                              {stats.length}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="flex items-center space-x-2">
+                          <Gamepad2 className="h-5 w-5 text-purple-500" />
+                          <div>
+                            <p className="text-sm font-medium text-muted-foreground">Total clics</p>
+                            <p className="text-2xl font-bold text-purple-500">
+                              {stats.reduce((total, stat) => total + (stat.clicks_contributed || 0), 0)}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Top 10 Contributeurs */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center">
+                        <BarChart3 className="mr-2 h-5 w-5" />
+                        Top 10 Contributeurs
+                      </CardTitle>
+                      <CardDescription>
+                        Classement des joueurs ayant contribué le plus de temps au Pauvrathon (remis à zéro à chaque nouveau stream)
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {stats.length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <Star className="mx-auto h-12 w-12 mb-4 opacity-50" />
+                          <p>Aucune statistique disponible</p>
+                          <p className="text-sm">Les statistiques apparaîtront une fois que les viewers commenceront à jouer</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {stats.slice(0, 10).map((stat, index) => {
+                            const timeInMinutes = Math.floor(stat.time_contributed / 60);
+                            const timeInSeconds = stat.time_contributed % 60;
+                            const maxTimeContributed = Math.max(...stats.map(s => s.time_contributed));
+                            const progressPercentage = maxTimeContributed > 0 ? (stat.time_contributed / maxTimeContributed) * 100 : 0;
+                            
+                            return (
+                              <div key={stat.id} className="relative">
+                                <div className="flex items-center space-x-4 relative z-10 bg-background p-3 rounded-lg border">
+                                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 border-2 border-primary/20">
+                                    {index < 3 ? (
+                                      <Trophy className={`w-4 h-4 ${
+                                        index === 0 ? 'text-yellow-500' : 
+                                        index === 1 ? 'text-gray-400' : 
+                                        'text-orange-600'
+                                      }`} />
+                                    ) : (
+                                      <span className="text-sm font-bold text-primary">{index + 1}</span>
+                                    )}
+                                  </div>
+                                  
+                                  <div className="flex-1 min-w-0">
+                                    <p className="font-semibold truncate">{stat.profile_twitch_display_name}</p>
+                                    <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+                                      <span className="flex items-center">
+                                        <Clock className="w-3 h-3 mr-1" />
+                                        {timeInMinutes}m {timeInSeconds}s
+                                      </span>
+                                      <span className="flex items-center">
+                                        <Star className="w-3 h-3 mr-1" />
+                                        {stat.clicks_contributed || 0} clics
+                                      </span>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="text-right">
+                                    <Badge variant={index < 3 ? "default" : "secondary"} className="mb-1">
+                                      #{index + 1}
+                                    </Badge>
+                                    <p className="text-xs text-muted-foreground">
+                                      {((stat.time_contributed / Math.max(1, stats.reduce((total, s) => total + s.time_contributed, 0))) * 100).toFixed(1)}%
+                                    </p>
+                                  </div>
+                                </div>
+                                
+                                {/* Barre de progression en arrière-plan */}
+                                <div 
+                                  className="absolute top-0 left-0 h-full bg-primary/5 rounded-lg transition-all duration-300"
+                                  style={{ width: `${progressPercentage}%` }}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Informations sur le stream actuel */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center">
+                        <Radio className="mr-2 h-5 w-5" />
+                        Informations du stream
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid md:grid-cols-3 gap-4">
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium text-muted-foreground">Statut actuel</p>
+                          <Badge variant={
+                            streamer?.status === 'live' ? 'default' :
+                            streamer?.status === 'paused' ? 'secondary' :
+                            streamer?.status === 'ended' ? 'destructive' : 'outline'
+                          }>
+                            {streamer?.status === 'live' ? '🔴 En direct' :
+                             streamer?.status === 'paused' ? '⏸️ En pause' :
+                             streamer?.status === 'ended' ? '🏁 Terminé' : '⚫ Hors ligne'}
+                          </Badge>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium text-muted-foreground">Durée initiale configurée</p>
+                          <p className="font-medium">{formatTime(streamer?.initial_duration || 0)}</p>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium text-muted-foreground">Mini-jeux actifs</p>
+                          <p className="font-medium">{streamer?.active_minigames?.length || 0} jeu(x)</p>
+                        </div>
+                        
+                        {streamer?.stream_started_at && (
+                          <div className="space-y-2">
+                            <p className="text-sm font-medium text-muted-foreground">Démarré le</p>
+                            <p className="font-medium">
+                              {new Date(streamer.stream_started_at).toLocaleDateString('fr-FR', {
+                                day: 'numeric',
+                                month: 'long',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })}
+                            </p>
+                          </div>
+                        )}
+                        
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium text-muted-foreground">Mode de temps</p>
+                          <Badge variant="outline">
+                            {streamer?.time_mode === 'fixed' ? `Fixe (${streamer.time_increment}s)` : 
+                             `Aléatoire (${streamer.time_increment || 10}-${streamer.max_random_time}s)`}
+                          </Badge>
+                        </div>
+                        
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium text-muted-foreground">Clics requis</p>
+                          <p className="font-medium">{streamer?.clicks_required || 100} clics</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </TabsContent>
+
+              {/* Contenu de l'onglet Liens & Overlay */}
+              <TabsContent value="links">
+                <div className="grid gap-6 md:grid-cols-2">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center">
+                        <Eye className="mr-2 h-5 w-5" />
+                        Page Pauvrathon
+                      </CardTitle>
+                      <CardDescription>
+                        Lien vers la page publique de votre Pauvrathon
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex items-center space-x-2">
+                        <Input 
+                          value={pauvrathonUrl} 
+                          readOnly 
+                          className="text-sm"
+                        />
+                        <Button size="icon" onClick={copyPauvrathonLink}>
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                        <Button asChild size="icon" variant="outline">
+                          <a href={pauvrathonUrl} target="_blank" rel="noopener noreferrer">
+                            <ExternalLink className="h-4 w-4" />
+                          </a>
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center">
+                        <Monitor className="mr-2 h-5 w-5" />
+                        Overlay Twitch
+                      </CardTitle>
+                      <CardDescription>
+                        Lien à utiliser comme "Source de navigation" dans OBS/Streamlabs
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex items-center space-x-2">
+                        <Input 
+                          value={overlayUrl} 
+                          readOnly 
+                          className="text-sm"
+                        />
+                        <Button size="icon" onClick={copyOverlayLink}>
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                        <Button asChild size="icon" variant="outline">
+                          <a href={overlayUrl} target="_blank" rel="noopener noreferrer">
+                            <ExternalLink className="h-4 w-4" />
+                          </a>
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </TabsContent>
+            </Tabs>
+          </div>
+
+          {/* PARTIE DROITE - Timer et Contrôles */}
+          <div className="lg:col-span-1 space-y-6">
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center">
+                        <Monitor className="mr-2 h-5 w-5" />
+                        Lecteur Vidéo
+                    </CardTitle>
+                    <CardDescription>
+                        Aperçu de votre stream Twitch en direct.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <TwitchPlayer twitchUsername={profile?.twitch_username} />
+                </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Clock className="mr-2 h-5 w-5" />
+                  Timer & Contrôles
+                </CardTitle>
+                <CardDescription>
+                  Contrôlez le statut de votre Pauvrathon
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <UniversalTimer
+                    status={streamer?.status}
+                    streamStartedAt={streamer?.stream_started_at}
+                    pauseStartedAt={streamer?.pause_started_at}
+                    initialDuration={streamer?.initial_duration}
+                    totalTimeAdded={streamer?.total_time_added}
+                    totalElapsedTime={streamer?.total_elapsed_time || 0}
+                    totalPausedDuration={streamer?.total_paused_duration || 0}
+                    formatStyle="colon"
+                    showStatus={true}
+                    className="text-3xl font-mono font-bold text-primary mb-2"
+                />
+              </CardContent>
+              <CardFooter className="flex flex-col space-y-4 pt-0">
+                <div className="flex gap-2 w-full">
+                  <Button 
+                    className="flex-1"
+                    onClick={() => handleStatusChange('live')}
+                    disabled={streamer?.status === 'live'}
+                  >
+                    <Play className="mr-2 h-4 w-4" />
+                    Démarrer
+                  </Button>
+                  <Button 
+                    className="flex-1"
+                    variant="outline"
+                    onClick={() => handleStatusChange('paused')}
+                    disabled={streamer?.status === 'paused' || streamer?.status === 'ended'}
+                  >
+                    <Pause className="mr-2 h-4 w-4" />
+                    Pause
+                  </Button>
+                </div>
+                <div className="flex gap-2 w-full">
+                  <Button 
+                    className="flex-1"
+                    variant="destructive"
+                    onClick={() => handleStatusChange('ended')}
+                    disabled={streamer?.status === 'ended' || streamer?.status === 'offline'}
+                  >
+                    <Square className="mr-2 h-4 w-4" />
+                    Terminer
+                  </Button>
+                  <Button 
+                    className="flex-1"
+                    variant="secondary"
+                    onClick={handleResetClicks}
+                    disabled={saving}
+                  >
+                    <RotateCcw className="mr-2 h-4 w-4" />
+                    Reset Clics
+                  </Button>
+                </div>
+              </CardFooter>
+            </Card>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
