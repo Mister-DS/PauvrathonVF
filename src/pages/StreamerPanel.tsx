@@ -910,33 +910,6 @@ export default function StreamerPanel() {
                     </Card>
                   </div>
 
-                  {/* Progression vers le prochain jeu */}
-                  {streamer?.status === 'live' && (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="flex items-center">
-                          <Progress className="mr-2 h-5 w-5" />
-                          Progression vers le prochain mini-jeu
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-2">
-                          <div className="flex justify-between text-sm">
-                            <span>Clics actuels</span>
-                            <span>{streamer?.current_clicks || 0} / {streamer?.clicks_required || 100}</span>
-                          </div>
-                          <Progress 
-                            value={((streamer?.current_clicks || 0) / (streamer?.clicks_required || 100)) * 100} 
-                            className="h-3"
-                          />
-                          <p className="text-xs text-muted-foreground">
-                            {Math.max(0, (streamer?.clicks_required || 100) - (streamer?.current_clicks || 0))} clics restants
-                          </p>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-
                   {/* Top 10 Contributeurs */}
                   <Card>
                     <CardHeader>
@@ -1014,90 +987,6 @@ export default function StreamerPanel() {
                       )}
                     </CardContent>
                   </Card>
-
-                  {/* Statistiques détaillées */}
-                  {stats.length > 0 && (
-                    <div className="grid md:grid-cols-2 gap-6">
-                      {/* Répartition du temps */}
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="flex items-center">
-                            <Clock className="mr-2 h-5 w-5" />
-                            Répartition du temps ajouté
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="space-y-4">
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm">Temps moyen par contributeur</span>
-                              <span className="font-medium">
-                                {formatTime(Math.round(stats.reduce((total, stat) => total + stat.time_contributed, 0) / stats.length))}
-                              </span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm">Meilleure contribution</span>
-                              <span className="font-medium text-green-600">
-                                {formatTime(Math.max(...stats.map(s => s.time_contributed)))}
-                              </span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm">Plus faible contribution</span>
-                              <span className="font-medium text-orange-600">
-                                {formatTime(Math.min(...stats.map(s => s.time_contributed)))}
-                              </span>
-                            </div>
-                            <Separator />
-                            <div className="flex justify-between items-center font-medium">
-                              <span>Total du temps ajouté</span>
-                              <span className="text-primary">
-                                {formatTime(stats.reduce((total, stat) => total + stat.time_contributed, 0))}
-                              </span>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-
-                      {/* Statistiques des clics */}
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="flex items-center">
-                            <Star className="mr-2 h-5 w-5" />
-                            Statistiques des clics
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="space-y-4">
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm">Clics moyens par contributeur</span>
-                              <span className="font-medium">
-                                {Math.round(stats.reduce((total, stat) => total + (stat.clicks_contributed || 0), 0) / stats.length)}
-                              </span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm">Meilleur cliqueur</span>
-                              <span className="font-medium text-green-600">
-                                {Math.max(...stats.map(s => s.clicks_contributed || 0))} clics
-                              </span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm">Ratio clics/temps (moy.)</span>
-                              <span className="font-medium">
-                                {(stats.reduce((total, stat) => total + (stat.clicks_contributed || 0), 0) / 
-                                  Math.max(1, stats.reduce((total, stat) => total + stat.time_contributed, 0))).toFixed(2)} clics/sec
-                              </span>
-                            </div>
-                            <Separator />
-                            <div className="flex justify-between items-center font-medium">
-                              <span>Total des clics</span>
-                              <span className="text-primary">
-                                {stats.reduce((total, stat) => total + (stat.clicks_contributed || 0), 0)}
-                              </span>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </div>
-                  )}
 
                   {/* Informations sur le stream actuel */}
                   <Card>
