@@ -213,8 +213,18 @@ const PauvrathonPage = () => {
           throw error;
         }
       } else {
-        // Mise à jour locale optimiste
+        // Mise à jour locale optimiste avec vérification
         setStreamer(prev => prev ? { ...prev, current_clicks: newClickCount } : null);
+        
+        // Vérification immédiate pour déclencher le jeu
+        if (newClickCount >= streamer.clicks_required) {
+          console.log(`🎮 Seuil atteint localement : ${newClickCount}/${streamer.clicks_required}`);
+          setTimeout(() => {
+            if (!isGameActive && !showValidateTimeButton && !streamStartDelay) {
+              launchRandomMinigame();
+            }
+          }, 200);
+        }
         
         toast({
           title: "Clic enregistré !",
@@ -420,12 +430,19 @@ const PauvrathonPage = () => {
               return updatedStreamer;
             });
 
-            // Déclencher le mini-jeu seulement si les conditions sont remplies
+            // Déclencher le mini-jeu IMMÉDIATEMENT si les conditions sont remplies
             if (updatedStreamer.current_clicks >= updatedStreamer.clicks_required && 
                 !isGameActive && 
                 updatedStreamer.status === 'live' && 
-                !showValidateTimeButton) {
-              launchRandomMinigame();
+                !showValidateTimeButton &&
+                !streamStartDelay) {
+              
+              console.log(`🎮 Lancement immédiat du mini-jeu : ${updatedStreamer.current_clicks}/${updatedStreamer.clicks_required}`);
+              
+              // Lancement immédiat sans délai
+              setTimeout(() => {
+                launchRandomMinigame();
+              }, 100); // 100ms pour laisser le temps à l'UI de se mettre à jour
             }
           }
         )
@@ -435,7 +452,7 @@ const PauvrathonPage = () => {
         supabase.removeChannel(channel);
       };
     }
-  }, [id, navigate, user, isGameActive, showValidateTimeButton]);
+  }, [id, navigate, user, isGameActive, showValidateTimeButton, streamStartDelay]);
 
   if (loading) {
     return (
@@ -582,7 +599,10 @@ const PauvrathonPage = () => {
                               Stream en initialisation...
                             </p>
                             <p className="text-xs text-muted-foreground mt-1">
-                              Clics disponibles dans {countdownSeconds} secondes
+                              {countdownSeconds > 0 
+                                ? `Clics disponibles dans ${countdownSeconds} secondes`
+                                : "Temps écoulé ! Rafraîchissez la page si les clics ne fonctionnent pas."
+                              }
                             </p>
                             <div className="mt-2 w-full bg-yellow-200 dark:bg-yellow-800 rounded-full h-2">
                               <div 
@@ -595,12 +615,12 @@ const PauvrathonPage = () => {
                           <Button 
                             className="w-full mt-4 touch-manipulation" 
                             onClick={handleViewerClick}
-                            disabled={isClicking || clickCooldown}
+                            disabled={isClicking || clickCooldown || streamStartDelay}
                             size="lg"
                           >
                             <Zap className="mr-2 h-4 w-4" />
                             {isClicking ? 'Clic en cours...' : 
-                             clickCooldown ? 'Cooldown...' : 
+                             clickCooldown ? 'Cooldown... (1s)' : 
                              'Cliquer pour le streamer'}
                           </Button>
                         )}

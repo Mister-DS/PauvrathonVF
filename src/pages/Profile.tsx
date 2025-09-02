@@ -50,19 +50,42 @@ export default function Profile() {
     try {
       console.log('🗑️ Début de la suppression en cascade pour:', user.id);
       
-      // 1. Supprimer les statistiques de subathon
-      const { error: statsError } = await supabase
-        .from('subathon_stats')
-        .delete()
-        .eq('user_id', user.id);
-      
-      if (statsError) {
-        console.error('❌ Erreur suppression subathon_stats:', statsError);
-        throw new Error(`Erreur lors de la suppression des statistiques: ${statsError.message}`);
-      }
-      console.log('✅ subathon_stats supprimées');
+      // 1. Récupérer l'ID du streamer si l'utilisateur en est un
+      const { data: streamerData } = await supabase
+        .from('streamers')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
 
-      // 2. Supprimer les follows de l'utilisateur (en tant que follower)
+      // 2. Supprimer les statistiques de subathon liées au streamer
+      if (streamerData) {
+        const { error: statsError } = await supabase
+          .from('subathon_stats')
+          .delete()
+          .eq('streamer_id', streamerData.id);
+        
+        if (statsError) {
+          console.error('❌ Erreur suppression subathon_stats:', statsError);
+          throw new Error(`Erreur lors de la suppression des statistiques: ${statsError.message}`);
+        }
+        console.log('✅ subathon_stats supprimées');
+
+        // 3. Supprimer les follows où cet utilisateur est le streamer suivi
+        const { error: followedError } = await supabase
+          .from('follows')
+          .delete()
+          .eq('streamer_id', streamerData.id);
+        
+        if (followedError) {
+          console.error('❌ Erreur suppression follows (being followed):', followedError);
+          throw new Error(`Erreur lors de la suppression des follows entrants: ${followedError.message}`);
+        }
+        console.log('✅ follows (en tant que streamer suivi) supprimés');
+      } else {
+        console.log('ℹ️ Utilisateur n\'est pas un streamer, pas de subathon_stats à supprimer');
+      }
+
+      // 4. Supprimer les follows de l'utilisateur (en tant que follower)
       const { error: followsError } = await supabase
         .from('follows')
         .delete()
@@ -74,28 +97,7 @@ export default function Profile() {
       }
       console.log('✅ follows (en tant que follower) supprimés');
 
-      // 3. Gérer la suppression des follows entrants si l'utilisateur est streamer
-      const { data: streamerData } = await supabase
-        .from('streamers')
-        .select('id')
-        .eq('user_id', user.id)
-        .single();
-
-      if (streamerData) {
-        // Supprimer les follows où cet utilisateur est le streamer suivi
-        const { error: followedError } = await supabase
-          .from('follows')
-          .delete()
-          .eq('streamer_id', streamerData.id);
-        
-        if (followedError) {
-          console.error('❌ Erreur suppression follows (being followed):', followedError);
-          throw new Error(`Erreur lors de la suppression des follows entrants: ${followedError.message}`);
-        }
-        console.log('✅ follows (en tant que streamer suivi) supprimés');
-      }
-
-      // 4. Supprimer l'entrée streamer si elle existe
+      // 5. Supprimer l'entrée streamer si elle existe
       const { error: streamerError } = await supabase
         .from('streamers')
         .delete()
@@ -107,7 +109,7 @@ export default function Profile() {
       }
       console.log('✅ entrée streamers supprimée (si elle existait)');
 
-      // 5. Supprimer les demandes de streamer
+      // 6. Supprimer les demandes de streamer
       const { error: requestsError } = await supabase
         .from('streamer_requests')
         .delete()
@@ -119,7 +121,7 @@ export default function Profile() {
       }
       console.log('✅ streamer_requests supprimées (si elles existaient)');
 
-      // 6. Supprimer le profil utilisateur
+      // 7. Supprimer le profil utilisateur
       const { error: profileError } = await supabase
         .from('profiles')
         .delete()
