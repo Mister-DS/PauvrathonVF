@@ -42,112 +42,6 @@ export default function Profile() {
   const [confirmationEmail, setConfirmationEmail] = useState('');
   const [showDeletionDialog, setShowDeletionDialog] = useState(false);
 
-  const handleDeleteAccountCascade = async () => {
-    if (!user) {
-      throw new Error('Utilisateur non authentifié');
-    }
-
-    try {
-      console.log('🗑️ Début de la suppression en cascade pour:', user.id);
-      
-      // 1. Récupérer l'ID du streamer si l'utilisateur en est un
-      const { data: streamerData } = await supabase
-        .from('streamers')
-        .select('id')
-        .eq('user_id', user.id)
-        .single();
-
-      // 2. Supprimer les statistiques de subathon liées au streamer
-      if (streamerData) {
-        const { error: statsError } = await supabase
-          .from('subathon_stats')
-          .delete()
-          .eq('streamer_id', streamerData.id);
-        
-        if (statsError) {
-          console.error('❌ Erreur suppression subathon_stats:', statsError);
-          throw new Error(`Erreur lors de la suppression des statistiques: ${statsError.message}`);
-        }
-        console.log('✅ subathon_stats supprimées');
-
-        // 3. Supprimer les follows où cet utilisateur est le streamer suivi
-        const { error: followedError } = await supabase
-          .from('user_follows')
-          .delete()
-          .eq('streamer_id', streamerData.id);
-        
-        if (followedError) {
-          console.error('❌ Erreur suppression user_follows (being followed):', followedError);
-          throw new Error(`Erreur lors de la suppression des follows entrants: ${followedError.message}`);
-        }
-        console.log('✅ user_follows (en tant que streamer suivi) supprimés');
-      } else {
-        console.log('ℹ️ Utilisateur n\'est pas un streamer, pas de subathon_stats à supprimer');
-      }
-
-      // 4. Supprimer les follows de l'utilisateur (en tant que follower)
-      const { error: followsError } = await supabase
-        .from('user_follows')
-        .delete()
-        .eq('follower_user_id', user.id);
-      
-      if (followsError) {
-        console.error('❌ Erreur suppression user_follows (follower):', followsError);
-        throw new Error(`Erreur lors de la suppression des follows: ${followsError.message}`);
-      }
-      console.log('✅ user_follows (en tant que follower) supprimés');
-
-      // 5. Supprimer l'entrée streamer si elle existe
-      const { error: streamerError } = await supabase
-        .from('streamers')
-        .delete()
-        .eq('user_id', user.id);
-      
-      if (streamerError && streamerError.code !== 'PGRST116') {
-        console.error('❌ Erreur suppression streamers:', streamerError);
-        throw new Error(`Erreur lors de la suppression du profil streamer: ${streamerError.message}`);
-      }
-      console.log('✅ entrée streamers supprimée (si elle existait)');
-
-      // 6. Supprimer les demandes de streamer
-      const { error: requestsError } = await supabase
-        .from('streamer_requests')
-        .delete()
-        .eq('user_id', user.id);
-      
-      if (requestsError && requestsError.code !== 'PGRST116') {
-        console.error('❌ Erreur suppression streamer_requests:', requestsError);
-        throw new Error(`Erreur lors de la suppression des demandes: ${requestsError.message}`);
-      }
-      console.log('✅ streamer_requests supprimées (si elles existaient)');
-
-      // 7. Supprimer le profil utilisateur (utilise user_id qui référence auth.users)
-      const { data: deletedProfile, error: profileError } = await supabase
-        .from('profiles')
-        .delete()
-        .eq('user_id', user.id)
-        .select();
-      
-      if (profileError) {
-        console.error('❌ Erreur suppression profiles:', profileError);
-        throw new Error(`Erreur lors de la suppression du profil: ${profileError.message}`);
-      }
-      
-      if (!deletedProfile || deletedProfile.length === 0) {
-        console.warn('⚠️ Aucun profil trouvé à supprimer pour user_id:', user.id);
-      } else {
-        console.log('✅ profil utilisateur supprimé:', deletedProfile);
-      }
-
-      console.log('✅ Suppression en cascade terminée avec succès');
-      return { success: true };
-
-    } catch (error: any) {
-      console.error('❌ Erreur lors de la suppression en cascade:', error);
-      throw error;
-    }
-  };
-
   const handleDeleteAccount = async () => {
     if (!user) return;
     
@@ -172,14 +66,21 @@ export default function Profile() {
     setIsDeleting(true);
     
     try {
-      await handleDeleteAccountCascade();
-      
+      // Use an Edge Function to delete the user on the server
+      const { error } = await supabase.functions.invoke('delete-user', {
+        body: { userId: user.id },
+      });
+
+      if (error) {
+        throw new Error(`Erreur lors de l'appel de la fonction de suppression: ${error.message}`);
+      }
+
       toast({
         title: "Compte supprimé",
         description: "Votre compte et toutes vos données ont été supprimés définitivement.",
       });
       
-      // Déconnexion et redirection après un court délai
+      // Sign out and redirect after a short delay
       setTimeout(async () => {
         await signOut();
         window.location.href = '/';
@@ -224,7 +125,7 @@ export default function Profile() {
                           {profile?.twitch_display_name?.charAt(0) || 'U'}
                         </AvatarFallback>
                       </Avatar>
-                      {/* Indicateur live pour les streamers */}
+                      {/* Live indicator for streamers */}
                       {profile?.role === 'streamer' && isLive && (
                         <div className="absolute -top-1 -right-1">
                           <Badge 
@@ -285,7 +186,7 @@ export default function Profile() {
             </Card>
           )}
 
-          {/* Warning si streamer en live */}
+          {/* Warning if streamer is live */}
           {profile?.role === 'streamer' && isLive && (
             <Card className="border-yellow-500/20 bg-yellow-500/5">
               <CardContent className="pt-6">
@@ -373,7 +274,7 @@ export default function Profile() {
             </Card>
           )}
 
-          {/* Account Deletion - Version sécurisée */}
+          {/* Account Deletion - Secure version */}
           <Card className="border-destructive/20">
             <CardHeader>
               <CardTitle className="flex items-center text-destructive">
