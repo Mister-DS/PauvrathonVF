@@ -50,11 +50,11 @@ const PauvrathonPage = () => {
   const [globalCooldownRemaining, setGlobalCooldownRemaining] = useState(0);
   const [cooldownSeconds, setCooldownSeconds] = useState(60); // Valeur par défaut
 
-  const fetchStreamer = async (streamerId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('streamers')
-        .select(`
+ const fetchStreamer = async (streamerId: string) => {
+  try {
+    const { data, error } = await supabase
+      .from('streamers')
+      .select(`
           *,
           profiles (
             twitch_username,
@@ -62,89 +62,90 @@ const PauvrathonPage = () => {
             avatar_url
           )
         `)
-        .eq('id', streamerId)
-        .single();
+      .eq('id', streamerId)
+      .single();
 
-      if (error) throw error;
+    if (error) throw error;
 
-      if (!data || data.status !== 'live') {
-        toast({
-          title: "Pauvrathon non disponible",
-          description: "Ce streamer n'est pas en direct en ce moment.",
-          variant: "destructive",
-        });
-        navigate('/discovery', { replace: true });
-        return;
-      }
-
-      setStreamer(data as Streamer);
-      setIsStreamerOwner(user?.id === data.user_id);
-
-      // Initialiser la configuration de référence et la valeur du cooldown
-      const initialConfig = JSON.stringify({
-        time_mode: data.time_mode,
-        time_increment: data.time_increment,
-        min_random_time: data.min_random_time,
-        max_random_time: data.max_random_time,
-        clicks_required: data.clicks_required,
-        active_minigames: data.active_minigames,
-        cooldown_seconds: data.cooldown_seconds // Inclure le cooldown
-      });
-      setLastStreamerConfig(initialConfig);
-
-      // Mettre à jour la valeur du cooldown
-      setCooldownSeconds(data.cooldown_seconds || 60);
-
-      // Gérer le délai initial pour les nouveaux streams
-      if (data.stream_started_at) {
-        const streamStartTime = new Date(data.stream_started_at).getTime();
-        const now = Date.now();
-        const timeSinceStart = now - streamStartTime;
-        const initialDelayMs = 120000; // 2 minutes de délai (au lieu de 10 secondes)
-
-        if (timeSinceStart < initialDelayMs) {
-          setStreamStartDelay(true);
-          const remainingTime = Math.ceil((initialDelayMs - timeSinceStart) / 1000);
-
-          // Countdown timer avec state update
-          const countdownInterval = setInterval(() => {
-            const currentTime = Date.now();
-            const remaining = Math.ceil((initialDelayMs - (currentTime - streamStartTime)) / 1000);
-
-            setCountdownSeconds(remaining);
-
-            if (remaining <= 0) {
-              clearInterval(countdownInterval);
-              setStreamStartDelay(false);
-              setCountdownSeconds(0);
-              toast({
-                title: "Stream prêt !",
-                description: "Vous pouvez maintenant participer aux clics.",
-              });
-              window.location.reload(); // Ajout du rechargement ici
-            }
-          }, 1000);
-
-          setTimeout(() => {
-            clearInterval(countdownInterval);
-          }, initialDelayMs - timeSinceStart);
-        } else {
-          setStreamStartDelay(false);
-        }
-      }
-
-    } catch (error) {
-      console.error('Error fetching streamer:', error);
+    if (!data || data.status !== 'live') {
       toast({
-        title: "Erreur",
-        description: "Impossible de charger les données du Pauvrathon.",
+        title: "Pauvrathon non disponible",
+        description: "Ce streamer n'est pas en direct en ce moment.",
         variant: "destructive",
       });
       navigate('/discovery', { replace: true });
-    } finally {
-      setLoading(false);
+      return;
     }
-  };
+
+    setStreamer(data as Streamer);
+    setIsStreamerOwner(user?.id === data.user_id);
+
+    // Initialiser la configuration de référence et la valeur du cooldown
+    const initialConfig = JSON.stringify({
+      time_mode: data.time_mode,
+      time_increment: data.time_increment,
+      min_random_time: data.min_random_time,
+      max_random_time: data.max_random_time,
+      clicks_required: data.clicks_required,
+      active_minigames: data.active_minigames,
+      cooldown_seconds: data.cooldown_seconds // Inclure le cooldown
+    });
+    setLastStreamerConfig(initialConfig);
+
+    // Mettre à jour la valeur du cooldown
+    setCooldownSeconds(data.cooldown_seconds || 60);
+
+    // Gérer le délai initial pour les nouveaux streams
+    if (data.stream_started_at) {
+      const streamStartTime = new Date(data.stream_started_at).getTime();
+      const now = Date.now();
+      const timeSinceStart = now - streamStartTime;
+      const initialDelayMs = 120000; // 2 minutes de délai (au lieu de 10 secondes)
+
+      if (timeSinceStart < initialDelayMs) {
+        setStreamStartDelay(true);
+        const remainingTime = Math.ceil((initialDelayMs - timeSinceStart) / 1000);
+
+        // Countdown timer avec state update
+        const countdownInterval = setInterval(() => {
+          const currentTime = Date.now();
+          const remaining = Math.ceil((initialDelayMs - (currentTime - streamStartTime)) / 1000);
+
+          setCountdownSeconds(remaining);
+
+          if (remaining <= 0) {
+            clearInterval(countdownInterval);
+            setStreamStartDelay(false);
+            setCountdownSeconds(0);
+            toast({
+              title: "Stream prêt !",
+              description: "Vous pouvez maintenant participer aux clics.",
+            });
+            window.location.reload(); // Ajout du rechargement ici
+          }
+        }, 1000);
+
+        // S'assurer que l'intervalle est nettoyé même si l'utilisateur quitte la page avant la fin du délai
+        setTimeout(() => {
+          clearInterval(countdownInterval);
+        }, initialDelayMs - timeSinceStart);
+      } else {
+        setStreamStartDelay(false);
+      }
+    }
+
+  } catch (error) {
+    console.error('Error fetching streamer:', error);
+    toast({
+      title: "Erreur",
+      description: "Impossible de charger les données du Pauvrathon.",
+      variant: "destructive",
+    });
+    navigate('/discovery', { replace: true });
+  } finally {
+    setLoading(false);
+  }
+};
 
   const calculateTimeToAdd = (streamer: Streamer): number => {
     if (streamer.time_mode === 'random') {
