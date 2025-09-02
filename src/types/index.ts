@@ -44,6 +44,7 @@ export interface Streamer {
   active_minigames: string[];
   current_clicks: number;
   total_time_added: number;
+  total_elapsed_time: number;
   is_live: boolean;
   status: 'live' | 'paused' | 'offline' | 'ended';
   stream_title?: string;
@@ -54,6 +55,8 @@ export interface Streamer {
   stream_started_at?: string | null;
   pause_started_at?: string | null;
   total_paused_duration?: number;
+  total_clicks?: number;
+  viewer_count?: number;
   created_at: string;
   updated_at: string;
   profile?: Profile | null;
@@ -87,7 +90,7 @@ export interface PauvrathonStreamer {
   current_clicks: number;
   clicks_required: number;
   total_time_added: number;
-  profile: {
+  profiles?: {
     avatar_url?: string;
     twitch_display_name?: string;
     twitch_username?: string;
@@ -109,11 +112,24 @@ export interface SubathonStats {
 export interface Minigame {
   id: string;
   name: string;
-  code: string;
+  component_code: string;
   description?: string;
   is_active: boolean;
   created_by?: string;
   created_at: string;
+}
+
+export interface StreamerSettings {
+  active_minigames: string[];
+  clicks_required: number;
+  cooldown_seconds: number;
+  time_increment: number;
+  time_mode: 'fixed' | 'random';
+  max_random_time: number;
+  min_random_time?: number;
+  initial_duration: number;
+  stream_title?: string;
+  total_elapsed_time: number;
 }
 
 export interface GameSession {

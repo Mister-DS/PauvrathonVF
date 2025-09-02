@@ -401,12 +401,11 @@ export default function AdminPanel() {
         throw existingError;
       }
 
-      const { error } = await supabase.from("minigames").insert({
-        component_code: componentCode,
-        description: newMinigameDescription || `Mini-jeu ${newMinigameName}`,
-        is_active: true,
-        created_by: user.id,
-      });
+        const { error } = await supabase.from("minigames").insert({
+          name: newMinigameName,
+          component_code: componentCode,
+          description: newMinigameDescription || `Mini-jeu ${newMinigameName}`
+        });
 
       if (error) throw error;
 
@@ -838,7 +837,7 @@ export default function AdminPanel() {
                       >
                         <div>
                           <p className="font-medium">
-                            {minigame.component_code}
+                            {minigame.name}
                           </p>
                           <p className="text-sm text-muted-foreground">
                             {minigame.description || "Pas de description"}

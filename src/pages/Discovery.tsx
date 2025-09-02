@@ -287,15 +287,15 @@ export default function Discovery() {
                     <CardContent className="p-6">
                       <div className="flex items-center space-x-3 mb-4">
                         <Avatar className="h-12 w-12">
-                          <AvatarImage src={getStreamerAvatar(streamer)} alt={getStreamerDisplayName(streamer)} />
+                          <AvatarImage src={getStreamerAvatar(streamer as any)} alt={getStreamerDisplayName(streamer as any)} />
                           <AvatarFallback>
-                            {getStreamerDisplayName(streamer).charAt(0).toUpperCase()}
+                            {getStreamerDisplayName(streamer as any).charAt(0).toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
                         <div className="flex-1">
                           <h3 className="font-semibold text-lg">
                             <Link to={`/streamer/${streamer.id}`} className="hover:underline">
-                              {getStreamerDisplayName(streamer)}
+                              {getStreamerDisplayName(streamer as any)}
                             </Link>
                           </h3>
                           <div className="flex items-center space-x-2">

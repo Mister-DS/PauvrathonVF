@@ -172,8 +172,8 @@ export default function StreamerPanel() {
       if (error && error.code !== 'PGRST116') throw error;
 
       if (data) {
-        setStreamer(data as StreamerSettings);
-        setOriginalStreamerData(data as StreamerSettings);
+        setStreamer(data as any);
+        setOriginalStreamerData(data as any);
         
         setInitialHours(Math.floor((data.initial_duration || 7200) / 3600));
         setInitialMinutes(Math.floor(((data.initial_duration || 7200) % 3600) / 60));
@@ -347,8 +347,8 @@ export default function StreamerPanel() {
         throw error;
       }
 
-      setStreamer(data as StreamerSettings);
-      setOriginalStreamerData(data as StreamerSettings);
+      setStreamer(data as any);
+      setOriginalStreamerData(data as any);
       setHasUnsavedChanges(false);
       
       toast({
@@ -429,7 +429,7 @@ export default function StreamerPanel() {
         .single();
 
       if (error) throw error;
-      setStreamer(data as StreamerSettings);
+      setStreamer(data as any);
       
       const statusMessages = {
         live: streamer.status === 'paused' ? "Pauvrathon repris" : "Pauvrathon démarré",
@@ -480,7 +480,7 @@ export default function StreamerPanel() {
 
       if (error) throw error;
 
-      setStreamer(data as StreamerSettings);
+      setStreamer(data as any);
       
       toast({
         title: "Clics remis à zéro",

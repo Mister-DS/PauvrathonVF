@@ -15,10 +15,10 @@ import { UniversalTimer } from '@/components/UniversalTimer';
 import { toast } from '@/hooks/use-toast';
 import { Streamer } from '@/types';
 import {
-  Trophy, AlertTriangle, Clock, Settings, Gamepad2, Plus, Loader2, Zap, Hourglass, CheckCircle, Users, Eye
+  Trophy, AlertTriangle, Clock, Settings, Gamepad2, Loader2, Zap, Hourglass, CheckCircle, Users, Eye
 } from 'lucide-react';
 
-const SubathonPage = () => {
+const PauvrathonPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -205,7 +205,10 @@ const SubathonPage = () => {
         name: randomGameCode,
         props: {
           streamerId: streamer.id,
-          onGameEnd: handleGameEnd,
+          onWin: () => handleGameEnd(true),
+          onLose: () => handleGameEnd(false),
+          attempts: minigameAttempts,
+          maxAttempts: 12,
         },
       });
     } else {
@@ -298,15 +301,15 @@ const SubathonPage = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Section principale : Infos stream & Player */}
           <div className="lg:col-span-2 space-y-8">
-            {/* 1. Zone avec les infos du stream */}
+            {/* Zone avec les infos du stream */}
             <Card>
               <CardHeader className="flex flex-row items-center space-x-4">
                 <Avatar className="h-16 w-16">
-                  <AvatarImage src={streamer.profile?.avatar_url} />
-                  <AvatarFallback>{streamer.profile?.twitch_display_name?.substring(0, 2)}</AvatarFallback>
+                  <AvatarImage src={streamer.profile?.avatar_url || streamer.profiles?.avatar_url} />
+                  <AvatarFallback>{(streamer.profile?.twitch_display_name || streamer.profiles?.twitch_display_name)?.substring(0, 2)}</AvatarFallback>
                 </Avatar>
                 <div className="flex-1">
-                  <CardTitle className="text-2xl">{streamer.profile?.twitch_display_name}</CardTitle>
+                  <CardTitle className="text-2xl">{streamer.profile?.twitch_display_name || streamer.profiles?.twitch_display_name}</CardTitle>
                   <p className="text-muted-foreground">{streamer.stream_title || 'Titre du stream non défini'}</p>
                   <div className="flex items-center space-x-4 mt-2">
                     <div className="flex items-center text-sm">
@@ -322,20 +325,20 @@ const SubathonPage = () => {
               </CardHeader>
             </Card>
 
-            {/* 2. Zone avec aperçu du stream en direct */}
+            {/* Zone avec aperçu du stream en direct */}
             <Card>
               <CardHeader>
                 <CardTitle>Stream en direct</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
-                <TwitchPlayer twitchUsername={streamer.profile?.twitch_username} />
+                <TwitchPlayer channel={streamer.profile?.twitch_username || streamer.profiles?.twitch_username} />
               </CardContent>
             </Card>
           </div>
           
           {/* Section latérale : Stats & Actions */}
           <div className="lg:col-span-1 space-y-8">
-            {/* 3. Zone avec les stats en direct */}
+            {/* Zone avec les stats en direct */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
@@ -381,7 +384,7 @@ const SubathonPage = () => {
               </CardContent>
             </Card>
             
-            {/* 4. Zone clicable avec barre de progression */}
+            {/* Zone clicable avec barre de progression */}
             {!isGameActive && !showValidateTimeButton && (
               <Card>
                 <CardHeader>
@@ -525,4 +528,4 @@ const SubathonPage = () => {
   );
 };
 
-export default SubathonPage;
+export default PauvrathonPage;
