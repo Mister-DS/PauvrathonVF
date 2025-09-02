@@ -265,17 +265,12 @@ const PauvrathonPage = () => {
       setTimeout(() => {
         setClickCooldown(false);
         
-        // Message de rafraîchissement si le cooldown se termine à 1s
-        if (!isGameActive && !showValidateTimeButton) {
-          const currentTime = Date.now();
-          const timeSinceClick = currentTime - lastClickTime;
-          if (timeSinceClick >= 1000) {
-            toast({
-              title: "Temps écoulé",
-              description: "Si les clics ne fonctionnent pas, rafraîchissez la page.",
-              variant: "default",
-            });
-          }
+        // Message de rafraîchissement si le cooldown se termine et qu'on ne peut plus cliquer
+        if (!isGameActive && !showValidateTimeButton && !streamStartDelay) {
+          toast({
+            title: "Clics disponibles",
+            description: "Vous pouvez maintenant cliquer à nouveau.",
+          });
         }
       }, 1000);
     }

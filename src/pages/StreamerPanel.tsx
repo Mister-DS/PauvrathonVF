@@ -328,6 +328,7 @@ export default function StreamerPanel() {
         time_mode: timeMode,
         time_increment: fixedTime,
         max_random_time: maxRandomTime,
+        min_random_time: minRandomTime,
         clicks_required: clicksRequired,
         cooldown_seconds: cooldownTime,
         initial_duration: calculatedDuration,
@@ -1259,6 +1260,7 @@ export default function StreamerPanel() {
                     initialDuration={streamer?.initial_duration}
                     totalTimeAdded={streamer?.total_time_added}
                     totalElapsedTime={streamer?.total_elapsed_time || 0}
+                    totalPausedDuration={streamer?.total_paused_duration || 0}
                     formatStyle="colon"
                     showStatus={true}
                     className="text-3xl font-mono font-bold text-primary mb-2"
