@@ -33,8 +33,8 @@ const PauvrathonPage = () => {
     props: any;
     name: string;
   }>({ component: null, props: {}, name: '' });
-  const [minigameAttempts, setMinigameAttempts] = useState(0);
-  const [minigameChances, setMinigameChances] = useState(3);
+  const [minigameAttempts, setMinigameAttempts] = useState(0); // Tentatives sur la chance actuelle (max 12)
+  const [minigameChances, setMinigameChances] = useState(3); // Chances restantes (max 3)
   const [showValidateTimeButton, setShowValidateTimeButton] = useState(false);
   const [timeToAdd, setTimeToAdd] = useState(0); // Nouveau state pour le temps calculé
   const [isClicking, setIsClicking] = useState(false);
@@ -43,13 +43,18 @@ const PauvrathonPage = () => {
   const [streamStartDelay, setStreamStartDelay] = useState(true); // Nouveau: délai initial
   const [countdownSeconds, setCountdownSeconds] = useState(0); // Pour afficher le countdown
   const [lastStreamerConfig, setLastStreamerConfig] = useState<string>(''); // Pour détecter les changements
-  const [userClicks, setUserClicks] = useState(0); // Clics individuels de l'utilisateur
+  const [userClicks, setUserClicks] = useState(0); // Clics individuels de l'utilisateur pour déclencher un mini-jeu
 
-  // NOUVEAUX ÉTATS POUR LE COOLDOWN GLOBAL
+  // NOUVEAUX ÉTATS POUR LE COOLDOWN GLOBAL (après validation ou épuisement des chances)
   const [isGlobalCooldownActive, setIsGlobalCooldownActive] = useState(false);
   const [globalCooldownRemaining, setGlobalCooldownRemaining] = useState(0);
-  const [cooldownSeconds, setCooldownSeconds] = useState(60); // Valeur par défaut
+  const [cooldownSeconds, setCooldownSeconds] = useState(60); // Valeur par défaut du cooldown global
 
+  /**
+   * Formate un nombre de secondes en une chaîne de caractères "Xm Ys".
+   * @param seconds Le nombre de secondes à formater.
+   * @returns La chaîne de caractères formatée.
+   */
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -59,6 +64,11 @@ const PauvrathonPage = () => {
     return `${secs}s`;
   };
 
+  /**
+   * Calcule le temps à ajouter en fonction du mode de temps du streamer.
+   * @param streamer L'objet Streamer.
+   * @returns Le temps calculé en secondes.
+   */
   const calculateTimeToAdd = useCallback((streamer: Streamer): number => {
     if (streamer.time_mode === 'random') {
       const minTime = Math.max(1, streamer.min_random_time || streamer.time_increment || 10);
@@ -71,10 +81,15 @@ const PauvrathonPage = () => {
     }
   }, []);
 
+  /**
+   * Démarre le cooldown global pour le joueur actuel.
+   * @param duration La durée du cooldown en secondes.
+   */
   const startGlobalCooldown = useCallback((duration: number) => {
     setIsGlobalCooldownActive(true);
     setGlobalCooldownRemaining(duration);
 
+    // Stocke la fin du cooldown dans le localStorage pour persistance
     if (user) {
       const endTime = Date.now() + duration * 1000;
       localStorage.setItem(`pauvrathon_cooldown_end_${id}_${user.id}`, endTime.toString());
@@ -99,8 +114,11 @@ const PauvrathonPage = () => {
     }, 1000);
   }, [user, id]);
 
+  /**
+   * Lance un mini-jeu aléatoire parmi ceux actifs pour le streamer.
+   */
   const launchRandomMinigame = useCallback(async () => {
-    if (!streamer || isGameActive) return;
+    if (!streamer || isGameActive) return; // Empêche de lancer un jeu si un autre est déjà actif
 
     setIsGameActive(true);
 
@@ -124,10 +142,10 @@ const PauvrathonPage = () => {
         name: randomGameCode,
         props: {
           streamerId: streamer.id,
-          onWin: () => handleGameEnd(true),
-          onLose: () => handleGameEnd(false),
-          attempts: minigameAttempts,
-          maxAttempts: 12,
+          onWin: () => handleGameEnd(true), // Appelé en cas de victoire
+          onLose: () => handleGameEnd(false), // Appelé en cas de défaite
+          attempts: minigameAttempts, // Nombre de tentatives déjà effectuées sur cette chance
+          maxAttempts: 12, // Nombre maximum de tentatives par chance
         },
       });
     } else {
@@ -140,13 +158,18 @@ const PauvrathonPage = () => {
     }
   }, [streamer, isGameActive, minigameAttempts]);
 
+  /**
+   * Gère la fin d'un mini-jeu (victoire ou défaite).
+   * @param victory Indique si le joueur a gagné le mini-jeu.
+   */
   const handleGameEnd = useCallback(async (victory: boolean) => {
-    setIsGameActive(false);
-    setMinigameState({ component: null, props: {}, name: '' });
+    setIsGameActive(false); // Désactive le jeu
+    setMinigameState({ component: null, props: {}, name: '' }); // Réinitialise l'état du mini-jeu
 
-    if (!streamer) return; // Ensure streamer is not null
+    if (!streamer) return;
 
     if (victory) {
+      // Logique en cas de victoire
       const calculatedTime = calculateTimeToAdd(streamer);
       setTimeToAdd(calculatedTime);
 
@@ -154,48 +177,57 @@ const PauvrathonPage = () => {
         title: "Victoire !",
         description: `Vous avez gagné ! Validez pour ajouter ${formatTime(calculatedTime)} au Pauvrathon.`,
       });
-      setShowValidateTimeButton(true);
+      setShowValidateTimeButton(true); // Affiche le bouton de validation
 
+      // Réinitialise les compteurs après une victoire
       setMinigameAttempts(0);
       setMinigameChances(3);
       setUserClicks(0);
 
     } else {
-      setMinigameAttempts(prev => prev + 1);
+      // Logique en cas de défaite
+      setMinigameAttempts(prev => prev + 1); // Incrémente le nombre de tentatives
 
       if (minigameAttempts + 1 < 12) {
+        // Si moins de 12 tentatives épuisées sur la chance actuelle
         toast({
           title: "Défaite !",
           description: `Il vous reste ${12 - (minigameAttempts + 1)} essais sur cette chance. Relance du jeu dans 5 secondes.`,
           variant: "destructive",
         });
-        setTimeout(launchRandomMinigame, 5000);
+        setTimeout(launchRandomMinigame, 5000); // Relance le même mini-jeu après 5 secondes
       } else {
+        // Si 12 tentatives épuisées sur la chance actuelle
         setMinigameChances(prev => {
           const newChances = prev - 1;
           return newChances;
         });
 
         if (minigameChances - 1 > 0) {
-          setMinigameAttempts(0);
+          // S'il reste des chances (moins de 3 chances épuisées)
+          setMinigameAttempts(0); // Réinitialise les tentatives pour la nouvelle chance
           toast({
             title: "Chance perdue !",
             description: `Vous avez épuisé vos 12 essais. Il vous reste ${minigameChances - 1} chance(s). Nouvelle chance dans 5 secondes.`,
             variant: "destructive",
           });
-          setTimeout(launchRandomMinigame, 5000);
+          setTimeout(launchRandomMinigame, 5000); // Relance un mini-jeu après 5 secondes pour la nouvelle chance
         } else {
+          // Si toutes les chances (3) sont épuisées
           toast({
             title: "Toutes les chances épuisées !",
             description: "Vos clics ont été remis à zéro. Recommencez à cliquer pour déclencher un nouveau mini-jeu.",
             variant: "destructive",
           });
+          // Réinitialise tous les compteurs
           setMinigameAttempts(0);
           setMinigameChances(3);
           setUserClicks(0);
 
+          // Démarre le cooldown global pour le joueur
           startGlobalCooldown(streamer.cooldown_seconds || 60);
 
+          // Met à jour les statistiques du joueur dans la base de données
           if (user) {
             const { data: existingStats } = await supabase
               .from('subathon_stats')
@@ -232,10 +264,14 @@ const PauvrathonPage = () => {
     }
   }, [minigameAttempts, minigameChances, streamer, user, calculateTimeToAdd, launchRandomMinigame, startGlobalCooldown, userClicks]);
 
+  /**
+   * Gère la validation du temps après une victoire au mini-jeu.
+   */
   const handleValidateTime = useCallback(async () => {
     if (!streamer) return;
 
     try {
+      // Met à jour le temps total ajouté au streamer
       const { error } = await supabase
         .from('streamers')
         .update({
@@ -246,6 +282,7 @@ const PauvrathonPage = () => {
 
       if (error) throw error;
 
+      // Met à jour les statistiques du joueur dans la base de données
       if (user) {
         const { data: existingStats, error: fetchError } = await supabase
           .from('subathon_stats')
@@ -254,7 +291,7 @@ const PauvrathonPage = () => {
           .eq('player_twitch_username', user.user_metadata?.twitch_username || user.email)
           .single();
 
-        if (fetchError && fetchError.code !== 'PGRST116') {
+        if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 = No rows found
           console.error('Error fetching existing stats:', fetchError);
         }
 
@@ -297,9 +334,9 @@ const PauvrathonPage = () => {
         description: `${formatTime(timeToAdd)} ont été ajoutés au compteur du Pauvrathon.`,
       });
 
-      setShowValidateTimeButton(false);
-      setTimeToAdd(0);
-      startGlobalCooldown(cooldownSeconds);
+      setShowValidateTimeButton(false); // Cache le bouton de validation
+      setTimeToAdd(0); // Réinitialise le temps à ajouter
+      startGlobalCooldown(cooldownSeconds); // Démarre le cooldown global après validation
 
     } catch (error) {
       console.error('Error validating time:', error);
@@ -311,9 +348,16 @@ const PauvrathonPage = () => {
     }
   }, [streamer, timeToAdd, user, cooldownSeconds, startGlobalCooldown, userClicks]);
 
+  /**
+   * Gère le clic d'un spectateur pour contribuer au déclenchement d'un mini-jeu.
+   */
   const handleViewerClick = useCallback(async () => {
-    if (!streamer || !user || isClicking || isGameActive || clickCooldown || streamStartDelay || isGlobalCooldownActive) return;
+    // Conditions pour empêcher le clic
+    if (!streamer || !user || isClicking || isGameActive || clickCooldown || streamStartDelay || isGlobalCooldownActive) {
+      return;
+    }
 
+    // Vérifie si le joueur a atteint son quota de clics
     if (userClicks >= streamer.clicks_required) {
       toast({
         title: "Votre limite atteinte !",
@@ -323,9 +367,10 @@ const PauvrathonPage = () => {
       return;
     }
 
+    // Gère le cooldown entre les clics individuels
     const now = Date.now();
     const timeSinceLastClick = now - lastClickTime;
-    const minClickInterval = 1000;
+    const minClickInterval = 1000; // 1 seconde de cooldown entre les clics
 
     if (timeSinceLastClick < minClickInterval) {
       toast({
@@ -336,14 +381,15 @@ const PauvrathonPage = () => {
       return;
     }
 
-    setIsClicking(true);
-    setClickCooldown(true);
-    setLastClickTime(now);
+    setIsClicking(true); // Indique qu'un clic est en cours
+    setClickCooldown(true); // Active le cooldown de clic individuel
+    setLastClickTime(now); // Enregistre le temps du dernier clic
 
     try {
       const newUserClicks = userClicks + 1;
-      setUserClicks(newUserClicks);
+      setUserClicks(newUserClicks); // Incrémente les clics de l'utilisateur
 
+      // Met à jour le total des clics globaux du streamer (peut être optimisé pour moins de requêtes)
       const { error: globalError } = await supabase
         .from('streamers')
         .update({
@@ -356,12 +402,14 @@ const PauvrathonPage = () => {
         console.warn('Erreur mise à jour stats globales:', globalError);
       }
 
+      // Si les clics de l'utilisateur atteignent le seuil requis, lance un mini-jeu
       if (newUserClicks >= streamer.clicks_required) {
         setTimeout(() => {
+          // Vérifie à nouveau les conditions avant de lancer le jeu
           if (!isGameActive && !showValidateTimeButton && !streamStartDelay && !isGlobalCooldownActive) {
             launchRandomMinigame();
           }
-        }, 200);
+        }, 200); // Petit délai pour s'assurer que l'état est mis à jour
       }
 
       toast({
@@ -377,9 +425,11 @@ const PauvrathonPage = () => {
         variant: "destructive",
       });
     } finally {
-      setIsClicking(false);
+      setIsClicking(false); // Le clic est terminé
+      // Désactive le cooldown de clic après 1 seconde
       setTimeout(() => {
         setClickCooldown(false);
+        // Affiche un toast si le joueur peut de nouveau cliquer
         if (!isGameActive && !showValidateTimeButton && !streamStartDelay && !isGlobalCooldownActive) {
           toast({
             title: "Clics disponibles",
@@ -390,6 +440,10 @@ const PauvrathonPage = () => {
     }
   }, [streamer, user, isClicking, isGameActive, clickCooldown, streamStartDelay, isGlobalCooldownActive, userClicks, lastClickTime, showValidateTimeButton, launchRandomMinigame]);
 
+  /**
+   * Récupère les informations du streamer depuis la base de données.
+   * @param streamerId L'ID du streamer.
+   */
   const fetchStreamer = useCallback(async (streamerId: string) => {
     try {
       const { data, error } = await supabase
@@ -420,6 +474,7 @@ const PauvrathonPage = () => {
       setStreamer(data as Streamer);
       setIsStreamerOwner(user?.id === data.user_id);
 
+      // Enregistre la configuration initiale du streamer pour détecter les changements
       const initialConfig = JSON.stringify({
         time_mode: data.time_mode,
         time_increment: data.time_increment,
@@ -433,6 +488,7 @@ const PauvrathonPage = () => {
 
       setCooldownSeconds(data.cooldown_seconds || 60);
 
+      // Gère le délai initial au début du stream
       if (data.stream_started_at) {
         const streamStartTime = new Date(data.stream_started_at).getTime();
         const now = Date.now();
@@ -456,14 +512,13 @@ const PauvrathonPage = () => {
                 title: "Stream prêt !",
                 description: "Vous pouvez maintenant participer aux clics.",
               });
-              // No window.location.reload() here. State updates should be sufficient.
             }
           };
 
           countdownInterval = setInterval(updateCountdown, 1000);
-          updateCountdown(); // Call immediately to avoid 1-second delay on first render
+          updateCountdown(); // Appel immédiat pour éviter un délai d'une seconde au premier rendu
 
-          // Ensure interval is cleared if component unmounts or delay ends
+          // S'assure que l'intervalle est nettoyé si le composant est démonté ou si le délai se termine
           return () => clearInterval(countdownInterval);
 
         } else {
@@ -484,7 +539,11 @@ const PauvrathonPage = () => {
     }
   }, [navigate, user]);
 
+  /**
+   * Effet de hook pour charger les données du streamer et gérer les abonnements Supabase.
+   */
   useEffect(() => {
+    // Vérifie et restaure le cooldown global depuis le localStorage
     if (user && id) {
       const storedEndTime = localStorage.getItem(`pauvrathon_cooldown_end_${id}_${user.id}`);
       if (storedEndTime) {
@@ -516,6 +575,7 @@ const PauvrathonPage = () => {
       }
     }
 
+    // Charge les données du streamer et s'abonne aux changements en temps réel
     if (id) {
       fetchStreamer(id);
 
@@ -527,6 +587,7 @@ const PauvrathonPage = () => {
           (payload) => {
             const updatedStreamer = payload.new as Streamer;
 
+            // Détecte les changements de configuration pour informer l'utilisateur
             const newConfig = JSON.stringify({
               time_mode: updatedStreamer.time_mode,
               time_increment: updatedStreamer.time_increment,
@@ -547,17 +608,19 @@ const PauvrathonPage = () => {
 
             setLastStreamerConfig(newConfig);
 
+            // Met à jour l'état du streamer avec les nouvelles données
             setStreamer(prev => {
               if (!prev) return updatedStreamer;
               const mergedStreamer = {
                 ...prev,
                 ...updatedStreamer,
-                profile: updatedStreamer.profile || prev.profile,
-                profiles: updatedStreamer.profiles || prev.profiles,
+                profile: updatedStreamer.profile || prev.profile, // Conserve le profil si non mis à jour
+                profiles: updatedStreamer.profiles || prev.profiles, // Conserve les profils si non mis à jour
               };
               return mergedStreamer;
             });
 
+            // Met à jour la durée du cooldown si elle a changé
             if (updatedStreamer.cooldown_seconds !== cooldownSeconds) {
               setCooldownSeconds(updatedStreamer.cooldown_seconds || 60);
             }
@@ -565,12 +628,14 @@ const PauvrathonPage = () => {
         )
         .subscribe();
 
+      // Fonction de nettoyage pour désabonner le canal Supabase
       return () => {
         supabase.removeChannel(channel);
       };
     }
   }, [id, navigate, user, isGameActive, showValidateTimeButton, streamStartDelay, lastStreamerConfig, cooldownSeconds, fetchStreamer]);
 
+  // Affiche un indicateur de chargement
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
@@ -579,6 +644,7 @@ const PauvrathonPage = () => {
     );
   }
 
+  // Ne rend rien si le streamer n'est pas chargé (devrait être géré par la redirection)
   if (!streamer) {
     return null;
   }
