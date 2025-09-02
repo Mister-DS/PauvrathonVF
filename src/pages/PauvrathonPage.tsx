@@ -45,6 +45,11 @@ const PauvrathonPage = () => {
   const [lastStreamerConfig, setLastStreamerConfig] = useState<string>(''); // Pour détecter les changements
   const [userClicks, setUserClicks] = useState(0); // Clics individuels de l'utilisateur
 
+  // NOUVEAUX ÉTATS POUR LE COOLDOWN GLOBAL
+  const [isGlobalCooldownActive, setIsGlobalCooldownActive] = useState(false);
+  const [globalCooldownRemaining, setGlobalCooldownRemaining] = useState(0);
+  const [cooldownSeconds, setCooldownSeconds] = useState(60); // Valeur par défaut
+
   const fetchStreamer = async (streamerId: string) => {
     try {
       const { data, error } = await supabase
@@ -75,17 +80,21 @@ const PauvrathonPage = () => {
       setStreamer(data as Streamer);
       setIsStreamerOwner(user?.id === data.user_id);
       
-      // Initialiser la configuration de référence
+      // Initialiser la configuration de référence et la valeur du cooldown
       const initialConfig = JSON.stringify({
         time_mode: data.time_mode,
         time_increment: data.time_increment,
         min_random_time: data.min_random_time,
         max_random_time: data.max_random_time,
         clicks_required: data.clicks_required,
-        active_minigames: data.active_minigames
+        active_minigames: data.active_minigames,
+        cooldown_seconds: data.cooldown_seconds // Inclure le cooldown
       });
       setLastStreamerConfig(initialConfig);
       
+      // Mettre à jour la valeur du cooldown
+      setCooldownSeconds(data.cooldown_seconds || 60);
+
       // Gérer le délai initial pour les nouveaux streams
       if (data.stream_started_at) {
         const streamStartTime = new Date(data.stream_started_at).getTime();
@@ -166,8 +175,30 @@ const PauvrathonPage = () => {
     return `${secs}s`;
   };
 
+  // NOUVELLE FONCTION pour démarrer le cooldown global
+  const startGlobalCooldown = (duration: number) => {
+    setIsGlobalCooldownActive(true);
+    setGlobalCooldownRemaining(duration);
+
+    const intervalId = setInterval(() => {
+      setGlobalCooldownRemaining(prev => {
+        if (prev <= 1) {
+          clearInterval(intervalId);
+          setIsGlobalCooldownActive(false);
+          toast({
+            title: "Cooldown terminé !",
+            description: "Vous pouvez de nouveau cliquer pour lancer un mini-jeu.",
+          });
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
   const handleViewerClick = async () => {
-    if (!streamer || !user || isClicking || isGameActive || clickCooldown || streamStartDelay) return;
+    // AJOUT DE LA CONDITION isGlobalCooldownActive
+    if (!streamer || !user || isClicking || isGameActive || clickCooldown || streamStartDelay || isGlobalCooldownActive) return;
     
     // Protection contre le dépassement INDIVIDUEL
     if (userClicks >= streamer.clicks_required) {
@@ -219,7 +250,7 @@ const PauvrathonPage = () => {
       if (newUserClicks >= streamer.clicks_required) {
         console.log(`🎮 Seuil atteint pour ce viewer : ${newUserClicks}/${streamer.clicks_required}`);
         setTimeout(() => {
-          if (!isGameActive && !showValidateTimeButton && !streamStartDelay) {
+          if (!isGameActive && !showValidateTimeButton && !streamStartDelay && !isGlobalCooldownActive) {
             launchRandomMinigame();
           }
         }, 200);
@@ -244,7 +275,7 @@ const PauvrathonPage = () => {
         setClickCooldown(false);
         
         // Message de rafraîchissement si le cooldown se termine et qu'on ne peut plus cliquer
-        if (!isGameActive && !showValidateTimeButton && !streamStartDelay) {
+        if (!isGameActive && !showValidateTimeButton && !streamStartDelay && !isGlobalCooldownActive) {
           toast({
             title: "Clics disponibles",
             description: "Vous pouvez maintenant cliquer à nouveau.",
@@ -310,6 +341,11 @@ const PauvrathonPage = () => {
           setMinigameAttempts(0);
           setMinigameChances(3);
           setUserClicks(0); // Remise à zéro des clics utilisateur
+          
+          // DÉMARRER LE COOLDOWN APRÈS L'ÉCHEC COMPLET
+          if (streamer) {
+            startGlobalCooldown(streamer.cooldown_seconds || 60);
+          }
           
           // Enregistrer la tentative dans les stats même en cas d'échec complet
           if (user) {
@@ -463,6 +499,9 @@ const PauvrathonPage = () => {
       setShowValidateTimeButton(false);
       setTimeToAdd(0);
       
+      // DÉMARRER LE COOLDOWN APRÈS LA VALIDATION
+      startGlobalCooldown(cooldownSeconds);
+
     } catch (error) {
       console.error('Error validating time:', error);
       toast({
@@ -492,7 +531,8 @@ const PauvrathonPage = () => {
               min_random_time: updatedStreamer.min_random_time,
               max_random_time: updatedStreamer.max_random_time,
               clicks_required: updatedStreamer.clicks_required,
-              active_minigames: updatedStreamer.active_minigames
+              active_minigames: updatedStreamer.active_minigames,
+              cooldown_seconds: updatedStreamer.cooldown_seconds // Inclure le cooldown
             });
             
             if (lastStreamerConfig && lastStreamerConfig !== newConfig) {
@@ -520,6 +560,11 @@ const PauvrathonPage = () => {
               
               return mergedStreamer;
             });
+            
+            // Mettre à jour la valeur du cooldown si elle change en direct
+            if (updatedStreamer.cooldown_seconds !== cooldownSeconds) {
+              setCooldownSeconds(updatedStreamer.cooldown_seconds || 60);
+            }
 
             // Déclencher le mini-jeu IMMÉDIATEMENT si les conditions sont remplies pour CE VIEWER
             // Plus besoin de surveiller current_clicks car c'est individuel maintenant
@@ -532,7 +577,7 @@ const PauvrathonPage = () => {
         supabase.removeChannel(channel);
       };
     }
-  }, [id, navigate, user, isGameActive, showValidateTimeButton, streamStartDelay]);
+  }, [id, navigate, user, isGameActive, showValidateTimeButton, streamStartDelay, lastStreamerConfig, cooldownSeconds]);
 
   if (loading) {
     return (
@@ -545,10 +590,6 @@ const PauvrathonPage = () => {
   if (!streamer) {
     return null;
   }
-
-  const progress = streamer.clicks_required > 0
-    ? Math.min(100, (streamer.current_clicks / streamer.clicks_required) * 100)
-    : 0;
     
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground">
@@ -676,7 +717,23 @@ const PauvrathonPage = () => {
                     
                     {streamer.status === 'live' && user && (
                       <>
-                        {streamStartDelay ? (
+                        {isGlobalCooldownActive ? (
+                          <div className="mt-4 p-4 bg-purple-500/10 border border-purple-500/20 rounded-lg text-center">
+                            <Hourglass className="mx-auto h-8 w-8 text-purple-600 mb-2" />
+                            <p className="text-sm text-purple-600 dark:text-purple-400 font-medium">
+                              Cooldown global actif !
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Prochaine participation dans {globalCooldownRemaining} secondes
+                            </p>
+                            <div className="mt-2 w-full bg-purple-200 dark:bg-purple-800 rounded-full h-2">
+                              <div 
+                                className="bg-purple-600 h-2 rounded-full transition-all duration-1000"
+                                style={{ width: `${((cooldownSeconds - globalCooldownRemaining) / cooldownSeconds) * 100}%` }}
+                              />
+                            </div>
+                          </div>
+                        ) : streamStartDelay ? (
                           <div className="mt-4 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-center">
                             <Clock className="mx-auto h-8 w-8 text-yellow-600 mb-2" />
                             <p className="text-sm text-yellow-600 dark:text-yellow-400 font-medium">
@@ -699,7 +756,7 @@ const PauvrathonPage = () => {
                           <Button 
                             className="w-full mt-4 touch-manipulation" 
                             onClick={handleViewerClick}
-                            disabled={isClicking || clickCooldown || streamStartDelay}
+                            disabled={isClicking || clickCooldown}
                             size="lg"
                           >
                             <Zap className="mr-2 h-4 w-4" />
