@@ -28,7 +28,6 @@ import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
-import { useDebounce } from 'use-debounce'; // Hook pour le "debounce"
 
 // Interfaces pour un typage plus précis
 interface PauvrathonStreamer {
@@ -38,7 +37,7 @@ interface PauvrathonStreamer {
   current_clicks: number;
   clicks_required: number;
   total_time_added: number;
-  profiles: {
+  profiles?: {
     avatar_url?: string;
     twitch_display_name?: string;
     twitch_username?: string;
@@ -50,19 +49,21 @@ interface TwitchStream {
   user_id: string;
   user_name: string;
   user_login: string;
-  display_name: string;
+  display_name?: string;
   title: string;
-  game_name: string;
+  game_name?: string;
   viewer_count: number;
   thumbnail_url: string;
   started_at: string;
-  language: string;
-  tags: string[];
+  language?: string;
+  tags?: string[];
 }
+
+type FilterType = 'all' | 'live';
 
 // Langues les plus courantes sur Twitch
 const LANGUAGES = [
-  { code: 'all', name: 'Toutes les langues', flag: '🌐' },
+  { code: 'all', name: 'Toutes les langues', flag: '🌍' },
   { code: 'fr', name: 'Français', flag: '🇫🇷' },
   { code: 'en', name: 'English', flag: '🇺🇸' },
   { code: 'es', name: 'Español', flag: '🇪🇸' },
@@ -92,7 +93,7 @@ const EmptyState = ({ title, description }: { title: string; description: string
   </Card>
 );
 
-const formatStreamDuration = (startedAt: string) => {
+const formatStreamDuration = (startedAt: string): string => {
   const start = new Date(startedAt);
   const now = new Date();
   const diffMs = now.getTime() - start.getTime();
@@ -106,7 +107,7 @@ const formatStreamDuration = (startedAt: string) => {
 };
 
 // Fonction pour obtenir l'URL de l'avatar d'un streamer.
-const getStreamerAvatar = (streamer: PauvrathonStreamer) => {
+const getStreamerAvatar = (streamer: PauvrathonStreamer): string => {
   const displayName =
     streamer.profiles?.twitch_display_name ||
     streamer.profiles?.twitch_username ||
@@ -119,7 +120,7 @@ const getStreamerAvatar = (streamer: PauvrathonStreamer) => {
 };
 
 // Fonction pour obtenir le nom d'affichage d'un streamer.
-const getStreamerDisplayName = (streamer: PauvrathonStreamer) => {
+const getStreamerDisplayName = (streamer: PauvrathonStreamer): string => {
   return (
     streamer.profiles?.twitch_display_name ||
     streamer.profiles?.twitch_username ||
@@ -130,68 +131,76 @@ const getStreamerDisplayName = (streamer: PauvrathonStreamer) => {
 export default function Discovery() {
   const { user } = useAuth();
   const { streamers, loading: loadingPauvrathon, refetch } = useStreamers();
-  const [filter, setFilter] = useState<'all' | 'live'>('live'); // Ligne de correction 1 : Utilisation d'un seul `useState` avec la valeur par défaut `live`
+  const [filter, setFilter] = useState<FilterType>('live');
   const [twitchStreamers, setTwitchStreamers] = useState<TwitchStream[]>([]);
   const [loadingTwitch, setLoadingTwitch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLanguage, setSelectedLanguage] = useState('all');
   const [searchTerm, setSearchTerm] = useState('subathon');
+  const [debounceTimeout, setDebounceTimeout] = useState<NodeJS.Timeout | null>(null);
 
-  // Utilisation d'un debounce pour éviter les requêtes à chaque frappe
-  const [debouncedSearchQuery] = useDebounce(searchQuery, 500);
-  const [debouncedSelectedLanguage] = useDebounce(selectedLanguage, 500);
-  const [debouncedSearchTerm] = useDebounce(searchTerm, 500);
+  // Fonction de debounce manuelle pour éviter les dépendances externes
+  const debouncedSearch = useCallback(() => {
+    if (debounceTimeout) {
+      clearTimeout(debounceTimeout);
+    }
+    
+    const timeout = setTimeout(() => {
+      searchTwitchStreamers();
+    }, 500);
+    
+    setDebounceTimeout(timeout);
+  }, [searchQuery, selectedLanguage, searchTerm]);
 
-  const searchTwitchStreamers = useCallback(
-    async () => {
-      setLoadingTwitch(true);
-      try {
-        // Correction ici: utilisez les valeurs débenchées pour la recherche
-        const termToSearch = debouncedSearchQuery || debouncedSearchTerm;
-        const languageToSearch = debouncedSelectedLanguage;
-
-        if (!termToSearch.trim()) {
-          setTwitchStreamers([]);
-          return;
-        }
-
-        const { data, error } = await supabase.functions.invoke('search-twitch-streams', {
-          body: {
-            query: termToSearch,
-            language: languageToSearch === 'all' ? undefined : languageToSearch,
-          },
-        });
-
-        if (error) throw error;
-
-        if (data && data.streams) {
-          setTwitchStreamers(data.streams as TwitchStream[]);
-          toast({
-            title: 'Recherche terminée',
-            description: `${data.streams.length} stream(s) trouvé(s) pour "${termToSearch}"${
-              languageToSearch !== 'all' ? ` en ${LANGUAGES.find(l => l.code === languageToSearch)?.name}` : ''
-            }`,
-          });
-        }
-      } catch (error) {
-        console.error('Erreur lors de la recherche de streams Twitch:', error);
-        toast({
-          title: 'Erreur',
-          description: 'Impossible de récupérer les streams Twitch.',
-          variant: 'destructive',
-        });
-      } finally {
-        setLoadingTwitch(false);
+  const searchTwitchStreamers = useCallback(async () => {
+    setLoadingTwitch(true);
+    try {
+      const termToSearch = searchQuery.trim() || searchTerm;
+      
+      if (!termToSearch.trim()) {
+        setTwitchStreamers([]);
+        return;
       }
-    },
-    [debouncedSearchQuery, debouncedSearchTerm, debouncedSelectedLanguage]
-  );
+
+      const { data, error } = await supabase.functions.invoke('search-twitch-streams', {
+        body: {
+          query: termToSearch,
+          language: selectedLanguage === 'all' ? undefined : selectedLanguage,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data && data.streams) {
+        setTwitchStreamers(data.streams as TwitchStream[]);
+        toast({
+          title: 'Recherche terminée',
+          description: `${data.streams.length} stream(s) trouvé(s) pour "${termToSearch}"${
+            selectedLanguage !== 'all' ? ` en ${LANGUAGES.find(l => l.code === selectedLanguage)?.name}` : ''
+          }`,
+        });
+      }
+    } catch (error) {
+      console.error('Erreur lors de la recherche de streams Twitch:', error);
+      toast({
+        title: 'Erreur',
+        description: 'Impossible de récupérer les streams Twitch.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoadingTwitch(false);
+    }
+  }, [searchQuery, searchTerm, selectedLanguage]);
 
   useEffect(() => {
-    // Lance la recherche à chaque fois que le terme ou la langue change
-    // grâce aux valeurs "debounced"
-    searchTwitchStreamers();
-  }, [searchTwitchStreamers]);
+    debouncedSearch();
+    
+    return () => {
+      if (debounceTimeout) {
+        clearTimeout(debounceTimeout);
+      }
+    };
+  }, [debouncedSearch]);
 
   const handleRefresh = () => {
     refetch();
@@ -207,16 +216,30 @@ export default function Discovery() {
       });
       return;
     }
-    // Mettre à jour searchTerm déclenche la recherche via useEffect
     setSearchTerm(searchQuery);
   };
 
   const handleLanguageChange = (newLanguage: string) => {
     setSelectedLanguage(newLanguage);
-    // Mettre à jour selectedLanguage déclenche la recherche via useEffect
   };
 
-  const filteredStreamers = streamers.filter(streamer => {
+  const handleQuickSearch = (term: string) => {
+    setSearchTerm(term);
+    setSearchQuery(term);
+  };
+
+  // Conversion des streamers au bon type
+  const typedStreamers: PauvrathonStreamer[] = (streamers || []).map(streamer => ({
+    id: streamer.id,
+    is_live: streamer.is_live,
+    stream_title: streamer.stream_title,
+    current_clicks: streamer.current_clicks || 0,
+    clicks_required: streamer.clicks_required || 100,
+    total_time_added: streamer.total_time_added || 0,
+    profiles: streamer.profile || streamer.profiles
+  }));
+
+  const filteredStreamers = typedStreamers.filter(streamer => {
     if (filter === 'live') return streamer.is_live;
     return true;
   });
@@ -231,7 +254,7 @@ export default function Discovery() {
             Découverte
           </h1>
           <p className="text-muted-foreground">
-            Découvrez les streamers actifs et participez à leurs subathons
+            Découvrez les streamers actifs et participez à leurs pauvrathons
           </p>
         </div>
 
@@ -251,7 +274,11 @@ export default function Discovery() {
           <TabsContent value="pauvrathon">
             <div className="flex justify-between items-center mb-6">
               <div className="flex space-x-2">
-                <Button variant={filter === 'all' ? 'default' : 'outline'} onClick={() => setFilter('all')} size="sm">
+                <Button 
+                  variant={filter === 'all' ? 'default' : 'outline'} 
+                  onClick={() => setFilter('all')} 
+                  size="sm"
+                >
                   Tous
                 </Button>
                 <Button
@@ -287,15 +314,15 @@ export default function Discovery() {
                     <CardContent className="p-6">
                       <div className="flex items-center space-x-3 mb-4">
                         <Avatar className="h-12 w-12">
-                          <AvatarImage src={getStreamerAvatar(streamer as any)} alt={getStreamerDisplayName(streamer as any)} />
+                          <AvatarImage src={getStreamerAvatar(streamer)} alt={getStreamerDisplayName(streamer)} />
                           <AvatarFallback>
-                            {getStreamerDisplayName(streamer as any).charAt(0).toUpperCase()}
+                            {getStreamerDisplayName(streamer).charAt(0).toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
                         <div className="flex-1">
                           <h3 className="font-semibold text-lg">
                             <Link to={`/streamer/${streamer.id}`} className="hover:underline">
-                              {getStreamerDisplayName(streamer as any)}
+                              {getStreamerDisplayName(streamer)}
                             </Link>
                           </h3>
                           <div className="flex items-center space-x-2">
@@ -383,11 +410,7 @@ export default function Discovery() {
                     key={term}
                     variant={searchTerm === term ? 'default' : 'outline'}
                     size="sm"
-                    onClick={() => {
-                      setSearchTerm(term);
-                      setSearchQuery(term);
-                      // La recherche est déclenchée par l'effet de bord, pas besoin de l'appeler ici
-                    }}
+                    onClick={() => handleQuickSearch(term)}
                   >
                     {term}
                   </Button>
@@ -451,7 +474,6 @@ export default function Discovery() {
                           alt={stream.title}
                           className="w-full h-auto"
                           onError={e => {
-                            // Si l'image de la vignette ne charge pas, utilisez une image par défaut
                             const target = e.target as HTMLImageElement;
                             target.src = 'https://via.placeholder.com/440x248/667eea/ffffff?text=Stream+Live';
                           }}
@@ -463,7 +485,7 @@ export default function Discovery() {
                           </Badge>
                           {stream.language && (
                             <Badge variant="secondary">
-                              {LANGUAGES.find(l => l.code === stream.language)?.flag || '🌐'}
+                              {LANGUAGES.find(l => l.code === stream.language)?.flag || '🌍'}
                               {stream.language.toUpperCase()}
                             </Badge>
                           )}
@@ -479,8 +501,10 @@ export default function Discovery() {
                       <div className="p-4">
                         <div className="flex items-center space-x-3 mb-3">
                           <Avatar className="h-10 w-10">
-                            {/* L'API Twitch ne renvoie pas d'URL d'avatar dans cet endpoint. Utilisation d'une image générique. */}
-                            <AvatarImage src={`https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(stream.user_name)}`} alt={stream.user_name} />
+                            <AvatarImage 
+                              src={`https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(stream.user_name)}`} 
+                              alt={stream.user_name} 
+                            />
                             <AvatarFallback>{stream.user_name.charAt(0).toUpperCase()}</AvatarFallback>
                           </Avatar>
                           <div className="flex-1">
