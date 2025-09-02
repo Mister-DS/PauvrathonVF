@@ -201,18 +201,7 @@ const PauvrathonPage = () => {
       const newUserClicks = userClicks + 1;
       setUserClicks(newUserClicks);
       
-      // Aussi incrémenter le compteur global pour les statistiques générales
-      const { error: globalError } = await supabase
-        .from('streamers')
-        .update({
-          total_clicks: (streamer.total_clicks || 0) + 1,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', streamer.id);
-        
-      if (globalError) {
-        console.warn('Erreur mise à jour stats globales:', globalError);
-      }
+      // Le compteur global n'est plus mis à jour ici
       
       // Vérifier si ce viewer peut déclencher un mini-jeu
       if (newUserClicks >= streamer.clicks_required) {
@@ -249,6 +238,7 @@ const PauvrathonPage = () => {
             description: "Vous pouvez maintenant cliquer à nouveau.",
           });
         }
+        
       }, 1000);
     }
   };
@@ -395,10 +385,12 @@ const PauvrathonPage = () => {
     if (!streamer) return;
     
     try {
+      // Mise à jour des clics et du temps totaux
       const { error } = await supabase
         .from('streamers')
         .update({
           total_time_added: (streamer.total_time_added || 0) + timeToAdd,
+          total_clicks: (streamer.total_clicks || 0) + userClicks,
           updated_at: new Date().toISOString()
         })
         .eq('id', streamer.id);
@@ -808,12 +800,6 @@ const PauvrathonPage = () => {
                     <span className="text-sm font-semibold">
                       {Math.floor((streamer.total_time_added || 0) / 60)}m {(streamer.total_time_added || 0) % 60}s
                     </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <p className="text-sm text-muted-foreground">
-                      Viewers actifs :
-                    </p>
-                    <span className="text-sm font-semibold">{streamer.viewer_count || 0}</span>
                   </div>
                 </div>
               </CardContent>
