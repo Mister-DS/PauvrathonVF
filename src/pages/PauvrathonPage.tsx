@@ -41,6 +41,7 @@ const PauvrathonPage = () => {
   const [clickCooldown, setClickCooldown] = useState(false);
   const [lastClickTime, setLastClickTime] = useState<number>(0);
   const [streamStartDelay, setStreamStartDelay] = useState(true); // Nouveau: délai initial
+  const [countdownSeconds, setCountdownSeconds] = useState(0); // Pour afficher le countdown
 
   const fetchStreamer = async (streamerId: string) => {
     try {
@@ -77,16 +78,32 @@ const PauvrathonPage = () => {
         const streamStartTime = new Date(data.stream_started_at).getTime();
         const now = Date.now();
         const timeSinceStart = now - streamStartTime;
-        const initialDelayMs = 10000; // 10 secondes de délai
+        const initialDelayMs = 120000; // 2 minutes de délai (au lieu de 10 secondes)
         
         if (timeSinceStart < initialDelayMs) {
           setStreamStartDelay(true);
+          const remainingTime = Math.ceil((initialDelayMs - timeSinceStart) / 1000);
+          
+          // Countdown timer avec state update
+          const countdownInterval = setInterval(() => {
+            const currentTime = Date.now();
+            const remaining = Math.ceil((initialDelayMs - (currentTime - streamStartTime)) / 1000);
+            
+            setCountdownSeconds(remaining);
+            
+            if (remaining <= 0) {
+              clearInterval(countdownInterval);
+              setStreamStartDelay(false);
+              setCountdownSeconds(0);
+              toast({
+                title: "Stream prêt !",
+                description: "Vous pouvez maintenant participer aux clics.",
+              });
+            }
+          }, 1000);
+          
           setTimeout(() => {
-            setStreamStartDelay(false);
-            toast({
-              title: "Stream prêt !",
-              description: "Vous pouvez maintenant participer aux clics.",
-            });
+            clearInterval(countdownInterval);
           }, initialDelayMs - timeSinceStart);
         } else {
           setStreamStartDelay(false);
@@ -128,7 +145,17 @@ const PauvrathonPage = () => {
   };
 
   const handleViewerClick = async () => {
-    if (!streamer || !user || isClicking || isGameActive || clickCooldown) return;
+    if (!streamer || !user || isClicking || isGameActive || clickCooldown || streamStartDelay) return;
+    
+    // Protection stricte contre le dépassement
+    if (streamer.current_clicks >= streamer.clicks_required) {
+      toast({
+        title: "Limite atteinte !",
+        description: "Le nombre de clics requis a déjà été atteint. Le mini-jeu va se lancer.",
+        variant: "destructive",
+      });
+      return;
+    }
     
     // Vérifier le cooldown local (évite le spam de clics)
     const now = Date.now();
@@ -149,9 +176,19 @@ const PauvrathonPage = () => {
     setLastClickTime(now);
     
     try {
-      // Utilisation d'une transaction optimiste
-      const newClickCount = (streamer.current_clicks || 0) + 1;
+      // Vérification double du seuil avant l'envoi
+      const currentClicks = streamer.current_clicks || 0;
+      if (currentClicks >= streamer.clicks_required) {
+        toast({
+          title: "Trop tard !",
+          description: "Un autre joueur a déjà atteint la limite.",
+        });
+        return;
+      }
       
+      const newClickCount = currentClicks + 1;
+      
+      // Transaction avec double vérification
       const { data, error } = await supabase
         .from('streamers')
         .update({
@@ -159,17 +196,18 @@ const PauvrathonPage = () => {
           updated_at: new Date().toISOString()
         })
         .eq('id', streamer.id)
-        .eq('current_clicks', streamer.current_clicks) // Condition pour éviter les conflits
+        .eq('current_clicks', currentClicks) // Condition pour éviter les conflits
+        .lt('current_clicks', streamer.clicks_required) // Protection supplémentaire
         .select()
         .single();
 
       if (error) {
         if (error.code === 'PGRST116') {
-          // Conflit détecté, rafraîchir les données
+          // Conflit détecté ou limite dépassée, rafraîchir les données
           fetchStreamer(streamer.id);
           toast({
             title: "Données mises à jour",
-            description: "Les clics ont été synchronisés.",
+            description: "La limite a peut-être été atteinte par un autre joueur.",
           });
         } else {
           throw error;
@@ -538,10 +576,20 @@ const PauvrathonPage = () => {
                     {streamer.status === 'live' && user && (
                       <>
                         {streamStartDelay ? (
-                          <div className="mt-4 p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-center">
-                            <p className="text-sm text-yellow-600 dark:text-yellow-400">
-                              Stream en initialisation... Patientez quelques secondes.
+                          <div className="mt-4 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-center">
+                            <Clock className="mx-auto h-8 w-8 text-yellow-600 mb-2" />
+                            <p className="text-sm text-yellow-600 dark:text-yellow-400 font-medium">
+                              Stream en initialisation...
                             </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Clics disponibles dans {countdownSeconds} secondes
+                            </p>
+                            <div className="mt-2 w-full bg-yellow-200 dark:bg-yellow-800 rounded-full h-2">
+                              <div 
+                                className="bg-yellow-600 h-2 rounded-full transition-all duration-1000"
+                                style={{ width: `${((120 - countdownSeconds) / 120) * 100}%` }}
+                              />
+                            </div>
                           </div>
                         ) : (
                           <Button 

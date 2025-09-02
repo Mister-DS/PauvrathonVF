@@ -8,6 +8,7 @@ interface UniversalTimerProps {
   initialDuration: number;
   totalTimeAdded: number;
   totalElapsedTime?: number;
+  totalPausedDuration?: number;
   formatStyle?: 'long' | 'short' | 'colon';
   showStatus?: boolean;
   className?: string;
@@ -20,6 +21,7 @@ export const UniversalTimer = ({
   initialDuration,
   totalTimeAdded,
   totalElapsedTime = 0,
+  totalPausedDuration = 0,
   formatStyle = 'colon',
   showStatus = false,
   className = ''
@@ -33,19 +35,21 @@ export const UniversalTimer = ({
       let elapsedSeconds = 0;
 
       if (status === 'live' && streamStartedAt) {
-        // LIVE: Temps écoulé total + temps depuis le dernier démarrage
+        // LIVE: Calculer le temps réel écoulé en soustrayant les pauses
         const streamStart = new Date(streamStartedAt).getTime();
         const now = new Date().getTime();
-        const currentSessionElapsed = Math.floor((now - streamStart) / 1000);
-        elapsedSeconds = totalElapsedTime + currentSessionElapsed;
-      } else if (status === 'paused' && pauseStartedAt && streamStartedAt) {
-        // PAUSE: Temps écoulé total + temps écoulé dans la dernière session avant pause
-        const streamStart = new Date(streamStartedAt).getTime();
-        const pauseStart = new Date(pauseStartedAt).getTime();
-        const sessionElapsedBeforePause = Math.floor((pauseStart - streamStart) / 1000);
-        elapsedSeconds = totalElapsedTime + sessionElapsedBeforePause;
+        const totalRealTime = Math.floor((now - streamStart) / 1000);
+        
+        // Temps effectif = temps réel - pauses
+        elapsedSeconds = totalRealTime - totalPausedDuration;
+        
+      } else if (status === 'paused' && streamStartedAt) {
+        // PAUSE: Utiliser directement totalElapsedTime qui est calculé côté serveur
+        // Ne pas recalculer car cela causait les pertes de temps
+        elapsedSeconds = totalElapsedTime;
+        
       } else {
-        // OFFLINE/ENDED: Seulement le temps déjà écoulé
+        // OFFLINE/ENDED: Temps total écoulé sauvegardé
         elapsedSeconds = totalElapsedTime;
       }
 
@@ -80,7 +84,7 @@ export const UniversalTimer = ({
     // Calcul initial
     calculateTime();
 
-    // Mise à jour uniquement si le stream est en cours
+    // Mise à jour uniquement si le stream est en cours (pas en pause)
     let interval: NodeJS.Timeout;
     if (status === 'live') {
       interval = setInterval(calculateTime, 1000);
@@ -89,7 +93,7 @@ export const UniversalTimer = ({
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [status, streamStartedAt, pauseStartedAt, initialDuration, totalTimeAdded, totalElapsedTime, formatStyle]);
+  }, [status, streamStartedAt, pauseStartedAt, initialDuration, totalTimeAdded, totalElapsedTime, totalPausedDuration, formatStyle]);
 
   const getStatusInfo = () => {
     switch (status) {

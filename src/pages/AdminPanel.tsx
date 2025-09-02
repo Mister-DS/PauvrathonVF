@@ -408,8 +408,7 @@ export default function AdminPanel() {
         component_code: componentCode,
         description: newMinigameDescription || `Mini-jeu ${newMinigameName}`,
         is_active: true,
-        max_chances: 3,
-        max_attempts: 12
+        created_by: user.id
       });
 
       if (error) throw error;
@@ -529,8 +528,7 @@ export default function AdminPanel() {
         component_code: game.component_code,
         description: game.description,
         is_active: true,
-        max_chances: 3,
-        max_attempts: 12
+        created_by: user.id
       });
 
       if (error) throw error;
