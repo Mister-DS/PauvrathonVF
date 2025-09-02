@@ -38,7 +38,6 @@ import {
   AlertCircle,
   Trophy
 } from 'lucide-react';
-import { Progress } from '@/components/ui/progress';
 
 interface StreamerSettings {
   id: string;
@@ -61,7 +60,7 @@ interface StreamerSettings {
   pause_started_at: string | null;
   total_elapsed_time: number;
   total_paused_duration: number;
-  total_clicks?: number; // Ajouté pour correspondre à la logique de handleStatusChange
+  total_clicks?: number;
 }
 
 const formatTime = (seconds: number) => {
@@ -180,7 +179,7 @@ export default function StreamerPanel() {
         setInitialMinutes(Math.floor(((data.initial_duration || 7200) % 3600) / 60));
         setTimeMode(data.time_mode || 'fixed');
         setFixedTime(data.time_increment || 30);
-        setMinRandomTime(data.min_random_time ?? data.time_increment ?? 10); // Utilisation de ?? pour une meilleure gestion des valeurs null/undefined
+        setMinRandomTime(data.min_random_time ?? data.time_increment ?? 10);
         setMaxRandomTime(data.max_random_time || 60);
         setClicksRequired(data.clicks_required || 100);
         setCooldownTime(data.cooldown_seconds || 30);
@@ -297,7 +296,7 @@ export default function StreamerPanel() {
       stream_title: originalStreamerData.stream_title,
       time_mode: originalStreamerData.time_mode || 'fixed',
       time_increment: originalStreamerData.time_increment || 30,
-      min_random_time: originalStreamerData.min_random_time ?? 10, // Utilisation de ??
+      min_random_time: originalStreamerData.min_random_time ?? 10,
       max_random_time: originalStreamerData.max_random_time || 60,
       clicks_required: originalStreamerData.clicks_required || 100,
       cooldown_seconds: originalStreamerData.cooldown_seconds || 30,
@@ -370,108 +369,112 @@ export default function StreamerPanel() {
   };
 
   const handleStatusChange = async (newStatus: 'live' | 'paused' | 'ended' | 'offline') => {
-  if (!streamer || !streamer.id) {
-    console.error("Mise à jour du statut impossible: Streamer ID invalide.");
-    return;
-  }
+    if (!streamer || !streamer.id) {
+      console.error("Mise à jour du statut impossible: Streamer ID invalide.");
+      return;
+    }
 
-  try {
-    let updateData: any = {
-      status: newStatus,
-      is_live: newStatus === 'live',
-      updated_at: new Date().toISOString()
-    };
+    try {
+      let updateData: any = {
+        status: newStatus,
+        is_live: newStatus === 'live',
+        updated_at: new Date().toISOString()
+      };
 
-    if (newStatus === 'live') {
-      if (streamer.status === 'paused') {
-        const pauseDuration = Math.floor((new Date().getTime() - new Date(streamer.pause_started_at!).getTime()) / 1000);
-        updateData = {
-          ...updateData,
-          total_paused_duration: streamer.total_paused_duration + pauseDuration,
-          pause_started_at: null
-        };
-      } else {
-        // Nouvelle fonctionnalité : Réinitialiser les statistiques des contributeurs au début d'un nouveau stream
-        const { error: deleteError } = await supabase
-          .from('subathon_stats')
-          .delete()
-          .eq('streamer_id', streamer.id);
+      if (newStatus === 'live') {
+        if (streamer.status === 'paused') {
+          const pauseDuration = Math.floor((new Date().getTime() - new Date(streamer.pause_started_at!).getTime()) / 1000);
+          updateData = {
+            ...updateData,
+            total_paused_duration: streamer.total_paused_duration + pauseDuration,
+            pause_started_at: null
+          };
+        } else {
+          // Réinitialiser les statistiques des contributeurs au début d'un nouveau stream
+          const { error: deleteError } = await supabase
+            .from('subathon_stats')
+            .delete()
+            .eq('streamer_id', streamer.id);
 
-        if (deleteError) {
-          console.error('Erreur lors de la réinitialisation des statistiques:', deleteError);
-          // On ne jette pas d'erreur pour ne pas bloquer le démarrage du stream
+          if (deleteError) {
+            console.error('Erreur lors de la réinitialisation des statistiques:', deleteError);
+            toast({
+              title: "Avertissement",
+              description: "Le classement des contributeurs n'a pas pu être réinitialisé.",
+              variant: "destructive",
+            });
+          } else {
+            toast({
+              title: "Statistiques réinitialisées",
+              description: "Le classement des contributeurs a été remis à zéro.",
+            });
+          }
+          
+          updateData.stream_started_at = new Date().toISOString();
+          updateData.total_elapsed_time = 0;
+          updateData.total_paused_duration = 0;
+          updateData.total_clicks = 0;
+        }
+
+        if (!selectedGames.length) {
           toast({
-            title: "Avertissement",
-            description: "Le classement des contributeurs n'a pas pu être réinitialisé.",
+            title: "Attention",
+            description: "Aucun mini-jeu n'a été sélectionné. Les viewers ne pourront pas jouer.",
             variant: "destructive",
           });
         }
-        
-        updateData.stream_started_at = new Date().toISOString();
+      } else if (newStatus === 'paused') {
+        if (streamer.stream_started_at) {
+          const elapsedTimeBeforePause = Math.floor(
+            (new Date().getTime() - new Date(streamer.stream_started_at!).getTime()) / 1000
+          );
+          updateData = {
+            ...updateData,
+            pause_started_at: new Date().toISOString(),
+            total_elapsed_time: streamer.total_elapsed_time + elapsedTimeBeforePause,
+          };
+        }
+      } else if (newStatus === 'ended' || newStatus === 'offline') {
+        updateData.current_clicks = 0;
+        updateData.total_time_added = 0;
         updateData.total_elapsed_time = 0;
         updateData.total_paused_duration = 0;
-        updateData.total_clicks = 0; 
+        updateData.stream_started_at = null;
+        updateData.pause_started_at = null;
+        updateData.total_clicks = 0;
       }
 
-      if (!selectedGames.length) {
-        toast({
-          title: "Attention",
-          description: "Aucun mini-jeu n'a été sélectionné. Les viewers ne pourront pas jouer.",
-          variant: "destructive",
-        });
-      }
-    } else if (newStatus === 'paused') {
-      if (streamer.stream_started_at) {
-        const elapsedTimeBeforePause = Math.floor(
-          (new Date().getTime() - new Date(streamer.stream_started_at!).getTime()) / 1000
-        );
-        updateData = {
-          ...updateData,
-          pause_started_at: new Date().toISOString(),
-          total_elapsed_time: streamer.total_elapsed_time + elapsedTimeBeforePause,
-        };
-      }
-    } else if (newStatus === 'ended' || newStatus === 'offline') {
-      updateData.current_clicks = 0;
-      updateData.total_time_added = 0;
-      updateData.total_elapsed_time = 0;
-      updateData.total_paused_duration = 0;
-      updateData.stream_started_at = null;
-      updateData.pause_started_at = null;
-      updateData.total_clicks = 0; 
+      const { data, error } = await supabase
+        .from('streamers')
+        .update(updateData)
+        .eq('id', streamer.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      setStreamer(data as any);
+
+      const statusMessages = {
+        live: streamer.status === 'paused' ? "Pauvrathon repris" : "Pauvrathon démarré",
+        paused: "Pauvrathon en pause",
+        ended: "Pauvrathon terminé",
+        offline: "Pauvrathon arrêté"
+      };
+
+      toast({
+        title: statusMessages[newStatus],
+        description: `Le Pauvrathon est maintenant ${newStatus === 'live' ? 'en direct' : newStatus === 'paused' ? 'en pause' : 'terminé'}.`,
+      });
+
+    } catch (error: any) {
+      console.error('Error updating status:', error);
+      toast({
+        title: "Erreur",
+        description: `Impossible de mettre à jour le statut: ${error.message || 'Erreur inconnue'}`,
+        variant: "destructive",
+      });
     }
-
-    const { data, error } = await supabase
-      .from('streamers')
-      .update(updateData)
-      .eq('id', streamer.id)
-      .select()
-      .single();
-
-    if (error) throw error;
-    setStreamer(data as any);
-
-    const statusMessages = {
-      live: streamer.status === 'paused' ? "Pauvrathon repris" : "Pauvrathon démarré",
-      paused: "Pauvrathon en pause",
-      ended: "Pauvrathon terminé",
-      offline: "Pauvrathon arrêté"
-    };
-
-    toast({
-      title: statusMessages[newStatus],
-      description: `Le Pauvrathon est maintenant ${newStatus === 'live' ? 'en direct' : newStatus === 'paused' ? 'en pause' : 'terminé'}.`,
-    });
-
-  } catch (error: any) {
-    console.error('Error updating status:', error);
-    toast({
-      title: "Erreur",
-      description: `Impossible de mettre à jour le statut: ${error.message || 'Erreur inconnue'}`,
-      variant: "destructive",
-    });
-  }
-};
+  };
   
   const handleMinigameToggle = (minigameId: string, checked: boolean | 'indeterminate') => {
     if (checked === true) {
@@ -864,7 +867,7 @@ export default function StreamerPanel() {
                 </Card>
               </TabsContent>
 
-              {/* Contenu de l'onglet Statistiques ENRICHI */}
+              {/* Contenu de l'onglet Statistiques SIMPLIFIÉ */}
               <TabsContent value="statistics">
                 <div className="space-y-6">
                   {/* Statistiques générales */}
@@ -926,33 +929,6 @@ export default function StreamerPanel() {
                     </Card>
                   </div>
 
-                  {/* Progression vers le prochain jeu */}
-                  {streamer?.status === 'live' && (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="flex items-center">
-                          <Progress className="mr-2 h-5 w-5" />
-                          Progression vers le prochain mini-jeu
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-2">
-                          <div className="flex justify-between text-sm">
-                            <span>Clics actuels</span>
-                            <span>{streamer?.current_clicks || 0} / {streamer?.clicks_required || 100}</span>
-                          </div>
-                          <Progress 
-                            value={((streamer?.current_clicks || 0) / (streamer?.clicks_required || 100)) * 100} 
-                            className="h-3"
-                          />
-                          <p className="text-xs text-muted-foreground">
-                            {Math.max(0, (streamer?.clicks_required || 100) - (streamer?.current_clicks || 0))} clics restants
-                          </p>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-
                   {/* Top 10 Contributeurs */}
                   <Card>
                     <CardHeader>
@@ -961,7 +937,7 @@ export default function StreamerPanel() {
                         Top 10 Contributeurs
                       </CardTitle>
                       <CardDescription>
-                        Classement des joueurs ayant contribué le plus de temps au Pauvrathon
+                        Classement des joueurs ayant contribué le plus de temps au Pauvrathon (remis à zéro à chaque nouveau stream)
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
@@ -1030,90 +1006,6 @@ export default function StreamerPanel() {
                       )}
                     </CardContent>
                   </Card>
-
-                  {/* Statistiques détaillées */}
-                  {stats.length > 0 && (
-                    <div className="grid md:grid-cols-2 gap-6">
-                      {/* Répartition du temps */}
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="flex items-center">
-                            <Clock className="mr-2 h-5 w-5" />
-                            Répartition du temps ajouté
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="space-y-4">
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm">Temps moyen par contributeur</span>
-                              <span className="font-medium">
-                                {formatTime(Math.round(stats.reduce((total, stat) => total + stat.time_contributed, 0) / stats.length))}
-                              </span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm">Meilleure contribution</span>
-                              <span className="font-medium text-green-600">
-                                {formatTime(Math.max(...stats.map(s => s.time_contributed)))}
-                              </span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm">Plus faible contribution</span>
-                              <span className="font-medium text-orange-600">
-                                {formatTime(Math.min(...stats.map(s => s.time_contributed)))}
-                              </span>
-                            </div>
-                            <Separator />
-                            <div className="flex justify-between items-center font-medium">
-                              <span>Total du temps ajouté</span>
-                              <span className="text-primary">
-                                {formatTime(stats.reduce((total, stat) => total + stat.time_contributed, 0))}
-                              </span>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-
-                      {/* Statistiques des clics */}
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="flex items-center">
-                            <Star className="mr-2 h-5 w-5" />
-                            Statistiques des clics
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="space-y-4">
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm">Clics moyens par contributeur</span>
-                              <span className="font-medium">
-                                {Math.round(stats.reduce((total, stat) => total + (stat.clicks_contributed || 0), 0) / stats.length)}
-                              </span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm">Meilleur cliqueur</span>
-                              <span className="font-medium text-green-600">
-                                {Math.max(...stats.map(s => s.clicks_contributed || 0))} clics
-                              </span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-sm">Ratio clics/temps (moy.)</span>
-                              <span className="font-medium">
-                                {(stats.reduce((total, stat) => total + (stat.clicks_contributed || 0), 0) / 
-                                  Math.max(1, stats.reduce((total, stat) => total + stat.time_contributed, 0))).toFixed(2)} clics/sec
-                              </span>
-                            </div>
-                            <Separator />
-                            <div className="flex justify-between items-center font-medium">
-                              <span>Total des clics</span>
-                              <span className="text-primary">
-                                {stats.reduce((total, stat) => total + (stat.clicks_contributed || 0), 0)}
-                              </span>
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </div>
-                  )}
 
                   {/* Informations sur le stream actuel */}
                   <Card>
