@@ -38,8 +38,9 @@ const PauvrathonPage = () => {
   const [showValidateTimeButton, setShowValidateTimeButton] = useState(false);
   const [timeToAdd, setTimeToAdd] = useState(0);
   const [isClicking, setIsClicking] = useState(false);
-  const [clickCooldown, setClickCooldown] = useState(false);
-  const [lastClickTime, setLastClickTime] = useState<number>(0);
+  // Supprimer clickCooldown et lastClickTime
+  // const [clickCooldown, setClickCooldown] = useState(false);
+  // const [lastClickTime, setLastClickTime] = useState<number>(0);
   const [streamStartDelay, setStreamStartDelay] = useState(true);
   const [countdownSeconds, setCountdownSeconds] = useState(0);
   const [lastStreamerConfig, setLastStreamerConfig] = useState<string>('');
@@ -197,7 +198,6 @@ const PauvrathonPage = () => {
 
           startGlobalCooldown(streamer.cooldown_seconds || 60);
 
-          // CORRIGÉ: Utilisation de la fonction atomique pour les stats
           if (user) {
             const username = user.user_metadata?.twitch_username || user.email || 'Viewer anonyme';
             
@@ -223,11 +223,9 @@ const PauvrathonPage = () => {
     }
   }, [minigameAttempts, minigameChances, streamer, user, calculateTimeToAdd, launchRandomMinigame, startGlobalCooldown, userClicks]);
 
-  // CORRIGÉ: Utilisation de la fonction atomique pour valider le temps
   const handleValidateTime = useCallback(async () => {
     if (!streamer || !user) return;
 
-    // Validation des données
     if (timeToAdd < 1 || timeToAdd > 300) {
       toast({
         title: "Erreur",
@@ -238,7 +236,6 @@ const PauvrathonPage = () => {
     }
 
     try {
-      // CORRIGÉ: Utilisation de la fonction atomique pour ajouter du temps
       const { error: timeError } = await supabase.rpc('add_time_to_streamer', {
         streamer_id: streamer.id,
         time_to_add: timeToAdd
@@ -249,7 +246,6 @@ const PauvrathonPage = () => {
         throw timeError;
       }
 
-      // CORRIGÉ: Utilisation de la fonction atomique pour les stats utilisateur
       const username = user.user_metadata?.twitch_username || user.email || 'Viewer anonyme';
       
       const { error: statsError } = await supabase.rpc('upsert_user_stats', {
@@ -284,13 +280,12 @@ const PauvrathonPage = () => {
     }
   }, [streamer, timeToAdd, user, cooldownSeconds, startGlobalCooldown, userClicks]);
 
-  // CORRIGÉ: Utilisation de la fonction atomique pour les clics
   const handleViewerClick = useCallback(async () => {
-    if (!streamer || !user || isClicking || isGameActive || clickCooldown || streamStartDelay || isGlobalCooldownActive) {
+    // Supprimer clickCooldown de la condition
+    if (!streamer || !user || isClicking || isGameActive || streamStartDelay || isGlobalCooldownActive) {
       return;
     }
 
-    // Validation des données utilisateur
     if (!user.user_metadata?.twitch_username && !user.email) {
       toast({
         title: "Erreur",
@@ -309,32 +304,31 @@ const PauvrathonPage = () => {
       return;
     }
 
-    const now = Date.now();
-    const timeSinceLastClick = now - lastClickTime;
-    const minClickInterval = 1000;
+    // Supprimer toute la logique de lastClickTime et minClickInterval
+    // const now = Date.now();
+    // const timeSinceLastClick = now - lastClickTime;
+    // const minClickInterval = 1000;
 
-    if (timeSinceLastClick < minClickInterval) {
-      toast({
-        title: "Trop rapide !",
-        description: `Attendez ${Math.ceil((minClickInterval - timeSinceLastClick) / 1000)}s avant de recliquer.`,
-        variant: "destructive",
-      });
-      return;
-    }
+    // if (timeSinceLastClick < minClickInterval) {
+    //   toast({
+    //     title: "Trop rapide !",
+    //     description: `Attendez ${Math.ceil((minClickInterval - timeSinceLastClick) / 1000)}s avant de recliquer.`,
+    //     variant: "destructive",
+    //   });
+    //   return;
+    // }
 
     setIsClicking(true);
-    setClickCooldown(true);
-    setLastClickTime(now);
+    // Supprimer setClickCooldown(true);
+    // setLastClickTime(now);
 
     try {
-      // CORRIGÉ: Utilisation de la fonction atomique pour incrémenter les clics
       const { error: clickError } = await supabase.rpc('increment_clicks', {
         streamer_id: streamer.id
       });
 
       if (clickError) {
         console.error('Error incrementing clicks:', clickError);
-        // On continue quand même car c'est pas critique pour l'expérience utilisateur
       }
 
       const newUserClicks = userClicks + 1;
@@ -362,17 +356,18 @@ const PauvrathonPage = () => {
       });
     } finally {
       setIsClicking(false);
-      setTimeout(() => {
-        setClickCooldown(false);
-        if (!isGameActive && !showValidateTimeButton && !streamStartDelay && !isGlobalCooldownActive) {
-          toast({
-            title: "Clics disponibles",
-            description: "Vous pouvez maintenant cliquer à nouveau.",
-          });
-        }
-      }, 1000);
+      // Supprimer le setTimeout pour clickCooldown
+      // setTimeout(() => {
+      //   setClickCooldown(false);
+      //   if (!isGameActive && !showValidateTimeButton && !streamStartDelay && !isGlobalCooldownActive) {
+      //     toast({
+      //       title: "Clics disponibles",
+      //       description: "Vous pouvez maintenant cliquer à nouveau.",
+      //     });
+      //   }
+      // }, 1000);
     }
-  }, [streamer, user, isClicking, isGameActive, clickCooldown, streamStartDelay, isGlobalCooldownActive, userClicks, lastClickTime, showValidateTimeButton, launchRandomMinigame]);
+  }, [streamer, user, isClicking, isGameActive, streamStartDelay, isGlobalCooldownActive, userClicks, showValidateTimeButton, launchRandomMinigame]); // Supprimer clickCooldown et lastClickTime des dépendances
 
   const fetchStreamer = useCallback(async (streamerId: string) => {
     try {
@@ -466,7 +461,6 @@ const PauvrathonPage = () => {
   }, [navigate, user]);
 
   useEffect(() => {
-    // Restauration du cooldown depuis localStorage
     if (user && id) {
       const storedEndTime = localStorage.getItem(`pauvrathon_cooldown_end_${id}_${user.id}`);
       if (storedEndTime) {
@@ -590,8 +584,7 @@ const PauvrathonPage = () => {
                       <span>{streamer.total_clicks || 0} clics communauté</span>
                     </div>
                   </div>
-                </div>
-              </CardHeader>
+                </CardHeader>
             </Card>
 
             <Card>
@@ -724,13 +717,11 @@ const PauvrathonPage = () => {
                           <Button
                             className="w-full mt-4 touch-manipulation"
                             onClick={handleViewerClick}
-                            disabled={isClicking || clickCooldown}
+                            disabled={isClicking} // Supprimer clickCooldown de la désactivation
                             size="lg"
                           >
                             <Zap className="mr-2 h-4 w-4" />
-                            {isClicking ? 'Clic en cours...' :
-                              clickCooldown ? 'Cooldown... (1s)' :
-                                'Cliquer pour le streamer'}
+                            {isClicking ? 'Clic en cours...' : 'Cliquer pour le streamer'}
                           </Button>
                         )}
                       </>

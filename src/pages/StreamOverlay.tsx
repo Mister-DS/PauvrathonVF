@@ -3,11 +3,11 @@ import { useParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
-import { Slider } from '@/components/ui/slider';
+import { Button } from '@/components/ui/button'; // Garder si utilisé ailleurs, sinon supprimer
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'; // Garder si utilisé ailleurs, sinon supprimer
+import { Checkbox } from '@/components/ui/checkbox'; // Garder si utilisé ailleurs, sinon supprimer
+import { Label } from '@/components/ui/label'; // Garder si utilisé ailleurs, sinon supprimer
+import { Slider } from '@/components/ui/slider'; // Garder si utilisé ailleurs, sinon supprimer
 import { UniversalTimer } from '@/components/UniversalTimer';
 import { 
   Clock, 
@@ -17,7 +17,7 @@ import {
   Zap,
   Target,
   TrendingUp,
-  Settings,
+  Settings, // Supprimer si non utilisé
   Eye,
   EyeOff,
   Plus,
@@ -54,9 +54,9 @@ export default function StreamOverlay() {
   const [stats, setStats] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState(new Date());
-  const [showConfig, setShowConfig] = useState(false);
   const [config, setConfig] = useState<OverlayConfig>(defaultConfig);
-  const [isStreamerOwner, setIsStreamerOwner] = useState(false);
+  // isStreamerOwner n'est plus nécessaire ici car la configuration est gérée dans le StreamerPanel
+  // const [isStreamerOwner, setIsStreamerOwner] = useState(false); 
 
   useEffect(() => {
     if (!id) return;
@@ -64,30 +64,44 @@ export default function StreamOverlay() {
     fetchStreamerData();
     loadOverlayConfig();
     
-    // Mise à jour toutes les 2 secondes pour un affichage fluide
     const interval = setInterval(() => {
       fetchStreamerData();
       setLastUpdate(new Date());
     }, 2000);
     
-    return () => clearInterval(interval);
+    // Écouter les changements de configuration de l'overlay en temps réel
+    const overlayConfigChannel = supabase
+      .channel(`public:overlay_configs:streamer_id=eq.${id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'overlay_configs', filter: `streamer_id=eq.${id}` },
+        (payload) => {
+          setConfig({ ...defaultConfig, ...(payload.new as any).config });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      clearInterval(interval);
+      supabase.removeChannel(overlayConfigChannel);
+    };
   }, [id]);
 
-  // Vérifier si l'utilisateur est le propriétaire du stream
-  useEffect(() => {
-    checkOwnership();
-  }, [streamer]);
+  // checkOwnership n'est plus nécessaire ici
+  // useEffect(() => {
+  //   checkOwnership();
+  // }, [streamer]);
 
-  const checkOwnership = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user && streamer && user.id === streamer.user_id) {
-        setIsStreamerOwner(true);
-      }
-    } catch (error) {
-      console.error('Error checking ownership:', error);
-    }
-  };
+  // const checkOwnership = async () => {
+  //   try {
+  //     const { data: { user } } = await supabase.auth.getUser();
+  //     if (user && streamer && user.id === streamer.user_id) {
+  //       setIsStreamerOwner(true);
+  //     }
+  //   } catch (error) {
+  //     console.error('Error checking ownership:', error);
+  //   }
+  // };
 
   const fetchStreamerData = async () => {
     if (!id) return;
@@ -104,7 +118,6 @@ export default function StreamOverlay() {
       if (streamerData) {
         setStreamer(streamerData);
         
-        // Récupérer les stats
         const { data: statsData } = await supabase
           .from('subathon_stats')
           .select('*')
@@ -139,27 +152,26 @@ export default function StreamOverlay() {
     }
   };
 
-  const saveOverlayConfig = async (newConfig: OverlayConfig) => {
-    if (!id || !isStreamerOwner) return;
+  // saveOverlayConfig et updateConfig ne sont plus nécessaires ici
+  // const saveOverlayConfig = async (newConfig: OverlayConfig) => {
+  //   if (!id || !isStreamerOwner) return;
+  //   try {
+  //     setConfig(newConfig);
+  //     const { toast } = await import('@/hooks/use-toast');
+  //     toast({
+  //       title: "Configuration sauvegardée",
+  //       description: "Les paramètres de l'overlay ont été mis à jour.",
+  //     });
+  //   } catch (error) {
+  //     console.error('Error saving overlay config:', error);
+  //   }
+  // };
 
-    try {
-      // For now, just update local state until overlay_configs table is set up
-      setConfig(newConfig);
-      const { toast } = await import('@/hooks/use-toast');
-      toast({
-        title: "Configuration sauvegardée",
-        description: "Les paramètres de l'overlay ont été mis à jour.",
-      });
-    } catch (error) {
-      console.error('Error saving overlay config:', error);
-    }
-  };
-
-  const updateConfig = (key: keyof OverlayConfig, value: any) => {
-    const newConfig = { ...config, [key]: value };
-    setConfig(newConfig);
-    saveOverlayConfig(newConfig);
-  };
+  // const updateConfig = (key: keyof OverlayConfig, value: any) => {
+  //   const newConfig = { ...config, [key]: value };
+  //   setConfig(newConfig);
+  //   saveOverlayConfig(newConfig);
+  // };
 
   if (loading) {
     return (
@@ -189,8 +201,8 @@ export default function StreamOverlay() {
       case 'top-right': return 'top-4 right-4';
       case 'bottom-left': return 'bottom-4 left-4';
       case 'bottom-right': return 'bottom-4 right-4';
-      case 'left': return 'top-4 left-4';
-      case 'right': return 'top-4 right-4';
+      case 'left': return 'top-4 left-4'; // Pour les stats compactes
+      case 'right': return 'top-4 right-4'; // Pour les stats compactes
       default: return 'top-4 right-4';
     }
   };
@@ -208,117 +220,8 @@ export default function StreamOverlay() {
 
   return (
     <div className="min-h-screen bg-transparent p-4 font-sans">
-      {/* Configuration Panel - Visible uniquement pour le streamer */}
-      {isStreamerOwner && (
-        <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50">
-          <Button
-            onClick={() => setShowConfig(!showConfig)}
-            className="bg-purple-600 hover:bg-purple-700 text-white"
-            size="sm"
-          >
-            <Settings className="w-4 h-4 mr-2" />
-            {showConfig ? 'Masquer Config' : 'Config Overlay'}
-          </Button>
-          
-          {showConfig && (
-            <Card className="mt-2 w-96 bg-black/90 border-purple-500/50 text-white">
-              <CardHeader>
-                <CardTitle className="text-sm">Configuration Overlay</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4 text-sm">
-                {/* Affichage des éléments */}
-                <div className="space-y-2">
-                  <Label className="text-white font-medium">Éléments à afficher :</Label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        checked={config.showTimer}
-                        onCheckedChange={(checked) => updateConfig('showTimer', checked)}
-                      />
-                      <Label>Timer Principal</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        checked={config.showProgress}
-                        onCheckedChange={(checked) => updateConfig('showProgress', checked)}
-                      />
-                      <Label>Progression</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        checked={config.showStats}
-                        onCheckedChange={(checked) => updateConfig('showStats', checked)}
-                      />
-                      <Label>Statistiques</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        checked={config.showTimeAdded}
-                        onCheckedChange={(checked) => updateConfig('showTimeAdded', checked)}
-                      />
-                      <Label>Temps Gagné</Label>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <Checkbox
-                        checked={config.showTopPlayer}
-                        onCheckedChange={(checked) => updateConfig('showTopPlayer', checked)}
-                      />
-                      <Label>Top Joueur</Label>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Taille du timer */}
-                {config.showTimer && (
-                  <div className="space-y-2">
-                    <Label>Taille du Timer: {config.timerSize}</Label>
-                    <Slider
-                      value={[config.timerSize]}
-                      min={4}
-                      max={8}
-                      step={1}
-                      onValueChange={(value) => updateConfig('timerSize', value[0])}
-                    />
-                  </div>
-                )}
-
-                {/* Positions */}
-                <div className="space-y-2">
-                  <Label>Positions :</Label>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <Label>Timer :</Label>
-                      <select
-                        value={config.timerPosition}
-                        onChange={(e) => updateConfig('timerPosition', e.target.value)}
-                        className="w-full bg-gray-800 text-white p-1 rounded"
-                      >
-                        <option value="top-right">Haut Droite</option>
-                        <option value="top-left">Haut Gauche</option>
-                        <option value="bottom-right">Bas Droite</option>
-                        <option value="bottom-left">Bas Gauche</option>
-                      </select>
-                    </div>
-                    <div>
-                      <Label>Progression :</Label>
-                      <select
-                        value={config.progressPosition}
-                        onChange={(e) => updateConfig('progressPosition', e.target.value)}
-                        className="w-full bg-gray-800 text-white p-1 rounded"
-                      >
-                        <option value="top-left">Haut Gauche</option>
-                        <option value="top-right">Haut Droite</option>
-                        <option value="bottom-left">Bas Gauche</option>
-                        <option value="bottom-right">Bas Droite</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      )}
+      {/* Le panneau de configuration est supprimé d'ici */}
+      {/* {isStreamerOwner && ( ... )} */}
 
       {/* Timer principal */}
       {config.showTimer && (

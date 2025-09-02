@@ -36,7 +36,13 @@ import {
   Star,
   Monitor,
   AlertCircle,
-  Trophy
+  Trophy,
+  LayoutDashboard,
+  MoveHorizontal,
+  MoveVertical,
+  Maximize,
+  Minimize,
+  Users // Ajout de l'icône Users
 } from 'lucide-react';
 
 interface StreamerSettings {
@@ -68,11 +74,38 @@ interface SubathonStat {
   id: string;
   streamer_id: string;
   profile_id: string;
-  profile_twitch_display_name: string; // Ajout de cette propriété pour le nom
+  profile_twitch_display_name: string;
   time_contributed: number;
   clicks_contributed: number;
+  games_won: number; // Ajout de games_won
+  games_played: number; // Ajout de games_played
   created_at: string;
 }
+
+// Interface pour la configuration de l'overlay
+interface OverlayConfig {
+  showTimer: boolean;
+  showProgress: boolean;
+  showStats: boolean;
+  showTimeAdded: boolean;
+  showTopPlayer: boolean;
+  timerSize: number;
+  timerPosition: 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left';
+  progressPosition: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  statsPosition: 'left' | 'right';
+}
+
+const defaultConfig: OverlayConfig = {
+  showTimer: true,
+  showProgress: true,
+  showStats: true,
+  showTimeAdded: true,
+  showTopPlayer: true,
+  timerSize: 6,
+  timerPosition: 'top-right',
+  progressPosition: 'top-left',
+  statsPosition: 'left'
+};
 
 const formatTime = (seconds: number) => {
   const mins = Math.floor(seconds / 60);
@@ -85,13 +118,11 @@ const TwitchPlayer = ({ twitchUsername }: { twitchUsername: string | undefined }
   useEffect(() => {
     if (!twitchUsername) return;
 
-    // Nettoie l'ancien embed s'il existe
     const existingEmbed = document.getElementById('twitch-embed');
     if (existingEmbed) {
       existingEmbed.innerHTML = '';
     }
 
-    // S'assure que le script de l'API Twitch est chargé
     if (!(window as any).Twitch) {
       const script = document.createElement('script');
       script.src = 'https://embed.twitch.tv/embed/v1.js';
@@ -110,7 +141,6 @@ const TwitchPlayer = ({ twitchUsername }: { twitchUsername: string | undefined }
         });
       };
     } else {
-      // Si le script est déjà là, initialise le lecteur directement
       new (window as any).Twitch.Embed("twitch-embed", {
         width: '100%',
         height: '400',
@@ -144,12 +174,15 @@ export default function StreamerPanel() {
   const [streamer, setStreamer] = useState<StreamerSettings | null>(null);
   const [originalStreamerData, setOriginalStreamerData] = useState<StreamerSettings | null>(null);
   const [availableMinigames, setAvailableMinigames] = useState<any[]>([]);
-  const [stats, setStats] = useState<SubathonStat[]>([]); // Utilisation de l'interface SubathonStat
+  const [stats, setStats] = useState<SubathonStat[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [overlayConfig, setOverlayConfig] = useState<OverlayConfig>(defaultConfig);
+  const [originalOverlayConfig, setOriginalOverlayConfig] = useState<OverlayConfig>(defaultConfig);
+  const [hasUnsavedOverlayChanges, setHasUnsavedOverlayChanges] = useState(false);
   
-  // États pour la configuration
+  // États pour la configuration du Pauvrathon
   const [timeMode, setTimeMode] = useState('fixed');
   const [initialHours, setInitialHours] = useState(2);
   const [initialMinutes, setInitialMinutes] = useState(0);
@@ -230,7 +263,6 @@ export default function StreamerPanel() {
     }
 
     try {
-      // Sélectionne également le nom d'affichage Twitch du profil lié
       const { data, error } = await supabase
         .from('subathon_stats')
         .select(`
@@ -242,7 +274,6 @@ export default function StreamerPanel() {
 
       if (error) throw error;
       
-      // Mappe les données pour inclure le nom d'affichage Twitch directement dans l'objet stat
       setStats((data || []).map(stat => ({
         ...stat,
         profile_twitch_display_name: stat.profiles?.twitch_display_name || 'Inconnu'
@@ -252,6 +283,71 @@ export default function StreamerPanel() {
     }
   }, [streamer]);
 
+  const loadOverlayConfig = useCallback(async () => {
+    if (!streamer?.id) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('overlay_configs')
+        .select('*')
+        .eq('streamer_id', streamer.id)
+        .single();
+
+      if (data && !error) {
+        const loadedConfig = { ...defaultConfig, ...data.config };
+        setOverlayConfig(loadedConfig);
+        setOriginalOverlayConfig(loadedConfig);
+      } else {
+        setOverlayConfig(defaultConfig);
+        setOriginalOverlayConfig(defaultConfig);
+      }
+    } catch (error) {
+      console.log('No overlay config found, using defaults or error:', error);
+      setOverlayConfig(defaultConfig);
+      setOriginalOverlayConfig(defaultConfig);
+    }
+  }, [streamer?.id]);
+
+  const saveOverlayConfig = async (newConfig: OverlayConfig) => {
+    if (!streamer?.id) return;
+
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from('overlay_configs')
+        .upsert(
+          { streamer_id: streamer.id, config: newConfig, updated_at: new Date().toISOString() },
+          { onConflict: 'streamer_id' }
+        );
+
+      if (error) throw error;
+      
+      setOverlayConfig(newConfig);
+      setOriginalOverlayConfig(newConfig);
+      setHasUnsavedOverlayChanges(false);
+      toast({
+        title: "Configuration de l'overlay sauvegardée",
+        description: "Les paramètres de l'overlay ont été mis à jour.",
+      });
+    } catch (error: any) {
+      console.error('Error saving overlay config:', error);
+      toast({
+        title: "Erreur de sauvegarde de l'overlay",
+        description: `Impossible de sauvegarder la configuration: ${error.message || 'Erreur inconnue'}`,
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateOverlayConfig = (key: keyof OverlayConfig, value: any) => {
+    setOverlayConfig(prevConfig => {
+      const newConfig = { ...prevConfig, [key]: value };
+      return newConfig;
+    });
+  };
+
   useEffect(() => {
     fetchStreamerData();
     fetchAvailableMinigames();
@@ -260,6 +356,8 @@ export default function StreamerPanel() {
   useEffect(() => {
     if (streamer) {
       fetchStats();
+      loadOverlayConfig();
+
       const streamerChannel = supabase
         .channel(`public:streamers:id=eq.${streamer.id}`)
         .on(
@@ -277,17 +375,29 @@ export default function StreamerPanel() {
           'postgres_changes',
           { event: '*', schema: 'public', table: 'subathon_stats', filter: `streamer_id=eq.${streamer.id}` },
           () => {
-            fetchStats();
+            fetchStats(); // Re-fetch stats on any change
           }
         )
         .subscribe();
         
+      const overlayConfigChannel = supabase
+        .channel(`public:overlay_configs:streamer_id=eq.${streamer.id}`)
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'overlay_configs', filter: `streamer_id=eq.${streamer.id}` },
+          (payload) => {
+            setOverlayConfig({ ...defaultConfig, ...(payload.new as any).config });
+          }
+        )
+        .subscribe();
+
       return () => {
         supabase.removeChannel(streamerChannel);
         supabase.removeChannel(statsChannel);
+        supabase.removeChannel(overlayConfigChannel);
       };
     }
-  }, [streamer, fetchStats]);
+  }, [streamer, fetchStats, loadOverlayConfig]);
 
   useEffect(() => {
     if (streamer && streamer.id) {
@@ -326,6 +436,12 @@ export default function StreamerPanel() {
     const hasChanges = JSON.stringify(currentConfig) !== JSON.stringify(originalConfig);
     setHasUnsavedChanges(hasChanges);
   }, [timeMode, fixedTime, minRandomTime, maxRandomTime, clicksRequired, cooldownTime, initialHours, initialMinutes, selectedGames, streamer, originalStreamerData]);
+
+  useEffect(() => {
+    if (!originalOverlayConfig) return;
+    const hasChanges = JSON.stringify(overlayConfig) !== JSON.stringify(originalOverlayConfig);
+    setHasUnsavedOverlayChanges(hasChanges);
+  }, [overlayConfig, originalOverlayConfig]);
 
   const handleSaveSettings = async () => {
     if (!streamer || !streamer.id) {
@@ -409,7 +525,6 @@ export default function StreamerPanel() {
             pause_started_at: null
           };
         } else {
-          // Réinitialiser les statistiques des contributeurs au début d'un nouveau stream
           const { error: deleteError } = await supabase
             .from('subathon_stats')
             .delete()
@@ -594,6 +709,13 @@ export default function StreamerPanel() {
                   <Settings className="w-4 h-4 mr-2" />
                   Configuration
                   {hasUnsavedChanges && (
+                    <Badge variant="destructive" className="ml-2 text-xs">•</Badge>
+                  )}
+                </TabsTrigger>
+                <TabsTrigger value="overlay">
+                  <LayoutDashboard className="w-4 h-4 mr-2" />
+                  Overlay
+                  {hasUnsavedOverlayChanges && (
                     <Badge variant="destructive" className="ml-2 text-xs">•</Badge>
                   )}
                 </TabsTrigger>
@@ -886,7 +1008,163 @@ export default function StreamerPanel() {
                 </Card>
               </TabsContent>
 
-              {/* Contenu de l'onglet Statistiques SIMPLIFIÉ */}
+              {/* Nouvelle Tab pour la configuration de l'Overlay */}
+              <TabsContent value="overlay">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <LayoutDashboard className="mr-2 h-5 w-5" />
+                      Configuration de l'Overlay
+                    </CardTitle>
+                    <CardDescription>
+                      Personnalisez l'affichage de l'overlay sur votre stream.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {/* Affichage des éléments */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-medium flex items-center">
+                        <Eye className="h-5 w-5 mr-2 text-muted-foreground" />
+                        Éléments à afficher
+                      </h3>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id="showTimer"
+                            checked={overlayConfig.showTimer}
+                            onCheckedChange={(checked) => updateOverlayConfig('showTimer', checked)}
+                          />
+                          <Label htmlFor="showTimer">Timer Principal</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id="showProgress"
+                            checked={overlayConfig.showProgress}
+                            onCheckedChange={(checked) => updateOverlayConfig('showProgress', checked)}
+                          />
+                          <Label htmlFor="showProgress">Progression</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id="showStats"
+                            checked={overlayConfig.showStats}
+                            onCheckedChange={(checked) => updateOverlayConfig('showStats', checked)}
+                          />
+                          <Label htmlFor="showStats">Statistiques</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id="showTimeAdded"
+                            checked={overlayConfig.showTimeAdded}
+                            onCheckedChange={(checked) => updateOverlayConfig('showTimeAdded', checked)}
+                          />
+                          <Label htmlFor="showTimeAdded">Temps Gagné</Label>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Checkbox
+                            id="showTopPlayer"
+                            checked={overlayConfig.showTopPlayer}
+                            onCheckedChange={(checked) => updateOverlayConfig('showTopPlayer', checked)}
+                          />
+                          <Label htmlFor="showTopPlayer">Top Joueur</Label>
+                        </div>
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Taille du timer */}
+                    {overlayConfig.showTimer && (
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-medium flex items-center">
+                          <Maximize className="h-5 w-5 mr-2 text-muted-foreground" />
+                          Taille du Timer Principal
+                        </h3>
+                        <Label>Taille: {overlayConfig.timerSize} (plus grand)</Label>
+                        <Slider
+                          value={[overlayConfig.timerSize]}
+                          min={4}
+                          max={8}
+                          step={1}
+                          onValueChange={(value) => updateOverlayConfig('timerSize', value[0])}
+                        />
+                      </div>
+                    )}
+
+                    <Separator />
+
+                    {/* Positions */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-medium flex items-center">
+                        <MoveHorizontal className="h-5 w-5 mr-2 text-muted-foreground" />
+                        Positions des éléments
+                      </h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <Label htmlFor="timerPosition">Position du Timer Principal</Label>
+                          <Select
+                            value={overlayConfig.timerPosition}
+                            onValueChange={(value: 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left') => updateOverlayConfig('timerPosition', value)}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Sélectionner une position" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="top-right">Haut Droite</SelectItem>
+                              <SelectItem value="top-left">Haut Gauche</SelectItem>
+                              <SelectItem value="bottom-right">Bas Droite</SelectItem>
+                              <SelectItem value="bottom-left">Bas Gauche</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label htmlFor="progressPosition">Position de la Progression</Label>
+                          <Select
+                            value={overlayConfig.progressPosition}
+                            onValueChange={(value: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right') => updateOverlayConfig('progressPosition', value)}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Sélectionner une position" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="top-left">Haut Gauche</SelectItem>
+                              <SelectItem value="top-right">Haut Droite</SelectItem>
+                              <SelectItem value="bottom-left">Bas Gauche</SelectItem>
+                              <SelectItem value="bottom-right">Bas Droite</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label htmlFor="statsPosition">Position des Statistiques</Label>
+                          <Select
+                            value={overlayConfig.statsPosition}
+                            onValueChange={(value: 'left' | 'right') => updateOverlayConfig('statsPosition', value)}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Sélectionner une position" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="left">Gauche</SelectItem>
+                              <SelectItem value="right">Droite</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                  <CardFooter className="flex justify-end pt-6">
+                    <Button 
+                      onClick={() => saveOverlayConfig(overlayConfig)} 
+                      disabled={saving || !hasUnsavedOverlayChanges}
+                      variant={hasUnsavedOverlayChanges ? "default" : "outline"}
+                    >
+                      Sauvegarder la configuration de l'overlay
+                    </Button>
+                  </CardFooter>
+                </Card>
+              </TabsContent>
+
+              {/* Contenu de l'onglet Statistiques */}
               <TabsContent value="statistics">
                 <div className="space-y-6">
                   {/* Statistiques générales */}
@@ -922,7 +1200,7 @@ export default function StreamerPanel() {
                     <Card>
                       <CardContent className="p-4">
                         <div className="flex items-center space-x-2">
-                          <Trophy className="h-5 w-5 text-green-500" />
+                          <Users className="h-5 w-5 text-green-500" /> {/* Icône Users */}
                           <div>
                             <p className="text-sm font-medium text-muted-foreground">Total contributeurs</p>
                             <p className="text-2xl font-bold text-green-500">
@@ -940,7 +1218,7 @@ export default function StreamerPanel() {
                           <div>
                             <p className="text-sm font-medium text-muted-foreground">Total clics</p>
                             <p className="text-2xl font-bold text-purple-500">
-                              {stats.reduce((total, stat) => total + (stat.clicks_contributed || 0), 0)}
+                              {streamer?.total_clicks || 0} {/* Utiliser streamer.total_clicks */}
                             </p>
                           </div>
                         </div>
@@ -990,7 +1268,6 @@ export default function StreamerPanel() {
                                   </div>
                                   
                                   <div className="flex-1 min-w-0">
-                                    {/* Affichage du nom d'utilisateur Twitch */}
                                     <p className="font-semibold truncate">{stat.profile_twitch_display_name}</p>
                                     <div className="flex items-center space-x-4 text-sm text-muted-foreground">
                                       <span className="flex items-center">
@@ -1000,6 +1277,10 @@ export default function StreamerPanel() {
                                       <span className="flex items-center">
                                         <Star className="w-3 h-3 mr-1" />
                                         {stat.clicks_contributed || 0} clics
+                                      </span>
+                                      <span className="flex items-center">
+                                        <Trophy className="w-3 h-3 mr-1" />
+                                        {stat.games_won || 0} victoires
                                       </span>
                                     </div>
                                   </div>
@@ -1014,7 +1295,6 @@ export default function StreamerPanel() {
                                   </div>
                                 </div>
                                 
-                                {/* Barre de progression en arrière-plan */}
                                 <div 
                                   className="absolute top-0 left-0 h-full bg-primary/5 rounded-lg transition-all duration-300"
                                   style={{ width: `${progressPercentage}%` }}
@@ -1078,7 +1358,7 @@ export default function StreamerPanel() {
                           <p className="text-sm font-medium text-muted-foreground">Mode de temps</p>
                           <Badge variant="outline">
                             {streamer?.time_mode === 'fixed' ? `Fixe (${streamer.time_increment}s)` : 
-                             `Aléatoire (${streamer.time_increment || 10}-${streamer.max_random_time}s)`}
+                             `Aléatoire (${streamer.min_random_time || streamer.time_increment || 10}-${streamer.max_random_time}s)`}
                           </Badge>
                         </div>
                         
