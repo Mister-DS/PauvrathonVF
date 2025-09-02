@@ -121,17 +121,23 @@ export default function Profile() {
       }
       console.log('✅ streamer_requests supprimées (si elles existaient)');
 
-      // 7. Supprimer le profil utilisateur en utilisant user_id (pas id)
-      const { error: profileError } = await supabase
+      // 7. Supprimer le profil utilisateur (utilise user_id qui référence auth.users)
+      const { data: deletedProfile, error: profileError } = await supabase
         .from('profiles')
         .delete()
-        .eq('user_id', user.id);  // user.id est l'ID de auth.users
+        .eq('user_id', user.id)
+        .select();
       
       if (profileError) {
         console.error('❌ Erreur suppression profiles:', profileError);
         throw new Error(`Erreur lors de la suppression du profil: ${profileError.message}`);
       }
-      console.log('✅ profil utilisateur supprimé');
+      
+      if (!deletedProfile || deletedProfile.length === 0) {
+        console.warn('⚠️ Aucun profil trouvé à supprimer pour user_id:', user.id);
+      } else {
+        console.log('✅ profil utilisateur supprimé:', deletedProfile);
+      }
 
       console.log('✅ Suppression en cascade terminée avec succès');
       return { success: true };

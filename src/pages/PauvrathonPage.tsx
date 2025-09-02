@@ -43,6 +43,7 @@ const PauvrathonPage = () => {
   const [streamStartDelay, setStreamStartDelay] = useState(true); // Nouveau: délai initial
   const [countdownSeconds, setCountdownSeconds] = useState(0); // Pour afficher le countdown
   const [lastStreamerConfig, setLastStreamerConfig] = useState<string>(''); // Pour détecter les changements
+  const [userClicks, setUserClicks] = useState(0); // Clics individuels de l'utilisateur
 
   const fetchStreamer = async (streamerId: string) => {
     try {
@@ -167,11 +168,11 @@ const PauvrathonPage = () => {
   const handleViewerClick = async () => {
     if (!streamer || !user || isClicking || isGameActive || clickCooldown || streamStartDelay) return;
     
-    // Protection stricte contre le dépassement
-    if (streamer.current_clicks >= streamer.clicks_required) {
+    // Protection contre le dépassement INDIVIDUEL
+    if (userClicks >= streamer.clicks_required) {
       toast({
-        title: "Limite atteinte !",
-        description: "Le nombre de clics requis a déjà été atteint. Le mini-jeu va se lancer.",
+        title: "Votre limite atteinte !",
+        description: "Vous avez atteint votre quota de clics pour déclencher un mini-jeu.",
         variant: "destructive",
       });
       return;
@@ -196,61 +197,37 @@ const PauvrathonPage = () => {
     setLastClickTime(now);
     
     try {
-      // Vérification double du seuil avant l'envoi
-      const currentClicks = streamer.current_clicks || 0;
-      if (currentClicks >= streamer.clicks_required) {
-        toast({
-          title: "Trop tard !",
-          description: "Un autre joueur a déjà atteint la limite.",
-        });
-        return;
-      }
+      // CLICS INDIVIDUELS : on incrémente seulement les clics de ce viewer
+      const newUserClicks = userClicks + 1;
+      setUserClicks(newUserClicks);
       
-      const newClickCount = currentClicks + 1;
-      
-      // Transaction avec double vérification
-      const { data, error } = await supabase
+      // Aussi incrémenter le compteur global pour les statistiques générales
+      const { error: globalError } = await supabase
         .from('streamers')
         .update({
-          current_clicks: newClickCount,
+          total_clicks: (streamer.total_clicks || 0) + 1,
           updated_at: new Date().toISOString()
         })
-        .eq('id', streamer.id)
-        .eq('current_clicks', currentClicks) // Condition pour éviter les conflits
-        .lt('current_clicks', streamer.clicks_required) // Protection supplémentaire
-        .select()
-        .single();
-
-      if (error) {
-        if (error.code === 'PGRST116') {
-          // Conflit détecté ou limite dépassée, rafraîchir les données
-          fetchStreamer(streamer.id);
-          toast({
-            title: "Données mises à jour",
-            description: "La limite a peut-être été atteinte par un autre joueur.",
-          });
-        } else {
-          throw error;
-        }
-      } else {
-        // Mise à jour locale optimiste avec vérification
-        setStreamer(prev => prev ? { ...prev, current_clicks: newClickCount } : null);
+        .eq('id', streamer.id);
         
-        // Vérification immédiate pour déclencher le jeu
-        if (newClickCount >= streamer.clicks_required) {
-          console.log(`🎮 Seuil atteint localement : ${newClickCount}/${streamer.clicks_required}`);
-          setTimeout(() => {
-            if (!isGameActive && !showValidateTimeButton && !streamStartDelay) {
-              launchRandomMinigame();
-            }
-          }, 200);
-        }
-        
-        toast({
-          title: "Clic enregistré !",
-          description: `Clic ${newClickCount}/${streamer.clicks_required} enregistré.`,
-        });
+      if (globalError) {
+        console.warn('Erreur mise à jour stats globales:', globalError);
       }
+      
+      // Vérifier si ce viewer peut déclencher un mini-jeu
+      if (newUserClicks >= streamer.clicks_required) {
+        console.log(`🎮 Seuil atteint pour ce viewer : ${newUserClicks}/${streamer.clicks_required}`);
+        setTimeout(() => {
+          if (!isGameActive && !showValidateTimeButton && !streamStartDelay) {
+            launchRandomMinigame();
+          }
+        }, 200);
+      }
+      
+      toast({
+        title: "Clic enregistré !",
+        description: `Vos clics : ${newUserClicks}/${streamer.clicks_required}`,
+      });
 
     } catch (error) {
       console.error('Error handling click:', error);
@@ -294,6 +271,8 @@ const PauvrathonPage = () => {
       // Réinitialiser les essais et chances pour la prochaine fois
       setMinigameAttempts(0);
       setMinigameChances(3);
+      // Réinitialiser les clics de l'utilisateur après une victoire
+      setUserClicks(0);
       
     } else {
       setMinigameAttempts(prev => prev + 1);
@@ -323,12 +302,46 @@ const PauvrathonPage = () => {
         } else {
           toast({
             title: "Toutes les chances épuisées !",
-            description: "Retour à la page des clics. Vous devez recommencer à faire avancer la barre.",
+            description: "Vos clics ont été remis à zéro. Recommencez à cliquer pour déclencher un nouveau mini-jeu.",
             variant: "destructive",
           });
           // Réinitialisation complète
           setMinigameAttempts(0);
           setMinigameChances(3);
+          setUserClicks(0); // Remise à zéro des clics utilisateur
+          
+          // Enregistrer la tentative dans les stats même en cas d'échec complet
+          if (user) {
+            const { data: existingStats } = await supabase
+              .from('subathon_stats')
+              .select('*')
+              .eq('streamer_id', streamer.id)
+              .eq('player_twitch_username', user.user_metadata?.twitch_username || user.email)
+              .single();
+
+            if (existingStats) {
+              await supabase
+                .from('subathon_stats')
+                .update({
+                  games_played: (existingStats.games_played || 0) + 1,
+                  clicks_contributed: (existingStats.clicks_contributed || 0) + userClicks,
+                  last_activity: new Date().toISOString()
+                })
+                .eq('id', existingStats.id);
+            } else {
+              await supabase
+                .from('subathon_stats')
+                .insert({
+                  streamer_id: streamer.id,
+                  player_twitch_username: user.user_metadata?.twitch_username || user.email || 'Viewer anonyme',
+                  time_contributed: 0,
+                  games_won: 0,
+                  games_played: 1,
+                  clicks_contributed: userClicks,
+                  last_activity: new Date().toISOString()
+                });
+            }
+          }
         }
       }
     }
@@ -339,23 +352,8 @@ const PauvrathonPage = () => {
     
     setIsGameActive(true);
     
-    // Réinitialisation des clics au moment du lancement du jeu
-    const { error: resetError } = await supabase
-      .from('streamers')
-      .update({ 
-        current_clicks: 0,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', streamer.id);
-      
-    if (resetError) {
-      console.error('Erreur lors de la réinitialisation des clics:', resetError);
-      toast({
-        title: "Erreur",
-        description: "Impossible de réinitialiser le compteur de clics.",
-        variant: "destructive",
-      });
-    }
+    // Plus besoin de remettre à zéro current_clicks car les clics sont individuels
+    console.log(`🎮 Lancement du mini-jeu pour ce viewer après ${userClicks} clics`);
     
     const activeGames = streamer.active_minigames;
     if (!activeGames || activeGames.length === 0) {
@@ -407,24 +405,52 @@ const PauvrathonPage = () => {
 
       if (error) throw error;
       
-      // Enregistrer la contribution dans les stats
+      // Enregistrer ou mettre à jour les statistiques utilisateur dans subathon_stats
       if (user) {
-        const { error: statsError } = await supabase
+        const { data: existingStats, error: fetchError } = await supabase
           .from('subathon_stats')
-          .upsert({
-            streamer_id: streamer.id,
-            user_id: user.id,
-            profile_twitch_display_name: user.user_metadata?.twitch_display_name || 'Viewer anonyme',
-            time_contributed: timeToAdd,
-            clicks_contributed: 1, // Un jeu gagné = 1 "contribution de clic"
-            updated_at: new Date().toISOString()
-          }, {
-            onConflict: 'streamer_id,user_id',
-            ignoreDuplicates: false
-          });
+          .select('*')
+          .eq('streamer_id', streamer.id)
+          .eq('player_twitch_username', user.user_metadata?.twitch_username || user.email)
+          .single();
 
-        if (statsError) {
-          console.error('Error updating stats:', statsError);
+        if (fetchError && fetchError.code !== 'PGRST116') {
+          console.error('Error fetching existing stats:', fetchError);
+        }
+
+        if (existingStats) {
+          // Mettre à jour les stats existantes
+          const { error: updateError } = await supabase
+            .from('subathon_stats')
+            .update({
+              time_contributed: (existingStats.time_contributed || 0) + timeToAdd,
+              games_won: (existingStats.games_won || 0) + 1,
+              games_played: (existingStats.games_played || 0) + 1,
+              clicks_contributed: (existingStats.clicks_contributed || 0) + userClicks,
+              last_activity: new Date().toISOString()
+            })
+            .eq('id', existingStats.id);
+
+          if (updateError) {
+            console.error('Error updating stats:', updateError);
+          }
+        } else {
+          // Créer de nouvelles stats
+          const { error: insertError } = await supabase
+            .from('subathon_stats')
+            .insert({
+              streamer_id: streamer.id,
+              player_twitch_username: user.user_metadata?.twitch_username || user.email || 'Viewer anonyme',
+              time_contributed: timeToAdd,
+              games_won: 1,
+              games_played: 1,
+              clicks_contributed: userClicks,
+              last_activity: new Date().toISOString()
+            });
+
+          if (insertError) {
+            console.error('Error inserting stats:', insertError);
+          }
         }
       }
       
@@ -478,28 +504,25 @@ const PauvrathonPage = () => {
             
             setLastStreamerConfig(newConfig);
             
+            // Mise à jour CONSERVATIVE du streamer - préserver les données existantes
             setStreamer(prev => {
-              // Éviter les mises à jour inutiles si les données sont identiques
-              if (prev && JSON.stringify(prev) === JSON.stringify(updatedStreamer)) {
-                return prev;
-              }
-              return updatedStreamer;
+              if (!prev) return updatedStreamer;
+              
+              // Conserver les informations importantes si elles ne sont pas dans l'update
+              const mergedStreamer = {
+                ...prev,
+                ...updatedStreamer,
+                // S'assurer que les profils ne disparaissent pas
+                profile: updatedStreamer.profile || prev.profile,
+                profiles: updatedStreamer.profiles || prev.profiles,
+              };
+              
+              return mergedStreamer;
             });
 
-            // Déclencher le mini-jeu IMMÉDIATEMENT si les conditions sont remplies
-            if (updatedStreamer.current_clicks >= updatedStreamer.clicks_required && 
-                !isGameActive && 
-                updatedStreamer.status === 'live' && 
-                !showValidateTimeButton &&
-                !streamStartDelay) {
-              
-              console.log(`🎮 Lancement immédiat du mini-jeu : ${updatedStreamer.current_clicks}/${updatedStreamer.clicks_required}`);
-              
-              // Lancement immédiat sans délai
-              setTimeout(() => {
-                launchRandomMinigame();
-              }, 100); // 100ms pour laisser le temps à l'UI de se mettre à jour
-            }
+            // Déclencher le mini-jeu IMMÉDIATEMENT si les conditions sont remplies pour CE VIEWER
+            // Plus besoin de surveiller current_clicks car c'est individuel maintenant
+            // Le déclenchement se fait dans handleViewerClick quand userClicks atteint la limite
           }
         )
         .subscribe();
@@ -550,7 +573,7 @@ const PauvrathonPage = () => {
                     </div>
                     <div className="flex items-center text-sm">
                       <Eye className="h-4 w-4 mr-1" />
-                      <span>{streamer.total_clicks || 0} clics totaux</span>
+                      <span>{streamer.total_clicks || 0} clics communauté</span>
                     </div>
                   </div>
                 </div>
@@ -598,8 +621,8 @@ const PauvrathonPage = () => {
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <p className="text-sm text-muted-foreground">Clics actuels</p>
-                    <span className="text-sm font-semibold">{streamer.current_clicks || 0}</span>
+                    <p className="text-sm text-muted-foreground">Vos clics actuels</p>
+                    <span className="text-sm font-semibold">{userClicks}</span>
                   </div>
                   <div className="flex justify-between items-center">
                     <p className="text-sm text-muted-foreground">Clics requis</p>
@@ -638,13 +661,17 @@ const PauvrathonPage = () => {
                   <div className="space-y-2">
                     <div className="flex justify-between items-center">
                       <Label htmlFor="progression" className="font-semibold">
-                        {streamer.current_clicks} / {streamer.clicks_required} clics
+                        Vos clics : {userClicks} / {streamer.clicks_required}
                       </Label>
                       <span className="text-sm text-muted-foreground">
-                        {Math.round(progress)}%
+                        {Math.round((userClicks / Math.max(1, streamer.clicks_required)) * 100)}%
                       </span>
                     </div>
-                    <Progress value={progress} id="progression" className="h-4" />
+                    <Progress 
+                      value={(userClicks / Math.max(1, streamer.clicks_required)) * 100} 
+                      id="progression" 
+                      className="h-4" 
+                    />
                     
                     {streamer.status === 'live' && user && (
                       <>
@@ -758,6 +785,40 @@ const PauvrathonPage = () => {
               </CardContent>
             </Card>
 
+            {/* Statistiques globales de la communauté */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Users className="mr-2 h-5 w-5" />
+                  Statistiques Communauté
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <p className="text-sm text-muted-foreground">
+                      Clics totaux communauté :
+                    </p>
+                    <span className="text-sm font-semibold">{streamer.total_clicks || 0}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <p className="text-sm text-muted-foreground">
+                      Temps total ajouté :
+                    </p>
+                    <span className="text-sm font-semibold">
+                      {Math.floor((streamer.total_time_added || 0) / 60)}m {(streamer.total_time_added || 0) % 60}s
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <p className="text-sm text-muted-foreground">
+                      Viewers actifs :
+                    </p>
+                    <span className="text-sm font-semibold">{streamer.viewer_count || 0}</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
@@ -766,11 +827,12 @@ const PauvrathonPage = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2 text-sm text-muted-foreground">
-                <p>• Chaque clic fait avancer la barre de progression</p>
-                <p>• À 100%, un mini-jeu se déclenche</p>
-                <p>• Réussir le jeu ajoute du temps au compteur (selon config)</p>
+                <p>• Chaque viewer a ses propres clics individuels</p>
+                <p>• Atteignez le quota requis pour déclencher votre mini-jeu</p>
+                <p>• Réussir le jeu ajoute du temps au timer global (pour tous)</p>
                 <p>• Vous avez 12 essais par chance et 3 chances maximum</p>
-                <p>• Si vous échouez, la barre se réinitialise</p>
+                <p>• Vos clics se remettent à zéro après chaque jeu (victoire ou échec)</p>
+                <p>• Tous les viewers contribuent au temps total du Pauvrathon</p>
               </CardContent>
             </Card>
           </div>
