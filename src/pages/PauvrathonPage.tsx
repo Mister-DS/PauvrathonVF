@@ -44,7 +44,6 @@ const PauvrathonPage = () => {
   const [countdownSeconds, setCountdownSeconds] = useState(0); // Pour afficher le countdown
   const [lastStreamerConfig, setLastStreamerConfig] = useState<string>(''); // Pour détecter les changements
   const [userClicks, setUserClicks] = useState(0); // Clics individuels de l'utilisateur
-  const [isGameCooldownActive, setIsGameCooldownActive] = useState(false); // Nouveau : cooldown du mini-jeu
 
   const fetchStreamer = async (streamerId: string) => {
     try {
@@ -96,35 +95,30 @@ const PauvrathonPage = () => {
         
         if (timeSinceStart < initialDelayMs) {
           setStreamStartDelay(true);
+          const remainingTime = Math.ceil((initialDelayMs - timeSinceStart) / 1000);
           
-          // Utilisez un `setTimeout` pour déclencher le rafraîchissement à la fin du délai
-          const remainingTime = initialDelayMs - timeSinceStart;
-          const reloadTimeout = setTimeout(() => {
-            setStreamStartDelay(false);
-            setCountdownSeconds(0);
-            toast({
-              title: "Stream prêt !",
-              description: "Vous pouvez maintenant participer aux clics.",
-            });
-            window.location.reload(); // Ajout du rechargement ici
-          }, remainingTime);
-          
-          // Mise à jour du compte à rebours toutes les secondes pour l'affichage
+          // Countdown timer avec state update
           const countdownInterval = setInterval(() => {
             const currentTime = Date.now();
             const remaining = Math.ceil((initialDelayMs - (currentTime - streamStartTime)) / 1000);
-            if (remaining >= 0) {
-              setCountdownSeconds(remaining);
-            } else {
+            
+            setCountdownSeconds(remaining);
+            
+            if (remaining <= 0) {
               clearInterval(countdownInterval);
+              setStreamStartDelay(false);
+              setCountdownSeconds(0);
+              toast({
+                title: "Stream prêt !",
+                description: "Vous pouvez maintenant participer aux clics.",
+              });
+              window.location.reload(); // Ajout du rechargement ici
             }
           }, 1000);
           
-          return () => {
-            clearTimeout(reloadTimeout);
+          setTimeout(() => {
             clearInterval(countdownInterval);
-          };
-          
+          }, initialDelayMs - timeSinceStart);
         } else {
           setStreamStartDelay(false);
         }
@@ -173,7 +167,7 @@ const PauvrathonPage = () => {
   };
 
   const handleViewerClick = async () => {
-    if (!streamer || !user || isClicking || isGameActive || clickCooldown || streamStartDelay || isGameCooldownActive) return;
+    if (!streamer || !user || isClicking || isGameActive || clickCooldown || streamStartDelay) return;
     
     // Protection contre le dépassement INDIVIDUEL
     if (userClicks >= streamer.clicks_required) {
@@ -225,7 +219,7 @@ const PauvrathonPage = () => {
       if (newUserClicks >= streamer.clicks_required) {
         console.log(`🎮 Seuil atteint pour ce viewer : ${newUserClicks}/${streamer.clicks_required}`);
         setTimeout(() => {
-          if (!isGameActive && !showValidateTimeButton && !streamStartDelay && !isGameCooldownActive) {
+          if (!isGameActive && !showValidateTimeButton && !streamStartDelay) {
             launchRandomMinigame();
           }
         }, 200);
@@ -250,7 +244,7 @@ const PauvrathonPage = () => {
         setClickCooldown(false);
         
         // Message de rafraîchissement si le cooldown se termine et qu'on ne peut plus cliquer
-        if (!isGameActive && !showValidateTimeButton && !streamStartDelay && !isGameCooldownActive) {
+        if (!isGameActive && !showValidateTimeButton && !streamStartDelay) {
           toast({
             title: "Clics disponibles",
             description: "Vous pouvez maintenant cliquer à nouveau.",
@@ -261,16 +255,12 @@ const PauvrathonPage = () => {
   };
 
   const handleGameEnd = async (victory: boolean) => {
-    if (!streamer) return;
-    
     setIsGameActive(false);
     setMinigameState({ component: null, props: {}, name: '' });
 
-    const cooldownInSeconds = streamer.cooldown_seconds || 300;
-
     if (victory) {
       // Calculer le temps à ajouter selon les paramètres du streamer
-      const calculatedTime = calculateTimeToAdd(streamer);
+      const calculatedTime = calculateTimeToAdd(streamer!);
       setTimeToAdd(calculatedTime);
       
       toast({
@@ -291,14 +281,10 @@ const PauvrathonPage = () => {
       if (minigameAttempts + 1 < 12) {
         toast({
           title: "Défaite !",
-          description: `Il vous reste ${12 - (minigameAttempts + 1)} essais sur cette chance. Relance du jeu dans ${cooldownInSeconds} secondes.`,
+          description: `Il vous reste ${12 - (minigameAttempts + 1)} essais sur cette chance. Relance du jeu dans 5 secondes.`,
           variant: "destructive",
         });
-        setIsGameCooldownActive(true);
-        setTimeout(() => {
-          setIsGameCooldownActive(false);
-          launchRandomMinigame();
-        }, cooldownInSeconds * 1000);
+        setTimeout(launchRandomMinigame, 5000);
       } else {
         setMinigameChances(prev => {
           const newChances = prev - 1;
@@ -310,14 +296,10 @@ const PauvrathonPage = () => {
           setMinigameAttempts(0);
           toast({
             title: "Chance perdue !",
-            description: `Vous avez épuisé vos 12 essais. Il vous reste ${minigameChances - 1} chance(s). Nouvelle chance dans ${cooldownInSeconds} secondes.`,
+            description: `Vous avez épuisé vos 12 essais. Il vous reste ${minigameChances - 1} chance(s). Nouvelle chance dans 5 secondes.`,
             variant: "destructive",
           });
-          setIsGameCooldownActive(true);
-          setTimeout(() => {
-            setIsGameCooldownActive(false);
-            launchRandomMinigame();
-          }, cooldownInSeconds * 1000);
+          setTimeout(launchRandomMinigame, 5000);
         } else {
           toast({
             title: "Toutes les chances épuisées !",
@@ -367,7 +349,7 @@ const PauvrathonPage = () => {
   };
 
   const launchRandomMinigame = async () => {
-    if (!streamer || isGameActive || isGameCooldownActive) return;
+    if (!streamer || isGameActive) return;
     
     setIsGameActive(true);
     
@@ -481,13 +463,6 @@ const PauvrathonPage = () => {
       setShowValidateTimeButton(false);
       setTimeToAdd(0);
       
-      // Active le cooldown APRÈS la validation du temps
-      const cooldownInSeconds = streamer.cooldown_seconds || 300;
-      setIsGameCooldownActive(true);
-      setTimeout(() => {
-        setIsGameCooldownActive(false);
-      }, cooldownInSeconds * 1000);
-      
     } catch (error) {
       console.error('Error validating time:', error);
       toast({
@@ -500,7 +475,7 @@ const PauvrathonPage = () => {
   
   useEffect(() => {
     if (id) {
-      const cleanup = fetchStreamer(id);
+      fetchStreamer(id);
       
       const channel = supabase
         .channel(`public:streamers:id=eq.${id}`)
@@ -555,7 +530,6 @@ const PauvrathonPage = () => {
 
       return () => {
         supabase.removeChannel(channel);
-        if (cleanup) cleanup();
       };
     }
   }, [id, navigate, user, isGameActive, showValidateTimeButton, streamStartDelay]);
@@ -721,21 +695,11 @@ const PauvrathonPage = () => {
                               />
                             </div>
                           </div>
-                        ) : isGameCooldownActive ? (
-                          <div className="mt-4 p-4 bg-red-500/10 border border-red-500/20 rounded-lg text-center">
-                            <Clock className="mx-auto h-8 w-8 text-red-600 mb-2" />
-                            <p className="text-sm text-red-600 dark:text-red-400 font-medium">
-                              Mini-jeu en cooldown
-                            </p>
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Relance du jeu possible dans {streamer.cooldown_seconds} secondes.
-                            </p>
-                          </div>
                         ) : (
                           <Button 
                             className="w-full mt-4 touch-manipulation" 
                             onClick={handleViewerClick}
-                            disabled={isClicking || clickCooldown || streamStartDelay || isGameCooldownActive}
+                            disabled={isClicking || clickCooldown || streamStartDelay}
                             size="lg"
                           >
                             <Zap className="mr-2 h-4 w-4" />
@@ -845,12 +809,6 @@ const PauvrathonPage = () => {
                     <span className="text-sm font-semibold">
                       {Math.floor((streamer.total_time_added || 0) / 60)}m {(streamer.total_time_added || 0) % 60}s
                     </span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <p className="text-sm text-muted-foreground">
-                      Viewers actifs :
-                    </p>
-                    <span className="text-sm font-semibold">{streamer.viewer_count || 0}</span>
                   </div>
                 </div>
               </CardContent>
