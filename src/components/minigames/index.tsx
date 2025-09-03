@@ -4,7 +4,6 @@ import { GuessNumber } from './GuessNumber';
 import { Hangman } from './Hangman';
 import { MemoryGame } from './MemoryGame';
 
-// Un dictionnaire central qui associe les noms des mini-jeux (utilisés dans la base de données) à leurs composants.
 export const minigameComponents = {
   guess_number: GuessNumber,
   hangman: Hangman,
