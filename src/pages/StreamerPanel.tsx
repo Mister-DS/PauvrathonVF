@@ -223,7 +223,7 @@ export default function StreamerPanel() {
         setInitialMinutes(Math.floor(((data.initial_duration || 7200) % 3600) / 60));
         setTimeMode(data.time_mode || 'fixed');
         setFixedTime(data.time_increment || 30);
-        setMinRandomTime(data.min_random_time ?? data.time_increment ?? 10);
+        setMinRandomTime(data.max_random_time ?? data.time_increment ?? 10);
         setMaxRandomTime(data.max_random_time || 60);
         setClicksRequired(data.clicks_required || 100);
         setCooldownTime(data.cooldown_seconds || 30);
@@ -291,7 +291,7 @@ export default function StreamerPanel() {
       const mappedStats = statsData.map(stat => ({
         id: stat.id,
         streamer_id: stat.streamer_id,
-        profile_id: stat.profile_id || stat.player_twitch_username, // Fallback pour la compatibilité
+        profile_id: stat.player_twitch_username, // Utilise directement le nom d'utilisateur
         profile_twitch_display_name: stat.player_twitch_username || `Joueur ${stat.id?.slice(0, 8) || 'Inconnu'}`,
         time_contributed: stat.time_contributed || 0,
         clicks_contributed: stat.clicks_contributed || 0,
@@ -322,10 +322,11 @@ export default function StreamerPanel() {
         .from('overlay_configs')
         .select('*')
         .eq('streamer_id', streamer.id)
-        .single();
+        .maybeSingle();
 
       if (data && !error) {
-        const loadedConfig = { ...defaultConfig, ...data.config };
+        const configData = typeof data.config === 'object' ? data.config : {};
+        const loadedConfig = { ...defaultConfig, ...configData };
         setOverlayConfig(loadedConfig);
         setOriginalOverlayConfig(loadedConfig);
       } else {
@@ -347,7 +348,7 @@ export default function StreamerPanel() {
       const { error } = await supabase
         .from('overlay_configs')
         .upsert(
-          { streamer_id: streamer.id, config: newConfig, updated_at: new Date().toISOString() },
+          { streamer_id: streamer.id, config: JSON.parse(JSON.stringify(newConfig)), updated_at: new Date().toISOString() },
           { onConflict: 'streamer_id' }
         );
 

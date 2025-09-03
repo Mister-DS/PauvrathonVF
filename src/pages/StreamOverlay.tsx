@@ -52,6 +52,7 @@ interface OverlayConfig {
   timerPosition: 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left';
   progressPosition: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
   statsPosition: 'left' | 'right';
+  overlayScale?: number;
 }
 
 const defaultConfig: OverlayConfig = {
@@ -98,7 +99,13 @@ export default function StreamOverlay() {
       
       if (streamerData) {
         console.log('Streamer data loaded:', streamerData);
-        setStreamer(streamerData);
+        const mappedData = {
+          ...streamerData,
+          status: streamerData.status as 'offline' | 'live' | 'paused' | 'ended',
+          total_elapsed_time: streamerData.total_elapsed_time || 0,
+          total_clicks: streamerData.total_clicks || 0
+        };
+        setStreamer(mappedData);
         setConnectionStatus('connected');
         setError(null);
         await fetchPlayerStats();
@@ -146,7 +153,7 @@ export default function StreamOverlay() {
       // Utiliser directement player_twitch_username au lieu de chercher dans profiles
       const mappedStats = statsData.map(stat => ({
         id: stat.id,
-        profile_id: stat.profile_id || stat.player_twitch_username, // Fallback pour la compatibilité
+        profile_id: stat.player_twitch_username, // Utilise directement le nom d'utilisateur
         profile_twitch_display_name: stat.player_twitch_username || `Joueur ${stat.id?.slice(0, 8) || 'Inconnu'}`,
         time_contributed: stat.time_contributed || 0,
         clicks_contributed: stat.clicks_contributed || 0,
@@ -174,7 +181,7 @@ export default function StreamOverlay() {
         .from('overlay_configs')
         .select('*')
         .eq('streamer_id', id)
-        .single();
+        .maybeSingle();
 
       if (error) {
         console.log('No overlay config found or error:', error.message);
@@ -182,9 +189,10 @@ export default function StreamOverlay() {
         return;
       }
 
-      if (data && data.config) {
+      if (data?.config) {
         console.log('Overlay config loaded:', data.config);
-        setConfig({ ...defaultConfig, ...data.config });
+        const configData = typeof data.config === 'object' ? data.config : {};
+        setConfig({ ...defaultConfig, ...configData });
       } else {
         console.log('Using default config');
         setConfig(defaultConfig);

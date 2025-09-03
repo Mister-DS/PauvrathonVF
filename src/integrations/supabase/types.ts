@@ -59,34 +59,86 @@ export type Database = {
             referencedRelation: "streamers"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "game_sessions_streamer_id_fkey"
+            columns: ["streamer_id"]
+            isOneToOne: false
+            referencedRelation: "streamers_public"
+            referencedColumns: ["id"]
+          },
         ]
       }
       minigames: {
         Row: {
+          component_code: string
           created_at: string
           created_by: string | null
           description: string | null
           id: string
           is_active: boolean | null
-          name: string
+          max_attempts: number | null
+          max_chances: number | null
         }
         Insert: {
+          component_code: string
           created_at?: string
           created_by?: string | null
           description?: string | null
           id?: string
           is_active?: boolean | null
-          name: string
+          max_attempts?: number | null
+          max_chances?: number | null
         }
         Update: {
+          component_code?: string
           created_at?: string
           created_by?: string | null
           description?: string | null
           id?: string
           is_active?: boolean | null
-          name?: string
+          max_attempts?: number | null
+          max_chances?: number | null
         }
         Relationships: []
+      }
+      overlay_configs: {
+        Row: {
+          config: Json
+          created_at: string | null
+          id: string
+          streamer_id: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          config: Json
+          created_at?: string | null
+          id?: string
+          streamer_id?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          config?: Json
+          created_at?: string | null
+          id?: string
+          streamer_id?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "overlay_configs_streamer_id_fkey"
+            columns: ["streamer_id"]
+            isOneToOne: true
+            referencedRelation: "streamers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "overlay_configs_streamer_id_fkey"
+            columns: ["streamer_id"]
+            isOneToOne: true
+            referencedRelation: "streamers_public"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -182,12 +234,15 @@ export type Database = {
           initial_duration: number | null
           is_live: boolean | null
           max_random_time: number | null
+          min_random_time: number | null
           pause_started_at: string | null
           status: string | null
           stream_started_at: string | null
           stream_title: string | null
           time_increment: number | null
           time_mode: string | null
+          total_clicks: number | null
+          total_elapsed_time: number | null
           total_paused_duration: number | null
           total_time_added: number | null
           twitch_id: string
@@ -204,12 +259,15 @@ export type Database = {
           initial_duration?: number | null
           is_live?: boolean | null
           max_random_time?: number | null
+          min_random_time?: number | null
           pause_started_at?: string | null
           status?: string | null
           stream_started_at?: string | null
           stream_title?: string | null
           time_increment?: number | null
           time_mode?: string | null
+          total_clicks?: number | null
+          total_elapsed_time?: number | null
           total_paused_duration?: number | null
           total_time_added?: number | null
           twitch_id: string
@@ -226,12 +284,15 @@ export type Database = {
           initial_duration?: number | null
           is_live?: boolean | null
           max_random_time?: number | null
+          min_random_time?: number | null
           pause_started_at?: string | null
           status?: string | null
           stream_started_at?: string | null
           stream_title?: string | null
           time_increment?: number | null
           time_mode?: string | null
+          total_clicks?: number | null
+          total_elapsed_time?: number | null
           total_paused_duration?: number | null
           total_time_added?: number | null
           twitch_id?: string
@@ -290,6 +351,13 @@ export type Database = {
             referencedRelation: "streamers"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "subathon_stats_streamer_id_fkey"
+            columns: ["streamer_id"]
+            isOneToOne: false
+            referencedRelation: "streamers_public"
+            referencedColumns: ["id"]
+          },
         ]
       }
       user_follows: {
@@ -311,13 +379,108 @@ export type Database = {
           id?: string
           streamer_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_follows_follower_user_id_fkey"
+            columns: ["follower_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "user_follows_streamer_id_fkey"
+            columns: ["streamer_id"]
+            isOneToOne: false
+            referencedRelation: "streamers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_follows_streamer_id_fkey"
+            columns: ["streamer_id"]
+            isOneToOne: false
+            referencedRelation: "streamers_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_tokens: {
+        Row: {
+          created_at: string | null
+          encrypted_access_token: string | null
+          encrypted_refresh_token: string | null
+          id: string
+          token_expires_at: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          encrypted_access_token?: string | null
+          encrypted_refresh_token?: string | null
+          id?: string
+          token_expires_at?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          encrypted_access_token?: string | null
+          encrypted_refresh_token?: string | null
+          id?: string
+          token_expires_at?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_tokens_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
       }
     }
     Views: {
-      [_ in never]: never
+      streamers_public: {
+        Row: {
+          created_at: string | null
+          id: string | null
+          is_live: boolean | null
+          status: string | null
+          stream_started_at: string | null
+          stream_title: string | null
+          twitch_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string | null
+          is_live?: boolean | null
+          status?: string | null
+          stream_started_at?: string | null
+          stream_title?: string | null
+          twitch_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string | null
+          is_live?: boolean | null
+          status?: string | null
+          stream_started_at?: string | null
+          stream_title?: string | null
+          twitch_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
+      add_time_to_streamer: {
+        Args:
+          | { p_streamer_id: string; p_time_to_add: number }
+          | { streamer_id: string; time_to_add: number }
+        Returns: undefined
+      }
       create_admin_streamer_profile: {
         Args: Record<PropertyKey, never>
         Returns: undefined
@@ -372,6 +535,41 @@ export type Database = {
           is_active: boolean
           name: string
         }[]
+      }
+      increment_clicks: {
+        Args: { p_streamer_id: string } | { streamer_id: string }
+        Returns: undefined
+      }
+      update_player_stats: {
+        Args: {
+          p_clicks_contributed?: number
+          p_games_played?: number
+          p_games_won?: number
+          p_player_twitch_username: string
+          p_streamer_id: string
+          p_time_contributed?: number
+        }
+        Returns: undefined
+      }
+      upsert_user_stats: {
+        Args:
+          | {
+              p_clicks_contributed?: number
+              p_games_played?: number
+              p_games_won?: number
+              p_player_twitch_username: string
+              p_streamer_id: string
+              p_time_contributed?: number
+            }
+          | {
+              p_clicks_contributed?: number
+              p_games_played?: number
+              p_games_won?: number
+              p_player_username: string
+              p_streamer_id: string
+              p_time_contributed?: number
+            }
+        Returns: undefined
       }
     }
     Enums: {
