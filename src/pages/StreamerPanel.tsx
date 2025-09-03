@@ -259,11 +259,14 @@ export default function StreamerPanel() {
   const fetchStats = useCallback(async () => {
     if (!streamer || !streamer.id) {
       console.error("ID de streamer invalide pour les statistiques.");
+      setStats([]);
       return;
     }
 
     try {
-      // Récupération des statistiques avec les profils
+      console.log('Fetching stats for streamer:', streamer.id);
+      
+      // Récupération des statistiques avec gestion d'erreur
       const { data: statsData, error: statsError } = await supabase
         .from('subathon_stats')
         .select('*')
@@ -272,8 +275,11 @@ export default function StreamerPanel() {
 
       if (statsError) {
         console.error('Erreur lors de la récupération des stats:', statsError);
-        throw statsError;
+        setStats([]);
+        return;
       }
+
+      console.log('Stats data retrieved:', statsData);
 
       if (!statsData || statsData.length === 0) {
         console.log('Aucune statistique trouvée');
@@ -281,8 +287,25 @@ export default function StreamerPanel() {
         return;
       }
 
+      // Filtrer les stats avec des profile_id valides
+      const validStats = statsData.filter(stat => 
+        stat.profile_id && 
+        typeof stat.profile_id === 'string' && 
+        stat.profile_id.length > 0
+      );
+
+      console.log('Valid stats after filtering:', validStats);
+
+      if (validStats.length === 0) {
+        console.log('Aucun profile_id valide trouvé');
+        setStats([]);
+        return;
+      }
+
       // Récupération des profils correspondants
-      const profileIds = [...new Set(statsData.map(stat => stat.profile_id))];
+      const profileIds = [...new Set(validStats.map(stat => stat.profile_id))];
+      console.log('Profile IDs to fetch:', profileIds);
+
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select('id, twitch_display_name')
@@ -290,25 +313,40 @@ export default function StreamerPanel() {
 
       if (profilesError) {
         console.warn('Erreur lors de la récupération des profils:', profilesError);
+        // Continuer avec des noms par défaut
       }
 
-      // Création d'un map pour les profils
+      console.log('Profiles data retrieved:', profilesData);
+
+      // Création d'un map pour les profils avec validation
       const profilesMap = (profilesData || []).reduce((acc, profile) => {
-        acc[profile.id] = profile.twitch_display_name;
+        if (profile && profile.id && profile.twitch_display_name) {
+          acc[profile.id] = profile.twitch_display_name;
+        }
         return acc;
       }, {} as Record<string, string>);
 
-      // Mapping final avec les noms
-      const mappedStats = statsData.map(stat => ({
-        ...stat,
-        profile_twitch_display_name: profilesMap[stat.profile_id] || `Joueur ${stat.profile_id.slice(0, 8)}`
+      console.log('Profiles map created:', profilesMap);
+
+      // Mapping final avec les noms et validation complète
+      const mappedStats = validStats.map(stat => ({
+        id: stat.id,
+        streamer_id: stat.streamer_id,
+        profile_id: stat.profile_id,
+        profile_twitch_display_name: profilesMap[stat.profile_id] || `Joueur ${stat.profile_id.slice(0, 8)}`,
+        time_contributed: stat.time_contributed || 0,
+        clicks_contributed: stat.clicks_contributed || 0,
+        games_won: stat.games_won || 0,
+        games_played: stat.games_played || 0,
+        created_at: stat.created_at
       })) as SubathonStat[];
       
-      console.log('Stats avec profils mappés:', mappedStats);
+      console.log('Final mapped stats:', mappedStats);
       setStats(mappedStats);
       
     } catch (error: any) {
       console.error('Error fetching stats:', error);
+      setStats([]);
       toast({
         title: "Erreur",
         description: "Impossible de charger les statistiques des contributeurs.",
