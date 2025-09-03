@@ -63,6 +63,49 @@ export interface Streamer {
   profiles?: Profile | null;
 }
 
+export interface StreamerData {
+  id: string;
+  user_id: string;
+  twitch_username: string;
+  twitch_display_name: string;
+  stream_title: string;
+  stream_category: string;
+  is_live: boolean;
+  current_clicks: number;
+  clicks_required: number;
+  initial_duration: number;
+  min_random_time?: number;
+  max_random_time: number;
+  cooldown_seconds: number;
+  active_minigames: string[];
+  created_at: string;
+  updated_at: string;
+  total_elapsed_time: number;
+  total_clicks: number;
+}
+
+export interface UserStats {
+  id: string;
+  streamer_id: string;
+  player_twitch_username: string;
+  clicks_contributed: number;
+  time_contributed: number;
+  games_played: number;
+  games_won: number;
+  last_activity: string;
+  created_at: string;
+  profile_id?: string;
+}
+
+export interface OverlayConfig {
+  showChat: boolean;
+  showStats: boolean;
+  showTimer: boolean;
+  showProgress: boolean;
+  overlayScale?: number;
+  config?: any;
+}
+
 export interface DetailedStreamerRequest extends StreamerRequest {
   rejection_reason?: string;
 }
@@ -107,6 +150,7 @@ export interface SubathonStats {
   time_contributed: number;
   last_activity: string;
   created_at: string;
+  profile_id?: string;
 }
 
 export interface Minigame {
@@ -117,6 +161,8 @@ export interface Minigame {
   is_active: boolean;
   created_by?: string;
   created_at: string;
+  max_chances?: number;
+  max_attempts?: number;
 }
 
 export interface StreamerSettings {

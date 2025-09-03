@@ -405,10 +405,13 @@ export default function AdminPanel() {
 
       // Créer le nouveau mini-jeu avec la structure correcte
       const { error } = await supabase.from("minigames").insert({
+        name: newMinigameName,
         component_code: componentCode,
         description: newMinigameDescription || `Mini-jeu ${newMinigameName}`,
         is_active: true,
-        created_by: user.id
+        created_by: user.id,
+        max_chances: 3,
+        max_attempts: 12
       });
 
       if (error) throw error;
@@ -525,10 +528,13 @@ export default function AdminPanel() {
       }
 
       const { error } = await supabase.from("minigames").insert({
+        name: game.name,
         component_code: game.component_code,
         description: game.description,
         is_active: true,
-        created_by: user.id
+        created_by: user.id,
+        max_chances: 3,
+        max_attempts: 12
       });
 
       if (error) throw error;
