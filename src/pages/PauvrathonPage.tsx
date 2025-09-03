@@ -38,9 +38,6 @@ const PauvrathonPage = () => {
   const [showValidateTimeButton, setShowValidateTimeButton] = useState(false);
   const [timeToAdd, setTimeToAdd] = useState(0);
   const [isClicking, setIsClicking] = useState(false);
-  // Supprimer clickCooldown et lastClickTime
-  // const [clickCooldown, setClickCooldown] = useState(false);
-  // const [lastClickTime, setLastClickTime] = useState<number>(0);
   const [streamStartDelay, setStreamStartDelay] = useState(true);
   const [countdownSeconds, setCountdownSeconds] = useState(0);
   const [lastStreamerConfig, setLastStreamerConfig] = useState<string>('');
@@ -281,7 +278,6 @@ const PauvrathonPage = () => {
   }, [streamer, timeToAdd, user, cooldownSeconds, startGlobalCooldown, userClicks]);
 
   const handleViewerClick = useCallback(async () => {
-    // Supprimer clickCooldown de la condition
     if (!streamer || !user || isClicking || isGameActive || streamStartDelay || isGlobalCooldownActive) {
       return;
     }
@@ -304,23 +300,7 @@ const PauvrathonPage = () => {
       return;
     }
 
-    // Supprimer toute la logique de lastClickTime et minClickInterval
-    // const now = Date.now();
-    // const timeSinceLastClick = now - lastClickTime;
-    // const minClickInterval = 1000;
-
-    // if (timeSinceLastClick < minClickInterval) {
-    //   toast({
-    //     title: "Trop rapide !",
-    //     description: `Attendez ${Math.ceil((minClickInterval - timeSinceLastClick) / 1000)}s avant de recliquer.`,
-    //     variant: "destructive",
-    //   });
-    //   return;
-    // }
-
     setIsClicking(true);
-    // Supprimer setClickCooldown(true);
-    // setLastClickTime(now);
 
     try {
       const { error: clickError } = await supabase.rpc('increment_clicks', {
@@ -356,18 +336,8 @@ const PauvrathonPage = () => {
       });
     } finally {
       setIsClicking(false);
-      // Supprimer le setTimeout pour clickCooldown
-      // setTimeout(() => {
-      //   setClickCooldown(false);
-      //   if (!isGameActive && !showValidateTimeButton && !streamStartDelay && !isGlobalCooldownActive) {
-      //     toast({
-      //       title: "Clics disponibles",
-      //       description: "Vous pouvez maintenant cliquer à nouveau.",
-      //     });
-      //   }
-      // }, 1000);
     }
-  }, [streamer, user, isClicking, isGameActive, streamStartDelay, isGlobalCooldownActive, userClicks, showValidateTimeButton, launchRandomMinigame]); // Supprimer clickCooldown et lastClickTime des dépendances
+  }, [streamer, user, isClicking, isGameActive, streamStartDelay, isGlobalCooldownActive, userClicks, showValidateTimeButton, launchRandomMinigame]);
 
   const fetchStreamer = useCallback(async (streamerId: string) => {
     try {
@@ -569,11 +539,17 @@ const PauvrathonPage = () => {
               <CardHeader className="flex flex-row items-center space-x-4">
                 <Avatar className="h-16 w-16">
                   <AvatarImage src={streamer.profile?.avatar_url || streamer.profiles?.avatar_url} />
-                  <AvatarFallback>{(streamer.profile?.twitch_display_name || streamer.profiles?.twitch_display_name)?.substring(0, 2)}</AvatarFallback>
+                  <AvatarFallback>
+                    {(streamer.profile?.twitch_display_name || streamer.profiles?.twitch_display_name)?.substring(0, 2)}
+                  </AvatarFallback>
                 </Avatar>
                 <div className="flex-1">
-                  <CardTitle className="text-2xl">{streamer.profile?.twitch_display_name || streamer.profiles?.twitch_display_name}</CardTitle>
-                  <p className="text-muted-foreground">{streamer.stream_title || 'Titre du stream non défini'}</p>
+                  <CardTitle className="text-2xl">
+                    {streamer.profile?.twitch_display_name || streamer.profiles?.twitch_display_name}
+                  </CardTitle>
+                  <p className="text-muted-foreground">
+                    {streamer.stream_title || 'Titre du stream non défini'}
+                  </p>
                   <div className="flex items-center space-x-4 mt-2">
                     <div className="flex items-center text-sm">
                       <Users className="h-4 w-4 mr-1" />
@@ -584,7 +560,8 @@ const PauvrathonPage = () => {
                       <span>{streamer.total_clicks || 0} clics communauté</span>
                     </div>
                   </div>
-                </CardHeader>
+                </div>
+              </CardHeader>
             </Card>
 
             <Card>
@@ -717,7 +694,7 @@ const PauvrathonPage = () => {
                           <Button
                             className="w-full mt-4 touch-manipulation"
                             onClick={handleViewerClick}
-                            disabled={isClicking} // Supprimer clickCooldown de la désactivation
+                            disabled={isClicking}
                             size="lg"
                           >
                             <Zap className="mr-2 h-4 w-4" />

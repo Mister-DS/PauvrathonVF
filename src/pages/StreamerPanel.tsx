@@ -42,7 +42,7 @@ import {
   MoveVertical,
   Maximize,
   Minimize,
-  Users // Ajout de l'icône Users
+  Users
 } from 'lucide-react';
 
 interface StreamerSettings {
@@ -77,8 +77,8 @@ interface SubathonStat {
   profile_twitch_display_name: string;
   time_contributed: number;
   clicks_contributed: number;
-  games_won: number; // Ajout de games_won
-  games_played: number; // Ajout de games_played
+  games_won: number;
+  games_played: number;
   created_at: string;
 }
 
@@ -263,23 +263,57 @@ export default function StreamerPanel() {
     }
 
     try {
-      const { data, error } = await supabase
+      // Récupération des statistiques avec les profils
+      const { data: statsData, error: statsError } = await supabase
         .from('subathon_stats')
-        .select(`
-          *,
-          profiles (twitch_display_name)
-        `)
+        .select('*')
         .eq('streamer_id', streamer.id)
         .order('time_contributed', { ascending: false });
 
-      if (error) throw error;
-      
-      setStats((data || []).map(stat => ({
+      if (statsError) {
+        console.error('Erreur lors de la récupération des stats:', statsError);
+        throw statsError;
+      }
+
+      if (!statsData || statsData.length === 0) {
+        console.log('Aucune statistique trouvée');
+        setStats([]);
+        return;
+      }
+
+      // Récupération des profils correspondants
+      const profileIds = [...new Set(statsData.map(stat => stat.profile_id))];
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, twitch_display_name')
+        .in('id', profileIds);
+
+      if (profilesError) {
+        console.warn('Erreur lors de la récupération des profils:', profilesError);
+      }
+
+      // Création d'un map pour les profils
+      const profilesMap = (profilesData || []).reduce((acc, profile) => {
+        acc[profile.id] = profile.twitch_display_name;
+        return acc;
+      }, {} as Record<string, string>);
+
+      // Mapping final avec les noms
+      const mappedStats = statsData.map(stat => ({
         ...stat,
-        profile_twitch_display_name: stat.profiles?.twitch_display_name || 'Inconnu'
-      })) as SubathonStat[]);
+        profile_twitch_display_name: profilesMap[stat.profile_id] || `Joueur ${stat.profile_id.slice(0, 8)}`
+      })) as SubathonStat[];
+      
+      console.log('Stats avec profils mappés:', mappedStats);
+      setStats(mappedStats);
+      
     } catch (error: any) {
       console.error('Error fetching stats:', error);
+      toast({
+        title: "Erreur",
+        description: "Impossible de charger les statistiques des contributeurs.",
+        variant: "destructive",
+      });
     }
   }, [streamer]);
 
@@ -525,6 +559,7 @@ export default function StreamerPanel() {
             pause_started_at: null
           };
         } else {
+          // Suppression des statistiques pour remettre à zéro le classement
           const { error: deleteError } = await supabase
             .from('subathon_stats')
             .delete()
@@ -538,6 +573,8 @@ export default function StreamerPanel() {
               variant: "destructive",
             });
           } else {
+            console.log('Statistiques réinitialisées avec succès');
+            setStats([]); // Vider immédiatement les stats dans l'interface
             toast({
               title: "Statistiques réinitialisées",
               description: "Le classement des contributeurs a été remis à zéro.",
@@ -548,6 +585,8 @@ export default function StreamerPanel() {
           updateData.total_elapsed_time = 0;
           updateData.total_paused_duration = 0;
           updateData.total_clicks = 0;
+          updateData.total_time_added = 0;
+          updateData.current_clicks = 0;
         }
 
         if (!selectedGames.length) {
@@ -1200,7 +1239,7 @@ export default function StreamerPanel() {
                     <Card>
                       <CardContent className="p-4">
                         <div className="flex items-center space-x-2">
-                          <Users className="h-5 w-5 text-green-500" /> {/* Icône Users */}
+                          <Users className="h-5 w-5 text-green-500" />
                           <div>
                             <p className="text-sm font-medium text-muted-foreground">Total contributeurs</p>
                             <p className="text-2xl font-bold text-green-500">
@@ -1218,7 +1257,7 @@ export default function StreamerPanel() {
                           <div>
                             <p className="text-sm font-medium text-muted-foreground">Total clics</p>
                             <p className="text-2xl font-bold text-purple-500">
-                              {streamer?.total_clicks || 0} {/* Utiliser streamer.total_clicks */}
+                              {streamer?.total_clicks || 0}
                             </p>
                           </div>
                         </div>
