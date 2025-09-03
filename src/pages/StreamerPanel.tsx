@@ -33,7 +33,7 @@ import {
   ClipboardCheck,
   Copy,
   Loader2,
-  Star,
+  Star, // Ajout de l'icône Star
   Monitor,
   AlertCircle,
   Trophy,
@@ -93,6 +93,12 @@ interface OverlayConfig {
   timerPosition: 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left';
   progressPosition: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
   statsPosition: 'left' | 'right';
+}
+
+// Interface pour les paramètres de temps par événement
+interface StreamerEventTimeSetting {
+  event_type: string;
+  time_seconds: number;
 }
 
 const defaultConfig: OverlayConfig = {
@@ -181,7 +187,7 @@ export default function StreamerPanel() {
   const [overlayConfig, setOverlayConfig] = useState<OverlayConfig>(defaultConfig);
   const [originalOverlayConfig, setOriginalOverlayConfig] = useState<OverlayConfig>(defaultConfig);
   const [hasUnsavedOverlayChanges, setHasUnsavedOverlayChanges] = useState(false);
-  
+
   // États pour la configuration du Pauvrathon
   const [timeMode, setTimeMode] = useState('fixed');
   const [initialHours, setInitialHours] = useState(2);
@@ -192,7 +198,17 @@ export default function StreamerPanel() {
   const [clicksRequired, setClicksRequired] = useState(100);
   const [cooldownTime, setCooldownTime] = useState(30);
   const [selectedGames, setSelectedGames] = useState<string[]>([]);
-  
+
+  // Nouveaux états pour la configuration du temps par événement
+  const [timePerSub, setTimePerSub] = useState(60); // Secondes par défaut pour un sub
+  const [timePerBit, setTimePerBit] = useState(1);  // Secondes par défaut par bit (ex: 1s par bit)
+  const [timePerGift, setTimePerGift] = useState(30); // Secondes par défaut pour un gift sub
+
+  // États pour stocker les valeurs originales des temps par événement pour la détection des changements
+  const [originalTimePerSub, setOriginalTimePerSub] = useState(60);
+  const [originalTimePerBit, setOriginalTimePerBit] = useState(1);
+  const [originalTimePerGift, setOriginalTimePerGift] = useState(30);
+
   // URLs
   const [pauvrathonUrl, setPauvrathonUrl] = useState('');
   const [overlayUrl, setOverlayUrl] = useState('');
@@ -204,7 +220,7 @@ export default function StreamerPanel() {
 
   const fetchStreamerData = useCallback(async () => {
     if (!user) return;
-    
+
     setLoading(true);
     try {
       const { data, error } = await supabase
@@ -218,7 +234,7 @@ export default function StreamerPanel() {
       if (data) {
         setStreamer(data as any);
         setOriginalStreamerData(data as any);
-        
+
         setInitialHours(Math.floor((data.initial_duration || 7200) / 3600));
         setInitialMinutes(Math.floor(((data.initial_duration || 7200) % 3600) / 60));
         setTimeMode(data.time_mode || 'fixed');
@@ -228,6 +244,35 @@ export default function StreamerPanel() {
         setClicksRequired(data.clicks_required || 100);
         setCooldownTime(data.cooldown_seconds || 30);
         setSelectedGames(data.active_minigames || []);
+
+        // Charger les configurations de temps par événement depuis la nouvelle table
+        const { data: eventTimeSettings, error: eventTimeError } = await supabase
+          .from('streamer_event_time_settings')
+          .select('event_type, time_seconds')
+          .eq('streamer_id', data.id); // Utilisez data.id car streamer n'est pas encore mis à jour
+
+        if (!eventTimeError && eventTimeSettings) {
+          const loadedSettings: Record<string, number> = {};
+          eventTimeSettings.forEach(setting => {
+            loadedSettings[setting.event_type] = setting.time_seconds;
+          });
+          setTimePerSub(loadedSettings.sub ?? 60);
+          setTimePerBit(loadedSettings.bits ?? 1);
+          setTimePerGift(loadedSettings.gift ?? 30);
+
+          setOriginalTimePerSub(loadedSettings.sub ?? 60);
+          setOriginalTimePerBit(loadedSettings.bits ?? 1);
+          setOriginalTimePerGift(loadedSettings.gift ?? 30);
+        } else {
+          console.warn("Could not load event time settings, using defaults.", eventTimeError);
+          setTimePerSub(60);
+          setTimePerBit(1);
+          setTimePerGift(30);
+
+          setOriginalTimePerSub(60);
+          setOriginalTimePerBit(1);
+          setOriginalTimePerGift(30);
+        }
       }
     } catch (error: any) {
       console.error('Error fetching streamer data:', error);
@@ -249,7 +294,7 @@ export default function StreamerPanel() {
         .order('component_code');
 
       if (error) throw error;
-      
+
       setAvailableMinigames((data || []).map(item => ({ ...item, code: '' })));
     } catch (error: any) {
       console.error('Error fetching minigames:', error);
@@ -265,7 +310,7 @@ export default function StreamerPanel() {
 
     try {
       console.log('Fetching stats for streamer:', streamer.id);
-      
+
       // Récupération des statistiques
       const { data: statsData, error: statsError } = await supabase
         .from('subathon_stats')
@@ -299,10 +344,10 @@ export default function StreamerPanel() {
         games_played: stat.games_played || 0,
         created_at: stat.created_at
       })) as SubathonStat[];
-      
+
       console.log('Final mapped stats:', mappedStats);
       setStats(mappedStats);
-      
+
     } catch (error: any) {
       console.error('Error fetching stats:', error);
       setStats([]);
@@ -316,7 +361,7 @@ export default function StreamerPanel() {
 
   const loadOverlayConfig = useCallback(async () => {
     if (!streamer?.id) return;
-    
+
     try {
       const { data, error } = await supabase
         .from('overlay_configs')
@@ -353,7 +398,7 @@ export default function StreamerPanel() {
         );
 
       if (error) throw error;
-      
+
       setOverlayConfig(newConfig);
       setOriginalOverlayConfig(newConfig);
       setHasUnsavedOverlayChanges(false);
@@ -400,7 +445,7 @@ export default function StreamerPanel() {
           }
         )
         .subscribe();
-      
+
       const statsChannel = supabase
         .channel(`public:subathon_stats:streamer_id=eq.${streamer.id}`)
         .on(
@@ -411,7 +456,7 @@ export default function StreamerPanel() {
           }
         )
         .subscribe();
-        
+
       const overlayConfigChannel = supabase
         .channel(`public:overlay_configs:streamer_id=eq.${streamer.id}`)
         .on(
@@ -423,10 +468,27 @@ export default function StreamerPanel() {
         )
         .subscribe();
 
+      // Écouter les changements sur streamer_event_time_settings
+      const eventTimeSettingsChannel = supabase
+        .channel(`public:streamer_event_time_settings:streamer_id=eq.${streamer.id}`)
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'streamer_event_time_settings', filter: `streamer_id=eq.${streamer.id}` },
+          (payload) => {
+            const updatedSetting = payload.new as StreamerEventTimeSetting;
+            if (updatedSetting.event_type === 'sub') setTimePerSub(updatedSetting.time_seconds);
+            if (updatedSetting.event_type === 'bits') setTimePerBit(updatedSetting.time_seconds);
+            if (updatedSetting.event_type === 'gift') setTimePerGift(updatedSetting.time_seconds);
+          }
+        )
+        .subscribe();
+
+
       return () => {
         supabase.removeChannel(streamerChannel);
         supabase.removeChannel(statsChannel);
         supabase.removeChannel(overlayConfigChannel);
+        supabase.removeChannel(eventTimeSettingsChannel); // Nettoyage du nouveau channel
       };
     }
   }, [streamer, fetchStats, loadOverlayConfig]);
@@ -440,7 +502,7 @@ export default function StreamerPanel() {
 
   useEffect(() => {
     if (!originalStreamerData) return;
-    
+
     const currentConfig = {
       stream_title: streamer?.stream_title,
       time_mode: timeMode,
@@ -451,8 +513,12 @@ export default function StreamerPanel() {
       cooldown_seconds: cooldownTime,
       initial_duration: (initialHours * 3600) + (initialMinutes * 60),
       active_minigames: selectedGames.sort(),
+      // Inclure les nouvelles configurations de temps par événement
+      time_per_sub: timePerSub,
+      time_per_bit: timePerBit,
+      time_per_gift: timePerGift,
     };
-    
+
     const originalConfig = {
       stream_title: originalStreamerData.stream_title,
       time_mode: originalStreamerData.time_mode || 'fixed',
@@ -463,11 +529,15 @@ export default function StreamerPanel() {
       cooldown_seconds: originalStreamerData.cooldown_seconds || 30,
       initial_duration: originalStreamerData.initial_duration || 7200,
       active_minigames: (originalStreamerData.active_minigames || []).sort(),
+      // Inclure les valeurs originales des configurations de temps par événement
+      time_per_sub: originalTimePerSub,
+      time_per_bit: originalTimePerBit,
+      time_per_gift: originalTimePerGift,
     };
-    
+
     const hasChanges = JSON.stringify(currentConfig) !== JSON.stringify(originalConfig);
     setHasUnsavedChanges(hasChanges);
-  }, [timeMode, fixedTime, minRandomTime, maxRandomTime, clicksRequired, cooldownTime, initialHours, initialMinutes, selectedGames, streamer, originalStreamerData]);
+  }, [timeMode, fixedTime, minRandomTime, maxRandomTime, clicksRequired, cooldownTime, initialHours, initialMinutes, selectedGames, streamer, originalStreamerData, timePerSub, timePerBit, timePerGift, originalTimePerSub, originalTimePerBit, originalTimePerGift]);
 
   useEffect(() => {
     if (!originalOverlayConfig) return;
@@ -489,7 +559,7 @@ export default function StreamerPanel() {
     setSaving(true);
     try {
       const calculatedDuration = (initialHours * 3600) + (initialMinutes * 60);
-      
+
       const updatedSettings = {
         stream_title: streamer.stream_title,
         time_mode: timeMode,
@@ -502,7 +572,7 @@ export default function StreamerPanel() {
         active_minigames: selectedGames,
         updated_at: new Date().toISOString()
       };
-      
+
       const { data, error } = await supabase
         .from('streamers')
         .update(updatedSettings)
@@ -517,8 +587,42 @@ export default function StreamerPanel() {
 
       setStreamer(data as any);
       setOriginalStreamerData(data as any);
+
+      // Sauvegarde des paramètres de temps par événement dans la table dédiée
+      const eventSettingsToSave = [
+        { event_type: 'sub', time_seconds: timePerSub },
+        { event_type: 'bits', time_seconds: timePerBit },
+        { event_type: 'gift', time_seconds: timePerGift },
+      ];
+
+      for (const setting of eventSettingsToSave) {
+        const { error: eventSettingError } = await supabase
+          .from('streamer_event_time_settings')
+          .upsert({
+            streamer_id: streamer.id,
+            event_type: setting.event_type,
+            time_seconds: setting.time_seconds,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: ['streamer_id', 'event_type'] });
+
+        if (eventSettingError) {
+          console.error(`Erreur de sauvegarde pour ${setting.event_type}:`, eventSettingError);
+          toast({
+            title: "Erreur de sauvegarde",
+            description: `Impossible de sauvegarder les paramètres de ${setting.event_type}: ${eventSettingError.message || 'Erreur inconnue'}`,
+            variant: "destructive",
+          });
+          // Vous pouvez choisir de throw l'erreur ou de continuer
+        }
+      }
+
+      // Mettre à jour les valeurs originales après sauvegarde réussie
+      setOriginalTimePerSub(timePerSub);
+      setOriginalTimePerBit(timePerBit);
+      setOriginalTimePerGift(timePerGift);
+
       setHasUnsavedChanges(false);
-      
+
       toast({
         title: "Paramètres sauvegardés",
         description: "Les paramètres du Pauvrathon ont été mis à jour avec succès.",
@@ -578,7 +682,7 @@ export default function StreamerPanel() {
               description: "Le classement des contributeurs a été remis à zéro.",
             });
           }
-          
+
           updateData.stream_started_at = new Date().toISOString();
           updateData.total_elapsed_time = 0;
           updateData.total_paused_duration = 0;
@@ -646,7 +750,7 @@ export default function StreamerPanel() {
       });
     }
   };
-  
+
   const handleMinigameToggle = (minigameId: string, checked: boolean | 'indeterminate') => {
     if (checked === true) {
       setSelectedGames(prev => [...new Set([...prev, minigameId])]);
@@ -654,7 +758,7 @@ export default function StreamerPanel() {
       setSelectedGames(prev => prev.filter(id => id !== minigameId));
     }
   };
-  
+
   const handleResetClicks = async () => {
     if (!streamer || !streamer.id) {
       console.error("Réinitialisation impossible: Streamer ID invalide.");
@@ -664,7 +768,7 @@ export default function StreamerPanel() {
     try {
       const { data, error } = await supabase
         .from('streamers')
-        .update({ 
+        .update({
           current_clicks: 0,
           updated_at: new Date().toISOString()
         })
@@ -675,7 +779,7 @@ export default function StreamerPanel() {
       if (error) throw error;
 
       setStreamer(data as any);
-      
+
       toast({
         title: "Clics remis à zéro",
         description: "Le compteur de clics a été réinitialisé.",
@@ -705,7 +809,7 @@ export default function StreamerPanel() {
   const copyPauvrathonLink = () => {
     copyToClipboard(pauvrathonUrl, "de la page Pauvrathon");
   };
-  
+
   const LoadingSpinner = () => (
     <div className="flex justify-center items-center py-16">
       <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -726,7 +830,7 @@ export default function StreamerPanel() {
   return (
     <div className="min-h-screen bg-background">
       <Navigation />
-      
+
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-purple-600 to-pink-600 text-transparent bg-clip-text">
@@ -765,7 +869,7 @@ export default function StreamerPanel() {
                   Liens & Overlay
                 </TabsTrigger>
               </TabsList>
-              
+
               <TabsContent value="configuration">
                 <Card>
                   <CardHeader>
@@ -784,7 +888,7 @@ export default function StreamerPanel() {
                         <Timer className="h-5 w-5 mr-2 text-muted-foreground" />
                         <h3 className="text-lg font-medium">Temps initial</h3>
                       </div>
-                      
+
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <Label htmlFor="initial_hours">Heures</Label>
@@ -809,21 +913,21 @@ export default function StreamerPanel() {
                           />
                         </div>
                       </div>
-                      
+
                       <div className="p-3 bg-muted/30 rounded-lg text-sm text-muted-foreground">
                         Durée totale: <span className="font-medium">{initialHours}h {initialMinutes}m</span> ({(initialHours * 3600) + (initialMinutes * 60)} secondes)
                       </div>
                     </div>
-                    
+
                     <Separator />
-                    
+
                     {/* Configuration du temps ajouté */}
                     <div className="space-y-4">
                       <div className="flex items-center">
                         <Clock className="h-5 w-5 mr-2 text-muted-foreground" />
                         <h3 className="text-lg font-medium">Temps ajouté par victoire</h3>
                       </div>
-                      
+
                       <RadioGroup
                         value={timeMode}
                         onValueChange={setTimeMode}
@@ -838,7 +942,7 @@ export default function StreamerPanel() {
                             </div>
                           </Label>
                         </div>
-                        
+
                         <div className="flex items-center space-x-2 p-4 rounded-lg border">
                           <RadioGroupItem value="random" id="random" />
                           <Label htmlFor="random" className="flex-1 cursor-pointer">
@@ -909,16 +1013,16 @@ export default function StreamerPanel() {
                         </div>
                       )}
                     </div>
-                    
+
                     <Separator />
-                    
+
                     {/* Configuration des clics et du cooldown */}
                     <div className="space-y-4">
                       <div className="flex items-center">
                         <ClipboardCheck className="h-5 w-5 mr-2 text-muted-foreground" />
                         <h3 className="text-lg font-medium">Paramètres de jeu</h3>
                       </div>
-                      
+
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <Label htmlFor="clicks_required">Clics requis pour déclencher un jeu</Label>
@@ -943,7 +1047,7 @@ export default function StreamerPanel() {
                             Nombre de clics nécessaires pour déclencher un mini-jeu
                           </p>
                         </div>
-                        
+
                         <div>
                           <Label htmlFor="cooldown_time">Temps de cooldown (secondes)</Label>
                           <div className="grid grid-cols-[1fr_80px] gap-4 items-center mt-2">
@@ -971,8 +1075,8 @@ export default function StreamerPanel() {
                     </div>
                   </CardContent>
                   <CardFooter className="flex justify-end pt-6">
-                    <Button 
-                      onClick={handleSaveSettings} 
+                    <Button
+                      onClick={handleSaveSettings}
                       disabled={saving || !hasUnsavedChanges}
                       variant={hasUnsavedChanges ? "default" : "outline"}
                     >
@@ -980,7 +1084,7 @@ export default function StreamerPanel() {
                     </Button>
                   </CardFooter>
                 </Card>
-                
+
                 <Card className="mt-6">
                   <CardHeader>
                     <CardTitle className="flex items-center">
@@ -1000,21 +1104,21 @@ export default function StreamerPanel() {
                     ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {availableMinigames.map((minigame) => (
-                          <div 
-                            key={minigame.id} 
+                          <div
+                            key={minigame.id}
                             className="flex items-start space-x-2"
                           >
                             <Checkbox
                               id={`minigame-${minigame.id}`}
                               checked={selectedGames.includes(minigame.component_code)}
-                              onCheckedChange={(checked) => 
+                              onCheckedChange={(checked) =>
                                 handleMinigameToggle(minigame.component_code, checked)
                               }
                               className="mt-1"
                             />
                             <div className="flex-1">
-                              <Label 
-                                htmlFor={`minigame-${minigame.id}`} 
+                              <Label
+                                htmlFor={`minigame-${minigame.id}`}
                                 className="cursor-pointer font-medium block mb-1"
                               >
                                 {minigame.component_code}
@@ -1034,12 +1138,75 @@ export default function StreamerPanel() {
                     )}
                   </CardContent>
                   <CardFooter className="flex justify-end border-t pt-6">
-                    <Button 
-                      onClick={handleSaveSettings} 
+                    <Button
+                      onClick={handleSaveSettings}
                       disabled={saving || !hasUnsavedChanges}
                       variant={hasUnsavedChanges ? "default" : "outline"}
                     >
                       Sauvegarder les jeux
+                    </Button>
+                  </CardFooter>
+                </Card>
+
+                {/* Nouvelle Card pour la configuration des gains de temps par événement */}
+                <Card className="mt-6">
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <Star className="mr-2 h-5 w-5" />
+                      Configuration des gains de temps par événement
+                    </CardTitle>
+                    <CardDescription>
+                      Définissez le temps ajouté au Pauvrathon pour chaque type d'événement Twitch (subs, bits, cadeaux).
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <Label htmlFor="time_per_sub">Temps ajouté par abonnement (secondes)</Label>
+                      <Input
+                        id="time_per_sub"
+                        type="number"
+                        min="0"
+                        value={timePerSub}
+                        onChange={(e) => setTimePerSub(parseInt(e.target.value) || 0)}
+                      />
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Secondes ajoutées pour chaque nouvel abonnement ou renouvellement.
+                      </p>
+                    </div>
+                    <div>
+                      <Label htmlFor="time_per_bit">Temps ajouté par bit (secondes par bit)</Label>
+                      <Input
+                        id="time_per_bit"
+                        type="number"
+                        min="0"
+                        value={timePerBit}
+                        onChange={(e) => setTimePerBit(parseInt(e.target.value) || 0)}
+                      />
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Secondes ajoutées pour chaque bit (ex: 1 pour 1s par bit, 0.1 pour 1s par 10 bits).
+                      </p>
+                    </div>
+                    <div>
+                      <Label htmlFor="time_per_gift">Temps ajouté par abonnement cadeau (secondes)</Label>
+                      <Input
+                        id="time_per_gift"
+                        type="number"
+                        min="0"
+                        value={timePerGift}
+                        onChange={(e) => setTimePerGift(parseInt(e.target.value) || 0)}
+                      />
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Secondes ajoutées pour chaque abonnement offert.
+                      </p>
+                    </div>
+                  </CardContent>
+                  <CardFooter className="flex justify-end border-t pt-6">
+                    <Button
+                      onClick={handleSaveSettings}
+                      disabled={saving || !hasUnsavedChanges}
+                      variant={hasUnsavedChanges ? "default" : "outline"}
+                    >
+                      Sauvegarder les gains de temps
                     </Button>
                   </CardFooter>
                 </Card>
@@ -1190,8 +1357,8 @@ export default function StreamerPanel() {
                     </div>
                   </CardContent>
                   <CardFooter className="flex justify-end pt-6">
-                    <Button 
-                      onClick={() => saveOverlayConfig(overlayConfig)} 
+                    <Button
+                      onClick={() => saveOverlayConfig(overlayConfig)}
                       disabled={saving || !hasUnsavedOverlayChanges}
                       variant={hasUnsavedOverlayChanges ? "default" : "outline"}
                     >
@@ -1219,7 +1386,7 @@ export default function StreamerPanel() {
                         </div>
                       </CardContent>
                     </Card>
-                    
+
                     <Card>
                       <CardContent className="p-4">
                         <div className="flex items-center space-x-2">
@@ -1233,7 +1400,7 @@ export default function StreamerPanel() {
                         </div>
                       </CardContent>
                     </Card>
-                    
+
                     <Card>
                       <CardContent className="p-4">
                         <div className="flex items-center space-x-2">
@@ -1247,7 +1414,7 @@ export default function StreamerPanel() {
                         </div>
                       </CardContent>
                     </Card>
-                    
+
                     <Card>
                       <CardContent className="p-4">
                         <div className="flex items-center space-x-2">
@@ -1288,22 +1455,22 @@ export default function StreamerPanel() {
                             const timeInSeconds = stat.time_contributed % 60;
                             const maxTimeContributed = Math.max(...stats.map(s => s.time_contributed));
                             const progressPercentage = maxTimeContributed > 0 ? (stat.time_contributed / maxTimeContributed) * 100 : 0;
-                            
+
                             return (
                               <div key={stat.id} className="relative">
                                 <div className="flex items-center space-x-4 relative z-10 bg-background p-3 rounded-lg border">
                                   <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 border-2 border-primary/20">
                                     {index < 3 ? (
                                       <Trophy className={`w-4 h-4 ${
-                                        index === 0 ? 'text-yellow-500' : 
-                                        index === 1 ? 'text-gray-400' : 
+                                        index === 0 ? 'text-yellow-500' :
+                                        index === 1 ? 'text-gray-400' :
                                         'text-orange-600'
                                       }`} />
                                     ) : (
                                       <span className="text-sm font-bold text-primary">{index + 1}</span>
                                     )}
                                   </div>
-                                  
+
                                   <div className="flex-1 min-w-0">
                                     <p className="font-semibold truncate">{stat.profile_twitch_display_name}</p>
                                     <div className="flex items-center space-x-4 text-sm text-muted-foreground">
@@ -1321,7 +1488,7 @@ export default function StreamerPanel() {
                                       </span>
                                     </div>
                                   </div>
-                                  
+
                                   <div className="text-right">
                                     <Badge variant={index < 3 ? "default" : "secondary"} className="mb-1">
                                       #{index + 1}
@@ -1331,8 +1498,8 @@ export default function StreamerPanel() {
                                     </p>
                                   </div>
                                 </div>
-                                
-                                <div 
+
+                                <div
                                   className="absolute top-0 left-0 h-full bg-primary/5 rounded-lg transition-all duration-300"
                                   style={{ width: `${progressPercentage}%` }}
                                 />
@@ -1366,17 +1533,17 @@ export default function StreamerPanel() {
                              streamer?.status === 'ended' ? '🏁 Terminé' : '⚫ Hors ligne'}
                           </Badge>
                         </div>
-                        
+
                         <div className="space-y-2">
                           <p className="text-sm font-medium text-muted-foreground">Durée initiale configurée</p>
                           <p className="font-medium">{formatTime(streamer?.initial_duration || 0)}</p>
                         </div>
-                        
+
                         <div className="space-y-2">
                           <p className="text-sm font-medium text-muted-foreground">Mini-jeux actifs</p>
                           <p className="font-medium">{streamer?.active_minigames?.length || 0} jeu(x)</p>
                         </div>
-                        
+
                         {streamer?.stream_started_at && (
                           <div className="space-y-2">
                             <p className="text-sm font-medium text-muted-foreground">Démarré le</p>
@@ -1390,15 +1557,15 @@ export default function StreamerPanel() {
                             </p>
                           </div>
                         )}
-                        
+
                         <div className="space-y-2">
                           <p className="text-sm font-medium text-muted-foreground">Mode de temps</p>
                           <Badge variant="outline">
-                            {streamer?.time_mode === 'fixed' ? `Fixe (${streamer.time_increment}s)` : 
+                            {streamer?.time_mode === 'fixed' ? `Fixe (${streamer.time_increment}s)` :
                              `Aléatoire (${streamer.min_random_time || streamer.time_increment || 10}-${streamer.max_random_time}s)`}
                           </Badge>
                         </div>
-                        
+
                         <div className="space-y-2">
                           <p className="text-sm font-medium text-muted-foreground">Clics requis</p>
                           <p className="font-medium">{streamer?.clicks_required || 100} clics</p>
@@ -1424,9 +1591,9 @@ export default function StreamerPanel() {
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <div className="flex items-center space-x-2">
-                        <Input 
-                          value={pauvrathonUrl} 
-                          readOnly 
+                        <Input
+                          value={pauvrathonUrl}
+                          readOnly
                           className="text-sm"
                         />
                         <Button size="icon" onClick={copyPauvrathonLink}>
@@ -1452,9 +1619,9 @@ export default function StreamerPanel() {
                     </CardHeader>
                     <CardContent className="space-y-4">
                       <div className="flex items-center space-x-2">
-                        <Input 
-                          value={overlayUrl} 
-                          readOnly 
+                        <Input
+                          value={overlayUrl}
+                          readOnly
                           className="text-sm"
                         />
                         <Button size="icon" onClick={copyOverlayLink}>
@@ -1501,7 +1668,9 @@ export default function StreamerPanel() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
+                {/* Assurez-vous que UniversalTimer reçoit le streamer.id */}
                 <UniversalTimer
+                    streamerId={streamer.id} // Passez l'ID du streamer
                     status={streamer?.status}
                     streamStartedAt={streamer?.stream_started_at}
                     pauseStartedAt={streamer?.pause_started_at}
@@ -1516,7 +1685,7 @@ export default function StreamerPanel() {
               </CardContent>
               <CardFooter className="flex flex-col space-y-4 pt-0">
                 <div className="flex gap-2 w-full">
-                  <Button 
+                  <Button
                     className="flex-1"
                     onClick={() => handleStatusChange('live')}
                     disabled={streamer?.status === 'live'}
@@ -1524,7 +1693,7 @@ export default function StreamerPanel() {
                     <Play className="mr-2 h-4 w-4" />
                     Démarrer
                   </Button>
-                  <Button 
+                  <Button
                     className="flex-1"
                     variant="outline"
                     onClick={() => handleStatusChange('paused')}
@@ -1535,7 +1704,7 @@ export default function StreamerPanel() {
                   </Button>
                 </div>
                 <div className="flex gap-2 w-full">
-                  <Button 
+                  <Button
                     className="flex-1"
                     variant="destructive"
                     onClick={() => handleStatusChange('ended')}
@@ -1544,7 +1713,7 @@ export default function StreamerPanel() {
                     <Square className="mr-2 h-4 w-4" />
                     Terminer
                   </Button>
-                  <Button 
+                  <Button
                     className="flex-1"
                     variant="secondary"
                     onClick={handleResetClicks}

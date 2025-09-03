@@ -45,7 +45,6 @@ export const UniversalTimer = ({
         
       } else if (status === 'paused' && streamStartedAt) {
         // PAUSE: Utiliser directement totalElapsedTime qui est calculé côté serveur
-        // Ne pas recalculer car cela causait les pertes de temps
         elapsedSeconds = totalElapsedTime;
         
       } else {
