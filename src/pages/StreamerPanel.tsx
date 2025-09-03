@@ -266,7 +266,7 @@ export default function StreamerPanel() {
     try {
       console.log('Fetching stats for streamer:', streamer.id);
       
-      // Récupération des statistiques avec gestion d'erreur
+      // Récupération des statistiques
       const { data: statsData, error: statsError } = await supabase
         .from('subathon_stats')
         .select('*')
@@ -287,53 +287,12 @@ export default function StreamerPanel() {
         return;
       }
 
-      // Filtrer les stats avec des profile_id valides
-      const validStats = statsData.filter(stat => 
-        stat.profile_id && 
-        typeof stat.profile_id === 'string' && 
-        stat.profile_id.length > 0
-      );
-
-      console.log('Valid stats after filtering:', validStats);
-
-      if (validStats.length === 0) {
-        console.log('Aucun profile_id valide trouvé');
-        setStats([]);
-        return;
-      }
-
-      // Récupération des profils correspondants
-      const profileIds = [...new Set(validStats.map(stat => stat.profile_id))];
-      console.log('Profile IDs to fetch:', profileIds);
-
-      const { data: profilesData, error: profilesError } = await supabase
-        .from('profiles')
-        .select('id, twitch_display_name')
-        .in('id', profileIds);
-
-      if (profilesError) {
-        console.warn('Erreur lors de la récupération des profils:', profilesError);
-        // Continuer avec des noms par défaut
-      }
-
-      console.log('Profiles data retrieved:', profilesData);
-
-      // Création d'un map pour les profils avec validation
-      const profilesMap = (profilesData || []).reduce((acc, profile) => {
-        if (profile && profile.id && profile.twitch_display_name) {
-          acc[profile.id] = profile.twitch_display_name;
-        }
-        return acc;
-      }, {} as Record<string, string>);
-
-      console.log('Profiles map created:', profilesMap);
-
-      // Mapping final avec les noms et validation complète
-      const mappedStats = validStats.map(stat => ({
+      // Utiliser directement player_twitch_username au lieu de chercher dans profiles
+      const mappedStats = statsData.map(stat => ({
         id: stat.id,
         streamer_id: stat.streamer_id,
-        profile_id: stat.profile_id,
-        profile_twitch_display_name: profilesMap[stat.profile_id] || `Joueur ${stat.profile_id.slice(0, 8)}`,
+        profile_id: stat.profile_id || stat.player_twitch_username, // Fallback pour la compatibilité
+        profile_twitch_display_name: stat.player_twitch_username || `Joueur ${stat.id?.slice(0, 8) || 'Inconnu'}`,
         time_contributed: stat.time_contributed || 0,
         clicks_contributed: stat.clicks_contributed || 0,
         games_won: stat.games_won || 0,

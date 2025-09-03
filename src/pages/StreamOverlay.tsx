@@ -143,46 +143,15 @@ export default function StreamOverlay() {
         return;
       }
 
-      // Filtrer les stats avec des profile_id valides
-      const validStats = statsData.filter(stat => stat.profile_id && typeof stat.profile_id === 'string');
-      console.log('Valid stats after filtering:', validStats);
-
-      if (validStats.length === 0) {
-        console.log('No valid profile_ids found in stats');
-        setStats([]);
-        return;
-      }
-
-      // Récupération des profils correspondants
-      const profileIds = [...new Set(validStats.map(stat => stat.profile_id))];
-      console.log('Profile IDs to fetch:', profileIds);
-
-      const { data: profilesData, error: profilesError } = await supabase
-        .from('profiles')
-        .select('id, twitch_display_name')
-        .in('id', profileIds);
-
-      if (profilesError) {
-        console.error('Erreur lors de la récupération des profils:', profilesError);
-        // Continue même si on ne peut pas récupérer les profils
-      }
-
-      console.log('Profiles data:', profilesData);
-
-      // Création d'un map pour les profils
-      const profilesMap = (profilesData || []).reduce((acc, profile) => {
-        if (profile.id && profile.twitch_display_name) {
-          acc[profile.id] = profile.twitch_display_name;
-        }
-        return acc;
-      }, {} as Record<string, string>);
-
-      console.log('Profiles map:', profilesMap);
-
-      // Construction des stats finales
-      const mappedStats = validStats.map(stat => ({
-        ...stat,
-        profile_twitch_display_name: profilesMap[stat.profile_id] || `Joueur ${stat.profile_id?.slice(0, 8) || 'Inconnu'}`
+      // Utiliser directement player_twitch_username au lieu de chercher dans profiles
+      const mappedStats = statsData.map(stat => ({
+        id: stat.id,
+        profile_id: stat.profile_id || stat.player_twitch_username, // Fallback pour la compatibilité
+        profile_twitch_display_name: stat.player_twitch_username || `Joueur ${stat.id?.slice(0, 8) || 'Inconnu'}`,
+        time_contributed: stat.time_contributed || 0,
+        clicks_contributed: stat.clicks_contributed || 0,
+        games_won: stat.games_won || 0,
+        games_played: stat.games_played || 0
       })) as PlayerStat[];
       
       console.log('Final mapped stats:', mappedStats);
