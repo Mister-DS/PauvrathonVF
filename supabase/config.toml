@@ -6,6 +6,9 @@ verify_jwt = false
 [functions.twitch-client-id]
 verify_jwt = false
 
+[functions.twitch-eventsub]
+verify_jwt = false
+
 [functions.create-admin]
 verify_jwt = false
 
