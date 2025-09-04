@@ -123,6 +123,7 @@ export function TicTacToe({ onWin, onLose }: TicTacToeProps) {
     if (isBoardFull(newBoard)) {
       setGameStatus('Match nul ! 🤝');
       setIsGameOver(true);
+      setTimeout(() => onLose(), 1500);
       return;
     }
 
