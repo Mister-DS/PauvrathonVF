@@ -856,52 +856,6 @@ export default function AdminPanel() {
 
           {/* Minigames Management */}
           <div className="space-y-6">
-            {/* Jeux prédéfinis */}
-            <Card className="neon-border">
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Gamepad2 className="mr-2 h-5 w-5" />
-                  Jeux Prédéfinis
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {predefinedGames.map((game) => {
-                  const isAdded = minigames.some(m => m.component_code === game.component_code);
-                  return (
-                    <div
-                      key={game.id}
-                      className="flex items-center justify-between p-3 border border-border rounded"
-                    >
-                      <div>
-                        <p className="font-medium">{game.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {game.description}
-                        </p>
-                      </div>
-                      <Button
-                        size="sm"
-                        onClick={() => handleAddPredefinedGame(game)}
-                        disabled={isAdded}
-                        className={isAdded ? "" : "neon-glow"}
-                      >
-                        {isAdded ? (
-                          <>
-                            <CheckCircle className="mr-2 h-4 w-4" />
-                            Ajouté
-                          </>
-                        ) : (
-                          <>
-                            <Plus className="mr-2 h-4 w-4" />
-                            Ajouter
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  );
-                })}
-              </CardContent>
-            </Card>
-
             {/* Ajouter un mini-jeu personnalisé */}
             <Card className="neon-border">
               <CardHeader>
