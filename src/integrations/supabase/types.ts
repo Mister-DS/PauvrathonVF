@@ -176,6 +176,48 @@ export type Database = {
         }
         Relationships: []
       }
+      streamer_event_time_settings: {
+        Row: {
+          created_at: string | null
+          event_type: string
+          id: string
+          streamer_id: string | null
+          time_seconds: number
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          event_type: string
+          id?: string
+          streamer_id?: string | null
+          time_seconds: number
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          event_type?: string
+          id?: string
+          streamer_id?: string | null
+          time_seconds?: number
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "streamer_event_time_settings_streamer_id_fkey"
+            columns: ["streamer_id"]
+            isOneToOne: false
+            referencedRelation: "streamers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "streamer_event_time_settings_streamer_id_fkey"
+            columns: ["streamer_id"]
+            isOneToOne: false
+            referencedRelation: "streamers_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       streamer_requests: {
         Row: {
           created_at: string

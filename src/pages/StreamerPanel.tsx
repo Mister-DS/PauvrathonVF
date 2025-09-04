@@ -253,11 +253,6 @@ export default function StreamerPanel() {
         setOriginalTimePerSub(60);
         setOriginalTimePerBit(1);
         setOriginalTimePerGift(30);
-
-          setOriginalTimePerSub(60);
-          setOriginalTimePerBit(1);
-          setOriginalTimePerGift(30);
-        }
       }
     } catch (error: any) {
       console.error('Error fetching streamer data:', error);
@@ -575,13 +570,6 @@ export default function StreamerPanel() {
 
       // Event settings are saved in the component state only for now
       // In the future, these could be stored in a dedicated table
-            title: "Erreur de sauvegarde",
-            description: `Impossible de sauvegarder les paramètres de ${setting.event_type}: ${eventSettingError.message || 'Erreur inconnue'}`,
-            variant: "destructive",
-          });
-          // Vous pouvez choisir de throw l'erreur ou de continuer
-        }
-      }
 
       // Mettre à jour les valeurs originales après sauvegarde réussie
       setOriginalTimePerSub(timePerSub);
