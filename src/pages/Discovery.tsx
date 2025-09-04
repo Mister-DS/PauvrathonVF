@@ -33,10 +33,16 @@ import { toast } from '@/hooks/use-toast';
 interface PauvrathonStreamer {
   id: string;
   is_live: boolean;
+  status?: string;
   stream_title?: string;
   current_clicks: number;
   clicks_required: number;
   total_time_added: number;
+  profile?: {
+    avatar_url?: string;
+    twitch_display_name?: string;
+    twitch_username?: string;
+  };
   profiles?: {
     avatar_url?: string;
     twitch_display_name?: string;
@@ -108,22 +114,21 @@ const formatStreamDuration = (startedAt: string): string => {
 
 // Fonction pour obtenir l'URL de l'avatar d'un streamer.
 const getStreamerAvatar = (streamer: PauvrathonStreamer): string => {
-  const displayName =
-    streamer.profiles?.twitch_display_name ||
-    streamer.profiles?.twitch_username ||
-    'Streamer';
+  const profileData = streamer.profile || streamer.profiles;
+  const displayName = profileData?.twitch_display_name || profileData?.twitch_username || 'Streamer';
 
   return (
-    streamer.profiles?.avatar_url ||
+    profileData?.avatar_url ||
     `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(displayName)}`
   );
 };
 
 // Fonction pour obtenir le nom d'affichage d'un streamer.
 const getStreamerDisplayName = (streamer: PauvrathonStreamer): string => {
+  const profileData = streamer.profile || streamer.profiles;
   return (
-    streamer.profiles?.twitch_display_name ||
-    streamer.profiles?.twitch_username ||
+    profileData?.twitch_display_name ||
+    profileData?.twitch_username ||
     'Streamer inconnu'
   );
 };
@@ -131,13 +136,19 @@ const getStreamerDisplayName = (streamer: PauvrathonStreamer): string => {
 export default function Discovery() {
   const { user } = useAuth();
   const { streamers, loading: loadingPauvrathon, refetch } = useStreamers();
-  const [filter, setFilter] = useState<FilterType>('live');
+  const [filter, setFilter] = useState<FilterType>('all'); // Changé de 'live' à 'all' par défaut
   const [twitchStreamers, setTwitchStreamers] = useState<TwitchStream[]>([]);
   const [loadingTwitch, setLoadingTwitch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedLanguage, setSelectedLanguage] = useState('all');
   const [searchTerm, setSearchTerm] = useState('subathon');
   const [debounceTimeout, setDebounceTimeout] = useState<NodeJS.Timeout | null>(null);
+
+  // Debug: Log des streamers reçus
+  useEffect(() => {
+    console.log('Streamers reçus:', streamers);
+    console.log('Loading:', loadingPauvrathon);
+  }, [streamers, loadingPauvrathon]);
 
   // Fonction de debounce manuelle pour éviter les dépendances externes
   const debouncedSearch = useCallback(() => {
@@ -228,21 +239,33 @@ export default function Discovery() {
     setSearchQuery(term);
   };
 
-  // Conversion des streamers au bon type
-  const typedStreamers: PauvrathonStreamer[] = (streamers || []).map(streamer => ({
-    id: streamer.id,
-    is_live: streamer.is_live,
-    stream_title: streamer.stream_title,
-    current_clicks: streamer.current_clicks || 0,
-    clicks_required: streamer.clicks_required || 100,
-    total_time_added: streamer.total_time_added || 0,
-    profiles: streamer.profile || streamer.profiles
-  }));
-
-  const filteredStreamers = typedStreamers.filter(streamer => {
-    if (filter === 'live') return streamer.is_live;
-    return true;
+  // Conversion des streamers au bon type - CORRIGÉE
+  const typedStreamers: PauvrathonStreamer[] = (streamers || []).map(streamer => {
+    console.log('Mapping streamer:', streamer); // Debug
+    return {
+      id: streamer.id,
+      is_live: streamer.is_live || streamer.status === 'live', // Vérifier les deux champs
+      status: streamer.status,
+      stream_title: streamer.stream_title,
+      current_clicks: streamer.current_clicks || 0,
+      clicks_required: streamer.clicks_required || 100,
+      total_time_added: streamer.total_time_added || 0,
+      profile: streamer.profile,
+      profiles: streamer.profiles
+    };
   });
+
+  // Filtrage des streamers - CORRIGÉ
+  const filteredStreamers = typedStreamers.filter(streamer => {
+    console.log(`Streamer ${streamer.id}: is_live=${streamer.is_live}, status=${streamer.status}, filter=${filter}`); // Debug
+    
+    if (filter === 'live') {
+      return streamer.is_live || streamer.status === 'live';
+    }
+    return true; // Pour 'all', on affiche tous les streamers
+  });
+
+  console.log('Streamers filtrés:', filteredStreamers); // Debug
 
   return (
     <div className="min-h-screen bg-background">
@@ -279,7 +302,7 @@ export default function Discovery() {
                   onClick={() => setFilter('all')} 
                   size="sm"
                 >
-                  Tous
+                  Tous ({typedStreamers.length})
                 </Button>
                 <Button
                   variant={filter === 'live' ? 'default' : 'outline'}
@@ -288,9 +311,15 @@ export default function Discovery() {
                   className="flex items-center space-x-1"
                 >
                   <Radio className="w-4 h-4 text-red-500" />
-                  <span>En live</span>
+                  <span>En live ({typedStreamers.filter(s => s.is_live || s.status === 'live').length})</span>
                 </Button>
               </div>
+            </div>
+
+            {/* Debug info - à supprimer après tests */}
+            <div className="mb-4 p-3 bg-muted rounded text-sm">
+              <p>Debug: {streamers?.length || 0} streamers total, {filteredStreamers.length} après filtrage</p>
+              <p>Filter actuel: {filter}</p>
             </div>
 
             {loadingPauvrathon ? (
@@ -301,7 +330,9 @@ export default function Discovery() {
                 description={
                   filter === 'live'
                     ? 'Aucun streamer n\'est actuellement en live.'
-                    : 'Aucun streamer disponible pour le moment.'
+                    : streamers?.length === 0 
+                    ? 'Aucun streamer enregistré sur la plateforme.'
+                    : 'Erreur de filtrage des streamers.'
                 }
               />
             ) : (
@@ -326,7 +357,7 @@ export default function Discovery() {
                             </Link>
                           </h3>
                           <div className="flex items-center space-x-2">
-                            {streamer.is_live ? (
+                            {(streamer.is_live || streamer.status === 'live') ? (
                               <Badge className="bg-red-500 text-white">
                                 <Radio className="w-3 h-3 mr-1" />
                                 En live
@@ -334,7 +365,9 @@ export default function Discovery() {
                             ) : (
                               <Badge variant="secondary">
                                 <Square className="w-3 h-3 mr-1" />
-                                Hors ligne
+                                {streamer.status === 'offline' ? 'Hors ligne' : 
+                                 streamer.status === 'paused' ? 'En pause' :
+                                 streamer.status === 'ended' ? 'Terminé' : 'Hors ligne'}
                               </Badge>
                             )}
                           </div>
