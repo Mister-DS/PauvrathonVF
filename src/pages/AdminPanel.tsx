@@ -58,52 +58,6 @@ interface DetailedStreamerRequest extends StreamerRequest {
   };
 }
 
-// Liste des jeux prédéfinis mise à jour avec les nouveaux jeux
-const predefinedGames = [
-  {
-    id: "guess_number",
-    component_code: "guess_number",
-    name: "Devine le nombre",
-    description: "Les viewers doivent deviner le nombre mystère.",
-  },
-  {
-    id: "memory_game",
-    component_code: "memory_game",
-    name: "Jeu de Mémoire",
-    description: "Trouvez toutes les paires de cartes correspondantes.",
-  },
-  {
-    id: "tic_tac_toe",
-    component_code: "tic_tac_toe",
-    name: "Tic Tac Toe",
-    description: "Alignez 3 X pour gagner contre l'ordinateur.",
-  },
-  {
-    id: "simon_game",
-    component_code: "simon_game",
-    name: "Simon Game",
-    description: "Mémorisez et reproduisez la séquence de couleurs.",
-  },
-  {
-    id: "snake_game",
-    component_code: "snake_game",
-    name: "Snake Game",
-    description: "Dirigez le serpent pour manger la nourriture.",
-  },
-  {
-    id: "reaction_game",
-    component_code: "reaction_game",
-    name: "Jeu de Réflexes",
-    description: "Cliquez rapidement sur les cercles qui apparaissent.",
-  },
-  {
-    id: "hangman",
-    component_code: "hangman",
-    name: "Pendu",
-    description: "Devinez le mot mystère lettre par lettre.",
-  },
-];
-
 export default function AdminPanel() {
   const { user, profile } = useAuth();
   const [requests, setRequests] = useState<DetailedStreamerRequest[]>([]);
