@@ -40,9 +40,9 @@ import {
   LayoutDashboard,
   MoveHorizontal,
   MoveVertical,
-  Maximize,
-  Minimize,
-  Users
+  Users,
+  PlusCircle,
+  Trash2
 } from 'lucide-react';
 
 interface StreamerSettings {
@@ -67,6 +67,12 @@ interface StreamerSettings {
   total_elapsed_time: number;
   total_paused_duration: number;
   total_clicks?: number;
+  // Ajout des champs pour les gains de temps par événement
+  time_per_sub_tier1?: number;
+  time_per_sub_tier2?: number;
+  time_per_sub_tier3?: number;
+  time_per_bits_tiers?: { amount: number; time: number }[];
+  time_per_donations_tiers?: { amount: number; time: number }[];
 }
 
 // Interface pour les statistiques des contributeurs
@@ -95,7 +101,7 @@ interface OverlayConfig {
   statsPosition: 'left' | 'right';
 }
 
-// Interface pour les paramètres de temps par événement
+// Interface pour les paramètres de temps par événement (pour les écouteurs de changements)
 interface StreamerEventTimeSetting {
   event_type: string;
   time_seconds: number;
@@ -200,14 +206,18 @@ export default function StreamerPanel() {
   const [selectedGames, setSelectedGames] = useState<string[]>([]);
 
   // Nouveaux états pour la configuration du temps par événement
-  const [timePerSub, setTimePerSub] = useState(60); // Secondes par défaut pour un sub
-  const [timePerBit, setTimePerBit] = useState(1);  // Secondes par défaut par bit (ex: 1s par bit)
-  const [timePerGift, setTimePerGift] = useState(30); // Secondes par défaut pour un gift sub
+  const [timePerSubTier1, setTimePerSubTier1] = useState(60);
+  const [timePerSubTier2, setTimePerSubTier2] = useState(120);
+  const [timePerSubTier3, setTimePerSubTier3] = useState(180);
+  const [timePerBitsTiers, setTimePerBitsTiers] = useState<{ amount: number; time: number }[]>([]);
+  const [timePerDonationsTiers, setTimePerDonationsTiers] = useState<{ amount: number; time: number }[]>([]);
 
   // États pour stocker les valeurs originales des temps par événement pour la détection des changements
-  const [originalTimePerSub, setOriginalTimePerSub] = useState(60);
-  const [originalTimePerBit, setOriginalTimePerBit] = useState(1);
-  const [originalTimePerGift, setOriginalTimePerGift] = useState(30);
+  const [originalTimePerSubTier1, setOriginalTimePerSubTier1] = useState(60);
+  const [originalTimePerSubTier2, setOriginalTimePerSubTier2] = useState(120);
+  const [originalTimePerSubTier3, setOriginalTimePerSubTier3] = useState(180);
+  const [originalTimePerBitsTiers, setOriginalTimePerBitsTiers] = useState<{ amount: number; time: number }[]>([]);
+  const [originalTimePerDonationsTiers, setOriginalTimePerDonationsTiers] = useState<{ amount: number; time: number }[]>([]);
 
   // URLs
   const [pauvrathonUrl, setPauvrathonUrl] = useState('');
@@ -245,14 +255,19 @@ export default function StreamerPanel() {
         setCooldownTime(data.cooldown_seconds || 30);
         setSelectedGames(data.active_minigames || []);
 
-        // Use default values for time settings
-        setTimePerSub(60);
-        setTimePerBit(1);
-        setTimePerGift(30);
+        // Set values for time settings from fetched data or defaults
+        setTimePerSubTier1(data.time_per_sub_tier1 ?? 60);
+        setTimePerSubTier2(data.time_per_sub_tier2 ?? 120);
+        setTimePerSubTier3(data.time_per_sub_tier3 ?? 180);
+        setTimePerBitsTiers(data.time_per_bits_tiers || []);
+        setTimePerDonationsTiers(data.time_per_donations_tiers || []);
 
-        setOriginalTimePerSub(60);
-        setOriginalTimePerBit(1);
-        setOriginalTimePerGift(30);
+        // Set original values for change detection
+        setOriginalTimePerSubTier1(data.time_per_sub_tier1 ?? 60);
+        setOriginalTimePerSubTier2(data.time_per_sub_tier2 ?? 120);
+        setOriginalTimePerSubTier3(data.time_per_sub_tier3 ?? 180);
+        setOriginalTimePerBitsTiers(data.time_per_bits_tiers || []);
+        setOriginalTimePerDonationsTiers(data.time_per_donations_tiers || []);
       }
     } catch (error: any) {
       console.error('Error fetching streamer data:', error);
@@ -448,7 +463,7 @@ export default function StreamerPanel() {
         )
         .subscribe();
 
-      // Écouter les changements sur streamer_event_time_settings
+      // Écouter les changements sur streamer_event_time_settings (si cette table est toujours utilisée)
       const eventTimeSettingsChannel = supabase
         .channel(`public:streamer_event_time_settings:streamer_id=eq.${streamer.id}`)
         .on(
@@ -456,9 +471,9 @@ export default function StreamerPanel() {
           { event: 'UPDATE', schema: 'public', table: 'streamer_event_time_settings', filter: `streamer_id=eq.${streamer.id}` },
           (payload) => {
             const updatedSetting = payload.new as StreamerEventTimeSetting;
-            if (updatedSetting.event_type === 'sub') setTimePerSub(updatedSetting.time_seconds);
-            if (updatedSetting.event_type === 'bits') setTimePerBit(updatedSetting.time_seconds);
-            if (updatedSetting.event_type === 'gift') setTimePerGift(updatedSetting.time_seconds);
+            // This part might need adjustment if event_type is not granular enough for tiers
+            // For now, we'll assume direct updates to streamer settings are primary
+            console.log("StreamerEventTimeSetting updated:", updatedSetting);
           }
         )
         .subscribe();
@@ -468,7 +483,7 @@ export default function StreamerPanel() {
         supabase.removeChannel(streamerChannel);
         supabase.removeChannel(statsChannel);
         supabase.removeChannel(overlayConfigChannel);
-        supabase.removeChannel(eventTimeSettingsChannel); // Nettoyage du nouveau channel
+        supabase.removeChannel(eventTimeSettingsChannel);
       };
     }
   }, [streamer, fetchStats, loadOverlayConfig]);
@@ -493,10 +508,11 @@ export default function StreamerPanel() {
       cooldown_seconds: cooldownTime,
       initial_duration: (initialHours * 3600) + (initialMinutes * 60),
       active_minigames: selectedGames.sort(),
-      // Inclure les nouvelles configurations de temps par événement
-      time_per_sub: timePerSub,
-      time_per_bit: timePerBit,
-      time_per_gift: timePerGift,
+      time_per_sub_tier1: timePerSubTier1,
+      time_per_sub_tier2: timePerSubTier2,
+      time_per_sub_tier3: timePerSubTier3,
+      time_per_bits_tiers: timePerBitsTiers.sort((a, b) => a.amount - b.amount),
+      time_per_donations_tiers: timePerDonationsTiers.sort((a, b) => a.amount - b.amount),
     };
 
     const originalConfig = {
@@ -509,15 +525,22 @@ export default function StreamerPanel() {
       cooldown_seconds: originalStreamerData.cooldown_seconds || 30,
       initial_duration: originalStreamerData.initial_duration || 7200,
       active_minigames: (originalStreamerData.active_minigames || []).sort(),
-      // Inclure les valeurs originales des configurations de temps par événement
-      time_per_sub: originalTimePerSub,
-      time_per_bit: originalTimePerBit,
-      time_per_gift: originalTimePerGift,
+      time_per_sub_tier1: originalTimePerSubTier1,
+      time_per_sub_tier2: originalTimePerSubTier2,
+      time_per_sub_tier3: originalTimePerSubTier3,
+      time_per_bits_tiers: originalTimePerBitsTiers.sort((a, b) => a.amount - b.amount),
+      time_per_donations_tiers: originalTimePerDonationsTiers.sort((a, b) => a.amount - b.amount),
     };
 
     const hasChanges = JSON.stringify(currentConfig) !== JSON.stringify(originalConfig);
     setHasUnsavedChanges(hasChanges);
-  }, [timeMode, fixedTime, minRandomTime, maxRandomTime, clicksRequired, cooldownTime, initialHours, initialMinutes, selectedGames, streamer, originalStreamerData, timePerSub, timePerBit, timePerGift, originalTimePerSub, originalTimePerBit, originalTimePerGift]);
+  }, [
+    timeMode, fixedTime, minRandomTime, maxRandomTime, clicksRequired, cooldownTime,
+    initialHours, initialMinutes, selectedGames, streamer, originalStreamerData,
+    timePerSubTier1, timePerSubTier2, timePerSubTier3, timePerBitsTiers, timePerDonationsTiers,
+    originalTimePerSubTier1, originalTimePerSubTier2, originalTimePerSubTier3,
+    originalTimePerBitsTiers, originalTimePerDonationsTiers
+  ]);
 
   useEffect(() => {
     if (!originalOverlayConfig) return;
@@ -550,6 +573,11 @@ export default function StreamerPanel() {
         cooldown_seconds: cooldownTime,
         initial_duration: calculatedDuration,
         active_minigames: selectedGames,
+        time_per_sub_tier1: timePerSubTier1,
+        time_per_sub_tier2: timePerSubTier2,
+        time_per_sub_tier3: timePerSubTier3,
+        time_per_bits_tiers: timePerBitsTiers,
+        time_per_donations_tiers: timePerDonationsTiers,
         updated_at: new Date().toISOString()
       };
 
@@ -568,13 +596,12 @@ export default function StreamerPanel() {
       setStreamer(data as any);
       setOriginalStreamerData(data as any);
 
-      // Event settings are saved in the component state only for now
-      // In the future, these could be stored in a dedicated table
-
       // Mettre à jour les valeurs originales après sauvegarde réussie
-      setOriginalTimePerSub(timePerSub);
-      setOriginalTimePerBit(timePerBit);
-      setOriginalTimePerGift(timePerGift);
+      setOriginalTimePerSubTier1(timePerSubTier1);
+      setOriginalTimePerSubTier2(timePerSubTier2);
+      setOriginalTimePerSubTier3(timePerSubTier3);
+      setOriginalTimePerBitsTiers([...timePerBitsTiers]);
+      setOriginalTimePerDonationsTiers([...timePerDonationsTiers]);
 
       setHasUnsavedChanges(false);
 
@@ -763,6 +790,34 @@ export default function StreamerPanel() {
 
   const copyPauvrathonLink = () => {
     copyToClipboard(pauvrathonUrl, "de la page Pauvrathon");
+  };
+
+  const addTier = (type: 'bits' | 'donations') => {
+    if (type === 'bits') {
+      setTimePerBitsTiers(prev => [...prev, { amount: 0, time: 0 }]);
+    } else {
+      setTimePerDonationsTiers(prev => [...prev, { amount: 0, time: 0 }]);
+    }
+  };
+
+  const updateTier = (type: 'bits' | 'donations', index: number, field: 'amount' | 'time', value: number) => {
+    if (type === 'bits') {
+      const newTiers = [...timePerBitsTiers];
+      newTiers[index][field] = value;
+      setTimePerBitsTiers(newTiers);
+    } else {
+      const newTiers = [...timePerDonationsTiers];
+      newTiers[index][field] = value;
+      setTimePerDonationsTiers(newTiers);
+    }
+  };
+
+  const removeTier = (type: 'bits' | 'donations', index: number) => {
+    if (type === 'bits') {
+      setTimePerBitsTiers(prev => prev.filter((_, i) => i !== index));
+    } else {
+      setTimePerDonationsTiers(prev => prev.filter((_, i) => i !== index));
+    }
   };
 
   const LoadingSpinner = () => (
@@ -1111,47 +1166,143 @@ export default function StreamerPanel() {
                       Configuration des gains de temps par événement
                     </CardTitle>
                     <CardDescription>
-                      Définissez le temps ajouté au Pauvrathon pour chaque type d'événement Twitch (subs, bits, cadeaux).
+                      Définissez le temps ajouté au Pauvrathon pour chaque type d'événement Twitch (subs, bits, dons).
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <Label htmlFor="time_per_sub">Temps ajouté par abonnement (secondes)</Label>
-                      <Input
-                        id="time_per_sub"
-                        type="number"
-                        min="0"
-                        value={timePerSub}
-                        onChange={(e) => setTimePerSub(parseInt(e.target.value) || 0)}
-                      />
+                  <CardContent className="space-y-6">
+                    {/* Subs Tiers */}
+                    <div className="space-y-4">
+                      <h4 className="text-md font-medium flex items-center">
+                        <Users className="h-4 w-4 mr-2 text-muted-foreground" />
+                        Abonnements (Subs)
+                      </h4>
+                      <div>
+                        <Label htmlFor="time_per_sub_tier1">Temps ajouté par Sub Tier 1 (secondes)</Label>
+                        <Input
+                          id="time_per_sub_tier1"
+                          type="number"
+                          min="0"
+                          value={timePerSubTier1}
+                          onChange={(e) => setTimePerSubTier1(parseInt(e.target.value) || 0)}
+                        />
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Secondes ajoutées pour chaque abonnement de Tier 1.
+                        </p>
+                      </div>
+                      <div>
+                        <Label htmlFor="time_per_sub_tier2">Temps ajouté par Sub Tier 2 (secondes)</Label>
+                        <Input
+                          id="time_per_sub_tier2"
+                          type="number"
+                          min="0"
+                          value={timePerSubTier2}
+                          onChange={(e) => setTimePerSubTier2(parseInt(e.target.value) || 0)}
+                        />
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Secondes ajoutées pour chaque abonnement de Tier 2.
+                        </p>
+                      </div>
+                      <div>
+                        <Label htmlFor="time_per_sub_tier3">Temps ajouté par Sub Tier 3 (secondes)</Label>
+                        <Input
+                          id="time_per_sub_tier3"
+                          type="number"
+                          min="0"
+                          value={timePerSubTier3}
+                          onChange={(e) => setTimePerSubTier3(parseInt(e.target.value) || 0)}
+                        />
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Secondes ajoutées pour chaque abonnement de Tier 3.
+                        </p>
+                      </div>
+                    </div>
+
+                    <Separator />
+
+                    {/* Bits Tiers */}
+                    <div className="space-y-4">
+                      <h4 className="text-md font-medium flex items-center">
+                        <Star className="h-4 w-4 mr-2 text-muted-foreground" />
+                        Bits
+                      </h4>
+                      {timePerBitsTiers.map((tier, index) => (
+                        <div key={index} className="flex items-end gap-2">
+                          <div className="flex-1">
+                            <Label htmlFor={`bits_amount_${index}`}>Montant des Bits</Label>
+                            <Input
+                              id={`bits_amount_${index}`}
+                              type="number"
+                              min="0"
+                              value={tier.amount}
+                              onChange={(e) => updateTier('bits', index, 'amount', parseInt(e.target.value) || 0)}
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <Label htmlFor={`bits_time_${index}`}>Temps ajouté (secondes)</Label>
+                            <Input
+                              id={`bits_time_${index}`}
+                              type="number"
+                              min="0"
+                              value={tier.time}
+                              onChange={(e) => updateTier('bits', index, 'time', parseInt(e.target.value) || 0)}
+                            />
+                          </div>
+                          <Button variant="destructive" size="icon" onClick={() => removeTier('bits', index)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                      <Button variant="outline" onClick={() => addTier('bits')}>
+                        <PlusCircle className="h-4 w-4 mr-2" />
+                        Ajouter un palier de Bits
+                      </Button>
                       <p className="text-sm text-muted-foreground mt-1">
-                        Secondes ajoutées pour chaque nouvel abonnement ou renouvellement.
+                        Définissez des paliers de bits et le temps correspondant à ajouter.
                       </p>
                     </div>
-                    <div>
-                      <Label htmlFor="time_per_bit">Temps ajouté par bit (secondes par bit)</Label>
-                      <Input
-                        id="time_per_bit"
-                        type="number"
-                        min="0"
-                        value={timePerBit}
-                        onChange={(e) => setTimePerBit(parseInt(e.target.value) || 0)}
-                      />
+
+                    <Separator />
+
+                    {/* Donations Tiers */}
+                    <div className="space-y-4">
+                      <h4 className="text-md font-medium flex items-center">
+                        <Trophy className="h-4 w-4 mr-2 text-muted-foreground" />
+                        Dons (Donations)
+                      </h4>
+                      {timePerDonationsTiers.map((tier, index) => (
+                        <div key={index} className="flex items-end gap-2">
+                          <div className="flex-1">
+                            <Label htmlFor={`donations_amount_${index}`}>Montant du Don (€)</Label>
+                            <Input
+                              id={`donations_amount_${index}`}
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={tier.amount}
+                              onChange={(e) => updateTier('donations', index, 'amount', parseFloat(e.target.value) || 0)}
+                            />
+                          </div>
+                          <div className="flex-1">
+                            <Label htmlFor={`donations_time_${index}`}>Temps ajouté (secondes)</Label>
+                            <Input
+                              id={`donations_time_${index}`}
+                              type="number"
+                              min="0"
+                              value={tier.time}
+                              onChange={(e) => updateTier('donations', index, 'time', parseInt(e.target.value) || 0)}
+                            />
+                          </div>
+                          <Button variant="destructive" size="icon" onClick={() => removeTier('donations', index)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))}
+                      <Button variant="outline" onClick={() => addTier('donations')}>
+                        <PlusCircle className="h-4 w-4 mr-2" />
+                        Ajouter un palier de Don
+                      </Button>
                       <p className="text-sm text-muted-foreground mt-1">
-                        Secondes ajoutées pour chaque bit (ex: 1 pour 1s par bit, 0.1 pour 1s par 10 bits).
-                      </p>
-                    </div>
-                    <div>
-                      <Label htmlFor="time_per_gift">Temps ajouté par abonnement cadeau (secondes)</Label>
-                      <Input
-                        id="time_per_gift"
-                        type="number"
-                        min="0"
-                        value={timePerGift}
-                        onChange={(e) => setTimePerGift(parseInt(e.target.value) || 0)}
-                      />
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Secondes ajoutées pour chaque abonnement offert.
+                        Définissez des paliers de dons et le temps correspondant à ajouter.
                       </p>
                     </div>
                   </CardContent>

@@ -4,6 +4,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { UniversalTimer } from '@/components/UniversalTimer';
+import { useRealtimeTimer } from '@/hooks/useRealtimeTimer';
+import { useTimeAdditions } from '@/hooks/useTimeAdditions';
 import { 
   Clock, 
   Trophy, 
@@ -76,6 +78,42 @@ export default function StreamOverlay() {
   const [config, setConfig] = useState<OverlayConfig>(defaultConfig);
   const [connectionStatus, setConnectionStatus] = useState<'connected' | 'connecting' | 'disconnected'>('connecting');
   const [error, setError] = useState<string | null>(null);
+  const [realtimeTimeAdded, setRealtimeTimeAdded] = useState(0);
+
+  // Utilisation des hooks pour l'écoute temps réel
+  const { timeAdditions, addTimeAddition } = useTimeAdditions(id);
+  
+  const { isConnected } = useRealtimeTimer({
+    streamerId: id,
+    onTimeAdded: (timeAddition) => {
+      console.log('Nouvel événement Twitch reçu:', timeAddition);
+      
+      // Ajouter à la liste des time_additions
+      addTimeAddition(timeAddition);
+      
+      // Mettre à jour le temps total en temps réel
+      setRealtimeTimeAdded(prev => prev + (timeAddition.time_seconds || 0));
+      
+      // Notification visuelle (optionnel)
+      if (timeAddition.player_name) {
+        console.log(`+${timeAddition.time_seconds}s ajoutés par ${timeAddition.player_name} (${timeAddition.event_type})`);
+      }
+      
+      setLastUpdate(new Date());
+    },
+    onStreamerUpdate: (updatedStreamer) => {
+      console.log('Streamer mis à jour:', updatedStreamer);
+      setStreamer(prev => ({
+        ...prev,
+        ...updatedStreamer,
+        status: updatedStreamer.status as 'offline' | 'live' | 'paused' | 'ended',
+        total_elapsed_time: updatedStreamer.total_elapsed_time || 0,
+        total_clicks: updatedStreamer.total_clicks || 0
+      }));
+      setConnectionStatus('connected');
+      setError(null);
+    }
+  });
 
   // Fonction pour récupérer les données du streamer
   const fetchStreamerData = async () => {
@@ -106,6 +144,10 @@ export default function StreamOverlay() {
           total_clicks: streamerData.total_clicks || 0
         };
         setStreamer(mappedData);
+        
+        // Initialiser le temps temps réel avec la valeur de la base
+        setRealtimeTimeAdded(streamerData.total_time_added || 0);
+        
         setConnectionStatus('connected');
         setError(null);
         await fetchPlayerStats();
@@ -213,40 +255,13 @@ export default function StreamOverlay() {
     loadOverlayConfig();
     fetchStreamerData();
     
-    // Mise à jour périodique plus fréquente
+    // Mise à jour périodique moins fréquente (les événements temps réel gèrent les mises à jour instantanées)
     const interval = setInterval(() => {
       setLastUpdate(new Date());
-      fetchStreamerData();
-    }, 3000); // Toutes les 3 secondes
+      fetchPlayerStats(); // Seulement les stats joueurs
+    }, 10000); // Toutes les 10 secondes au lieu de 3
     
-    // Écoute des changements temps réel
-    const streamerChannel = supabase
-      .channel(`public:streamers:id=eq.${id}`)
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'streamers', filter: `id=eq.${id}` },
-        (payload) => {
-          console.log('Real-time streamer update:', payload.new);
-          setStreamer(payload.new as StreamerData);
-          setConnectionStatus('connected');
-          setError(null);
-        }
-      )
-      .subscribe();
-
-    const statsChannel = supabase
-      .channel(`public:subathon_stats:streamer_id=eq.${id}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'subathon_stats', filter: `streamer_id=eq.${id}` },
-        () => {
-          console.log('Real-time stats update detected');
-          fetchPlayerStats();
-        }
-      )
-      .subscribe();
-    
-    // Tentative d'écoute de la config overlay (peut échouer si la table n'existe pas)
+    // Écoute de la config overlay seulement
     let overlayConfigChannel;
     try {
       overlayConfigChannel = supabase
@@ -268,13 +283,34 @@ export default function StreamOverlay() {
 
     return () => {
       clearInterval(interval);
-      supabase.removeChannel(streamerChannel);
-      supabase.removeChannel(statsChannel);
       if (overlayConfigChannel) {
         supabase.removeChannel(overlayConfigChannel);
       }
     };
   }, [id]);
+
+  // Synchroniser le temps total avec les événements temps réel
+  useEffect(() => {
+    if (streamer && timeAdditions.length > 0) {
+      // Calculer le temps total depuis la base + les ajouts temps réel non synchronisés
+      const baseTime = streamer.total_time_added || 0;
+      const recentAdditions = timeAdditions
+        .filter(addition => new Date(addition.created_at) > new Date(streamer.updated_at || streamer.created_at))
+        .reduce((sum, addition) => sum + (addition.time_seconds || 0), 0);
+      
+      setRealtimeTimeAdded(baseTime + recentAdditions);
+    }
+  }, [timeAdditions, streamer]);
+
+  // Mettre à jour le status de connexion basé sur les hooks temps réel
+  useEffect(() => {
+    if (isConnected) {
+      setConnectionStatus('connected');
+      setError(null);
+    } else if (connectionStatus === 'connected') {
+      setConnectionStatus('connecting');
+    }
+  }, [isConnected, connectionStatus]);
 
   // Classes utilitaires
   const getPositionClasses = (position: string) => {
@@ -348,7 +384,7 @@ export default function StreamOverlay() {
     );
   }
 
-  // Calculs pour l'affichage
+  // Calculs pour l'affichage - utiliser le temps temps réel
   const totalParticipants = stats.length;
   const totalWins = stats.reduce((sum, stat) => sum + (stat.games_won || 0), 0);
   const progressPercent = Math.min(100, (streamer.current_clicks / Math.max(1, streamer.clicks_required)) * 100);
@@ -375,7 +411,7 @@ export default function StreamOverlay() {
                   streamStartedAt={streamer.stream_started_at}
                   pauseStartedAt={streamer.pause_started_at}
                   initialDuration={streamer.initial_duration || 7200}
-                  totalTimeAdded={streamer.total_time_added || 0}
+                  totalTimeAdded={realtimeTimeAdded} // Utiliser le temps temps réel
                   totalElapsedTime={streamer.total_elapsed_time || 0}
                   formatStyle="colon"
                   showStatus={false}
@@ -467,7 +503,7 @@ export default function StreamOverlay() {
           </div>
         )}
 
-        {/* Temps ajouté total */}
+        {/* Temps ajouté total - Utiliser le temps temps réel */}
         {config.showTimeAdded && (
           <div className="bg-black/95 backdrop-blur-md border-2 border-green-500/50 rounded-xl p-5 text-white shadow-xl text-center">
             <div className="flex items-center justify-center mb-3">
@@ -475,10 +511,10 @@ export default function StreamOverlay() {
               <span className="font-bold text-lg">Temps Gagné</span>
             </div>
             <div className="text-4xl font-bold text-green-400 font-mono mb-2">
-              +{Math.floor((streamer.total_time_added || 0) / 3600)}h {Math.floor(((streamer.total_time_added || 0) % 3600) / 60)}m
+              +{Math.floor(realtimeTimeAdded / 3600)}h {Math.floor((realtimeTimeAdded % 3600) / 60)}m
             </div>
             <div className="text-sm text-gray-400">
-              {streamer.total_time_added || 0} secondes au total
+              {realtimeTimeAdded} secondes au total
             </div>
           </div>
         )}
@@ -545,6 +581,10 @@ export default function StreamOverlay() {
         
         <div className="text-xs text-gray-500 mt-1 px-3">
           Stats: {stats.length} joueurs
+        </div>
+
+        <div className="text-xs text-gray-500 mt-1 px-3">
+          Temps réel: {isConnected ? 'ON' : 'OFF'}
         </div>
       </div>
 
