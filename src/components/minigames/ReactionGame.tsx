@@ -74,7 +74,7 @@ export function ReactionGame({ onWin, onLose }: ReactionGameProps) {
     setTargets([]);
     setScore(0);
     setMisses(0);
-    setTimeLeft(30);
+    setTimeLeft(10);
     setIsPlaying(true);
     setGameOver(false);
     setMessage('Cliquez rapidement sur les cercles !');
@@ -199,7 +199,7 @@ export function ReactionGame({ onWin, onLose }: ReactionGameProps) {
         )}
 
         <div className="text-center text-sm text-muted-foreground">
-          <p>Objectif: 200 points en 30 secondes</p>
+          <p>Objectif: 200 points en 10 secondes</p>
           <p>Points: Réaction &lt;500ms = 20pts, &lt;800ms = 15pts, autres = 10pts</p>
         </div>
 
