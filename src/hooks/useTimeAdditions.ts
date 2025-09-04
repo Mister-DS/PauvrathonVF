@@ -30,7 +30,7 @@ export function useTimeAdditions(streamerId?: string) {
           return;
         }
 
-        setTimeAdditions(data || []);
+        setTimeAdditions((data as TimeAddition[]) || []);
         setError(null);
       } catch (err) {
         console.error('Erreur inattendue:', err);

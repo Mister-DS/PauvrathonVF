@@ -249,9 +249,9 @@ export interface TimeAddition {
   id: string;
   streamer_id: string;
   event_type: string;
-  event_data: Record<string, any>;
+  event_data: any; // Use any instead of Record<string, any> for Supabase compatibility
   time_seconds: number;
-  player_name?: string;
+  player_name?: string | null;
   created_at: string;
-  processed_at?: string;
+  processed_at?: string | null;
 }
