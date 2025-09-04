@@ -965,13 +965,15 @@ export default function AdminPanel() {
                       >
                         <div className="flex-1">
                           <p className="font-medium">
-                            {minigame.name || minigame.component_code.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                            {minigame.component_code.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                           </p>
                           <p className="text-sm text-muted-foreground">
                             {minigame.description || "Pas de description"}
                           </p>
                           <p className="text-xs text-muted-foreground mt-1">
-                            Code: {minigame.component_code}
+                            Code: {minigame.component_code} • 
+                            Chances: {minigame.max_chances || 3} • 
+                            Essais: {minigame.max_attempts || 12}
                           </p>
                         </div>
                         <div className="flex items-center space-x-2">

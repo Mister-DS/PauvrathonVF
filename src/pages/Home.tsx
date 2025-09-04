@@ -19,7 +19,6 @@ import {
   Star,
   ArrowRight,
   Sparkles,
-  Play,
   TrendingUp
 } from "lucide-react";
 
@@ -56,11 +55,11 @@ export default function Home() {
       
       <main className="flex-1 relative z-10">
         {/* Hero Section */}
-        <section className="relative py-20 lg:py-32 min-h-screen flex items-center">
+        <section className="relative py-16 lg:py-24 min-h-screen flex items-center">
           <ResponsiveLayout>
             <div className={`text-center transition-all duration-1000 ${isLoaded ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}`}>
               {/* Badge d'intro */}
-              <div className="mb-8">
+              <div className="mb-6">
                 <Badge className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-4 py-2 text-sm font-medium animate-pulse">
                   <Sparkles className="w-4 h-4 mr-2" />
                   Révolutionnez votre streaming
@@ -68,7 +67,7 @@ export default function Home() {
               </div>
 
               {/* Titre principal */}
-              <div className="mb-8">
+              <div className="mb-6">
                 <h1 className="text-6xl md:text-8xl lg:text-9xl font-black mb-4 bg-gradient-to-r from-white via-purple-200 to-pink-300 bg-clip-text text-transparent leading-tight">
                   Pauvrathon
                 </h1>
@@ -77,7 +76,7 @@ export default function Home() {
                 </div>
               </div>
               
-              <p className="text-xl md:text-2xl text-gray-300 mb-12 max-w-4xl mx-auto leading-relaxed">
+              <p className="text-xl md:text-2xl text-gray-300 mb-8 max-w-4xl mx-auto leading-relaxed">
                 La plateforme interactive révolutionnaire où{" "}
                 <span className="text-transparent bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text font-semibold">
                   vos clics prolongent le stream
@@ -85,7 +84,7 @@ export default function Home() {
                 {" "}! Participez aux mini-jeux et faites durer l'aventure de vos streamers préférés.
               </p>
               
-              <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-16">
+              <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
                 {user ? (
                   <Link to="/decouverte" className="group">
                     <Button size="lg" className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-8 py-4 text-lg font-semibold rounded-xl shadow-2xl hover:shadow-purple-500/25 transform hover:scale-105 transition-all duration-300">
@@ -103,11 +102,6 @@ export default function Home() {
                     </Button>
                   </Link>
                 )}
-                
-                <Button variant="outline" size="lg" className="border-2 border-purple-400 text-purple-300 hover:bg-purple-400 hover:text-white px-8 py-4 text-lg font-semibold rounded-xl transition-all duration-300">
-                  <Play className="mr-2 h-5 w-5" />
-                  Voir la démo
-                </Button>
               </div>
 
               {/* Stats rapides */}
@@ -130,13 +124,13 @@ export default function Home() {
         </section>
 
         {/* Features Section */}
-        <section className="py-24 relative">
+        <section className="py-16 relative">
           <ResponsiveLayout>
-            <div className="text-center mb-20">
+            <div className="text-center mb-16">
               <Badge className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-4 py-2 text-sm font-medium mb-6">
                 Comment ça marche
               </Badge>
-              <h2 className="text-4xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
+              <h2 className="text-4xl md:text-6xl font-bold mb-4 bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
                 Simple comme un clic
               </h2>
               <p className="text-xl text-gray-400 max-w-2xl mx-auto">
@@ -191,14 +185,14 @@ export default function Home() {
         </section>
 
         {/* Process Section */}
-        <section className="py-24 relative">
+        <section className="py-16 relative">
           <div className="absolute inset-0 bg-gradient-to-r from-purple-900/20 to-pink-900/20 backdrop-blur-sm"></div>
           <ResponsiveLayout>
-            <div className="text-center mb-20 relative">
+            <div className="text-center mb-16 relative">
               <Badge className="bg-gradient-to-r from-green-600 to-teal-600 text-white px-4 py-2 text-sm font-medium mb-6">
                 Processus simplifié
               </Badge>
-              <h2 className="text-4xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
+              <h2 className="text-4xl md:text-6xl font-bold mb-4 bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
                 Votre parcours en 4 étapes
               </h2>
             </div>
@@ -226,7 +220,7 @@ export default function Home() {
         </section>
 
         {/* Impact Section */}
-        <section className="py-24">
+        <section className="py-16">
           <ResponsiveLayout>
             <div className="grid lg:grid-cols-3 gap-12 items-center">
               <div className="lg:col-span-2">
@@ -279,7 +273,7 @@ export default function Home() {
         </section>
 
         {/* CTA Section */}
-        <section className="py-24 relative overflow-hidden">
+        <section className="py-16 relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-br from-purple-900/30 via-pink-900/20 to-orange-900/30"></div>
           <ResponsiveLayout>
             <div className="text-center relative">
@@ -294,7 +288,7 @@ export default function Home() {
                 L'aventure commence maintenant
               </h2>
               
-              <p className="text-xl text-gray-300 mb-12 max-w-3xl mx-auto leading-relaxed">
+              <p className="text-xl text-gray-300 mb-8 max-w-3xl mx-auto leading-relaxed">
                 Ne regardez plus passivement. <span className="text-transparent bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text font-bold">Participez, influencez, transformez</span> l'expérience streaming avec Pauvrathon.
               </p>
               
