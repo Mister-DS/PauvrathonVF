@@ -361,29 +361,7 @@ export default function Discovery() {
               </div>
             </div>
 
-            {/* Section debug - plus détaillée */}
-            <div className="mb-4 p-4 bg-muted rounded-lg text-sm space-y-2">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p><strong>Données brutes:</strong></p>
-                  <p>• Streamers reçus: {streamers?.length || 0}</p>
-                  <p>• Loading: {loadingPauvrathon ? 'Oui' : 'Non'}</p>
-                  <p>• Utilisateur connecté: {user ? 'Oui' : 'Non'}</p>
-                </div>
-                <div>
-                  <p><strong>Après traitement:</strong></p>
-                  <p>• Streamers typés: {typedStreamers.length}</p>
-                  <p>• Streamers filtrés: {filteredStreamers.length}</p>
-                  <p>• Filter actuel: {filter}</p>
-                </div>
-              </div>
-              {streamers && streamers.length > 0 && (
-                <div className="mt-2 p-2 bg-background rounded text-xs">
-                  <p><strong>Premier streamer brut:</strong></p>
-                  <pre className="mt-1">{JSON.stringify(streamers[0], null, 2)}</pre>
-                </div>
-              )}
-            </div>
+
 
             {loadingPauvrathon ? (
               <LoadingSpinner />
