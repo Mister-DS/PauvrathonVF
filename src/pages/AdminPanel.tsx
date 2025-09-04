@@ -47,6 +47,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { max } from "date-fns";
 
 // Interfaces pour un typage plus précis
 interface DetailedStreamerRequest extends StreamerRequest {
@@ -385,12 +386,12 @@ export default function AdminPanel() {
 
       // Créer le nouveau mini-jeu SEULEMENT avec les colonnes qui existent
       const minigameData = {
-        name: newMinigameName,
         component_code: componentCode,
         description: newMinigameDescription || `Mini-jeu ${newMinigameName}`,
         is_active: true,
-        created_by: user.id
-        // Supprimé: max_chances et max_attempts car ils causent l'erreur 400
+        created_by: user.id,
+        max_chances: 3,
+        max_attempts: 12
       };
 
       console.log('Données à insérer:', minigameData);
