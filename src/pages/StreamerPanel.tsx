@@ -42,7 +42,8 @@ import {
   MoveVertical,
   Users,
   PlusCircle,
-  Trash2
+  Trash2,
+  Maximize
 } from 'lucide-react';
 
 interface StreamerSettings {
