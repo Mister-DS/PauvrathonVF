@@ -44,8 +44,8 @@ import {
   PlusCircle,
   Trash2,
   Maximize,
-  ChevronDown, // Import de l'icône ChevronDown
-  ChevronUp // Import de l'icône ChevronUp
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 
 interface StreamerSettings {
@@ -218,15 +218,15 @@ export default function StreamerPanel() {
   const [overlayUrl, setOverlayUrl] = useState('');
   const navigate = useNavigate();
 
-  // Nouveaux états pour gérer l'ouverture/fermeture des sections
+  // États pour gérer l'ouverture/fermeture des sections
   const [openSections, setOpenSections] = useState({
     timeConfig: true,
     minigames: true,
     eventTimeGains: true,
     overlayConfig: true,
-    statisticsGeneral: true, // Ajouté pour les stats générales
-    topContributors: true, // Ajouté pour le top contributeurs
-    streamInfo: true, // Ajouté pour les infos du stream
+    statisticsGeneral: true,
+    topContributors: true,
+    streamInfo: true,
     links: true,
   });
 
@@ -889,12 +889,11 @@ export default function StreamerPanel() {
                       <Clock className="mr-2 h-5 w-5" />
                       Configuration du temps
                     </CardTitle>
-                    {/* Peut-être une section séparée pour l'overlay si tu veux */}
-<Button
-  variant="ghost"
-  size="icon"
-  onClick={() => toggleSection('links')}
->
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => toggleSection('timeConfig')}
+                    >
                       {openSections.timeConfig ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                     </Button>
                   </CardHeader>
@@ -1782,7 +1781,7 @@ export default function StreamerPanel() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => toggleSection('links')} {/* Peut-être une section séparée pour l'overlay si tu veux */}
+                        onClick={() => toggleSection('links')}
                       >
                         {openSections.links ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                       </Button>

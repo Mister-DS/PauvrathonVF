@@ -12,6 +12,8 @@ import { minigameComponents } from '@/components/minigames';
 import { TwitchPlayer } from '@/components/TwitchPlayer';
 import { Navigation } from '@/components/Navigation';
 import { UniversalTimer } from '@/components/UniversalTimer';
+import { useRealtimeTimer } from '@/hooks/useRealtimeTimer';
+import { useTimeAdditions } from '@/hooks/useTimeAdditions';
 import { toast } from '@/hooks/use-toast';
 import { Streamer } from '@/types';
 import {
@@ -25,6 +27,7 @@ const PauvrathonPage = () => {
   const [streamer, setStreamer] = useState<Streamer | null>(null);
   const [loading, setLoading] = useState(true);
   const [isStreamerOwner, setIsStreamerOwner] = useState(false);
+  const [realtimeTimeAdded, setRealtimeTimeAdded] = useState(0);
 
   // États pour le jeu
   const [isGameActive, setIsGameActive] = useState(false);
@@ -47,6 +50,58 @@ const PauvrathonPage = () => {
   const [isGlobalCooldownActive, setIsGlobalCooldownActive] = useState(false);
   const [globalCooldownRemaining, setGlobalCooldownRemaining] = useState(0);
   const [cooldownSeconds, setCooldownSeconds] = useState(60);
+
+  // Utilisation des hooks pour l'écoute temps réel
+  const { timeAdditions, addTimeAddition } = useTimeAdditions(id);
+  
+  const { isConnected } = useRealtimeTimer({
+    streamerId: id,
+    onTimeAdded: (timeAddition) => {
+      console.log('Nouvel événement Twitch reçu:', timeAddition);
+      
+      // Ajouter à la liste des time_additions
+      addTimeAddition(timeAddition);
+      
+      // Mettre à jour le temps total en temps réel
+      setRealtimeTimeAdded(prev => prev + (timeAddition.time_seconds || 0));
+      
+      // Notification visuelle
+      if (timeAddition.player_name && timeAddition.event_type) {
+        let eventText = '';
+        switch (timeAddition.event_type) {
+          case 'channel.subscribe':
+            eventText = 'Nouvel abonnement';
+            break;
+          case 'channel.cheer':
+            eventText = 'Donation de bits';
+            break;
+          case 'channel.subscription.gift':
+            eventText = 'Abonnements offerts';
+            break;
+          default:
+            eventText = 'Événement Twitch';
+        }
+        
+        toast({
+          title: `${eventText} !`,
+          description: `${timeAddition.player_name} a ajouté ${timeAddition.time_seconds}s au Pauvrathon !`,
+          duration: 5000,
+        });
+      }
+    },
+    onStreamerUpdate: (updatedStreamer) => {
+      console.log('Streamer mis à jour:', updatedStreamer);
+      setStreamer(prev => {
+        if (!prev) return updatedStreamer;
+        return {
+          ...prev,
+          ...updatedStreamer,
+          profile: updatedStreamer.profile || prev.profile,
+          profiles: updatedStreamer.profiles || prev.profiles,
+        };
+      });
+    }
+  });
 
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
@@ -369,6 +424,9 @@ const PauvrathonPage = () => {
       setStreamer(data as Streamer);
       setIsStreamerOwner(user?.id === data.user_id);
 
+      // Initialiser le temps temps réel avec la valeur de la base
+      setRealtimeTimeAdded(data.total_time_added || 0);
+
       const initialConfig = JSON.stringify({
         time_mode: data.time_mode,
         time_increment: data.time_increment,
@@ -430,6 +488,19 @@ const PauvrathonPage = () => {
     }
   }, [navigate, user]);
 
+  // Synchroniser le temps total avec les événements temps réel
+  useEffect(() => {
+    if (streamer && timeAdditions.length > 0) {
+      // Calculer le temps total depuis la base + les ajouts temps réel non synchronisés
+      const baseTime = streamer.total_time_added || 0;
+      const recentAdditions = timeAdditions
+        .filter(addition => new Date(addition.created_at) > new Date(streamer.updated_at || streamer.created_at))
+        .reduce((sum, addition) => sum + (addition.time_seconds || 0), 0);
+      
+      setRealtimeTimeAdded(baseTime + recentAdditions);
+    }
+  }, [timeAdditions, streamer]);
+
   useEffect(() => {
     if (user && id) {
       const storedEndTime = localStorage.getItem(`pauvrathon_cooldown_end_${id}_${user.id}`);
@@ -465,6 +536,7 @@ const PauvrathonPage = () => {
     if (id) {
       fetchStreamer(id);
 
+      // Abonnement temps réel simplifié - le useRealtimeTimer gère déjà les mises à jour importantes
       const channel = supabase
         .channel(`public:streamers:id=eq.${id}`)
         .on(
@@ -580,6 +652,12 @@ const PauvrathonPage = () => {
                 <CardTitle className="flex items-center">
                   <Clock className="mr-2 h-5 w-5" />
                   Statistiques en direct
+                  {isConnected && (
+                    <div className="ml-auto flex items-center text-xs text-green-600">
+                      <div className="w-2 h-2 bg-green-500 rounded-full mr-1 animate-pulse"></div>
+                      Live
+                    </div>
+                  )}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -591,14 +669,14 @@ const PauvrathonPage = () => {
                       streamStartedAt={streamer.stream_started_at}
                       pauseStartedAt={streamer.pause_started_at}
                       initialDuration={streamer.initial_duration || 7200}
-                      totalTimeAdded={streamer.total_time_added || 0}
+                      totalTimeAdded={realtimeTimeAdded} // Utiliser le temps temps réel
                       totalElapsedTime={streamer.total_elapsed_time || 0}
                     />
                   </div>
                   <div className="flex justify-between items-center">
                     <p className="text-sm text-muted-foreground">Temps ajouté</p>
                     <span className="text-sm font-semibold">
-                      {Math.floor((streamer.total_time_added || 0) / 60)} minutes
+                      {Math.floor(realtimeTimeAdded / 60)} minutes
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
@@ -795,9 +873,26 @@ const PauvrathonPage = () => {
                       Temps total ajouté :
                     </p>
                     <span className="text-sm font-semibold">
-                      {Math.floor((streamer.total_time_added || 0) / 60)}m {(streamer.total_time_added || 0) % 60}s
+                      {Math.floor(realtimeTimeAdded / 60)}m {realtimeTimeAdded % 60}s
                     </span>
                   </div>
+                  {timeAdditions.length > 0 && (
+                    <div className="mt-4 p-3 bg-muted/50 rounded-lg">
+                      <p className="text-xs text-muted-foreground mb-2">Derniers événements Twitch :</p>
+                      <div className="space-y-1">
+                        {timeAdditions.slice(0, 3).map((addition, index) => (
+                          <div key={addition.id} className="flex justify-between text-xs">
+                            <span className="truncate">
+                              {addition.player_name || 'Anonyme'}
+                            </span>
+                            <span className="text-green-600">
+                              +{addition.time_seconds}s
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -816,6 +911,7 @@ const PauvrathonPage = () => {
                 <p>• Vous avez 12 essais par chance et 3 chances maximum</p>
                 <p>• Vos clics se remettent à zéro après chaque jeu (victoire ou échec)</p>
                 <p>• Tous les viewers contribuent au temps total du Pauvrathon</p>
+                <p>• Les événements Twitch (subs, bits, etc.) ajoutent automatiquement du temps</p>
               </CardContent>
             </Card>
           </div>
