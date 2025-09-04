@@ -48,6 +48,17 @@ export function SnakeGame({ onWin, onLose }: SnakeGameProps) {
     return snakeBody.some(segment => segment.x === head.x && segment.y === head.y);
   }, []);
 
+  // Changer direction (fonction séparée pour éviter les conflits)
+  const changeDirection = useCallback((newDirection: Position) => {
+    if (!isPlaying || gameOver) return;
+    
+    // Empêcher de revenir sur soi-même
+    if (direction.x !== 0 && newDirection.x !== 0) return;
+    if (direction.y !== 0 && newDirection.y !== 0) return;
+    
+    setDirection(newDirection);
+  }, [direction, isPlaying, gameOver]);
+
   // Logique de jeu
   const gameLoop = useCallback(() => {
     if (!isPlaying || gameOver) return;
@@ -63,7 +74,7 @@ export function SnakeGame({ onWin, onLose }: SnakeGameProps) {
       if (checkCollision(newHead, currentSnake)) {
         setGameOver(true);
         setIsPlaying(false);
-        setMessage('Game Over ! Le serpent s\'est cogné 😔');
+        setMessage('Game Over ! Le serpent s\'est cogné');
         setTimeout(() => onLose(), 1500);
         return currentSnake;
       }
@@ -77,7 +88,7 @@ export function SnakeGame({ onWin, onLose }: SnakeGameProps) {
           if (newScore >= 100) {
             setGameOver(true);
             setIsPlaying(false);
-            setMessage('Félicitations ! Score maximum atteint ! 🎉');
+            setMessage('Félicitations ! Score maximum atteint !');
             setTimeout(() => onWin(newScore), 1500);
           }
           return newScore;
@@ -91,25 +102,32 @@ export function SnakeGame({ onWin, onLose }: SnakeGameProps) {
     });
   }, [direction, food, isPlaying, gameOver, checkCollision, generateFood, onWin, onLose]);
 
-  // Gestion des touches
+  // Gestion des touches clavier
   const handleKeyPress = useCallback((e: KeyboardEvent) => {
+    e.preventDefault(); // Empêcher le comportement par défaut
+    
     if (!isPlaying || gameOver) return;
 
     switch (e.key) {
       case 'ArrowUp':
-        if (direction.y === 0) setDirection({ x: 0, y: -1 });
+        changeDirection({ x: 0, y: -1 });
         break;
       case 'ArrowDown':
-        if (direction.y === 0) setDirection({ x: 0, y: 1 });
+        changeDirection({ x: 0, y: 1 });
         break;
       case 'ArrowLeft':
-        if (direction.x === 0) setDirection({ x: -1, y: 0 });
+        changeDirection({ x: -1, y: 0 });
         break;
       case 'ArrowRight':
-        if (direction.x === 0) setDirection({ x: 1, y: 0 });
+        changeDirection({ x: 1, y: 0 });
         break;
     }
-  }, [direction, isPlaying, gameOver]);
+  }, [changeDirection, isPlaying, gameOver]);
+
+  // Gestion des boutons tactiles
+  const handleTouchDirection = (newDirection: Position) => {
+    changeDirection(newDirection);
+  };
 
   // Démarrer le jeu
   const startGame = () => {
@@ -119,7 +137,7 @@ export function SnakeGame({ onWin, onLose }: SnakeGameProps) {
     setScore(0);
     setIsPlaying(true);
     setGameOver(false);
-    setMessage('Mangez la nourriture rouge ! 🍎');
+    setMessage('Mangez la nourriture rouge !');
   };
 
   // Effet pour le game loop
@@ -173,7 +191,13 @@ export function SnakeGame({ onWin, onLose }: SnakeGameProps) {
         </div>
 
         <div className="flex justify-center">
-          <div className="grid grid-cols-15 gap-0 border-2 border-gray-300 p-2 bg-white" style={{gridTemplateColumns: `repeat(${BOARD_SIZE}, 1fr)`}}>
+          <div 
+            className="grid gap-0 border-2 border-gray-300 p-2 bg-white inline-block" 
+            style={{
+              gridTemplateColumns: `repeat(${BOARD_SIZE}, 1fr)`,
+              gridTemplateRows: `repeat(${BOARD_SIZE}, 1fr)`
+            }}
+          >
             {Array.from({ length: BOARD_SIZE }, (_, y) =>
               Array.from({ length: BOARD_SIZE }, (_, x) => renderCell(x, y))
             )}
@@ -186,8 +210,9 @@ export function SnakeGame({ onWin, onLose }: SnakeGameProps) {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => handleKeyPress({ key: 'ArrowUp' } as KeyboardEvent)}
+            onClick={() => handleTouchDirection({ x: 0, y: -1 })}
             disabled={!isPlaying || gameOver}
+            className="h-12 text-xl"
           >
             ↑
           </Button>
@@ -195,8 +220,9 @@ export function SnakeGame({ onWin, onLose }: SnakeGameProps) {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => handleKeyPress({ key: 'ArrowLeft' } as KeyboardEvent)}
+            onClick={() => handleTouchDirection({ x: -1, y: 0 })}
             disabled={!isPlaying || gameOver}
+            className="h-12 text-xl"
           >
             ←
           </Button>
@@ -204,8 +230,9 @@ export function SnakeGame({ onWin, onLose }: SnakeGameProps) {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => handleKeyPress({ key: 'ArrowRight' } as KeyboardEvent)}
+            onClick={() => handleTouchDirection({ x: 1, y: 0 })}
             disabled={!isPlaying || gameOver}
+            className="h-12 text-xl"
           >
             →
           </Button>
@@ -213,8 +240,9 @@ export function SnakeGame({ onWin, onLose }: SnakeGameProps) {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => handleKeyPress({ key: 'ArrowDown' } as KeyboardEvent)}
+            onClick={() => handleTouchDirection({ x: 0, y: 1 })}
             disabled={!isPlaying || gameOver}
+            className="h-12 text-xl"
           >
             ↓
           </Button>

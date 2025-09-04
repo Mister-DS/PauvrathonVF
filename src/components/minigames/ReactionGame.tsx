@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -28,8 +28,23 @@ export function ReactionGame({ onWin, onLose }: ReactionGameProps) {
   const targetIdRef = useRef(0);
   const reactionTimesRef = useRef<number[]>([]);
 
+  // Fonctions de fin de jeu avec useCallback pour éviter les re-renders
+  const handleWin = useCallback((finalScore: number) => {
+    setIsPlaying(false);
+    setGameOver(true);
+    setMessage(`Excellent ! Score final: ${finalScore} points !`);
+    setTimeout(() => onWin(finalScore), 1500);
+  }, [onWin]);
+
+  const handleLose = useCallback((finalScore: number, reason: string) => {
+    setIsPlaying(false);
+    setGameOver(true);
+    setMessage(reason);
+    setTimeout(() => onLose(), 1500);
+  }, [onLose]);
+
   // Générer une nouvelle cible
-  const spawnTarget = () => {
+  const spawnTarget = useCallback(() => {
     if (!gameAreaRef.current || !isPlaying) return;
 
     const rect = gameAreaRef.current.getBoundingClientRect();
@@ -54,7 +69,7 @@ export function ReactionGame({ onWin, onLose }: ReactionGameProps) {
         return updated;
       });
     }, 2000);
-  };
+  }, [isPlaying]);
 
   // Gérer le clic sur une cible
   const handleTargetClick = (target: Target) => {
@@ -83,31 +98,31 @@ export function ReactionGame({ onWin, onLose }: ReactionGameProps) {
     setAverageReactionTime(0);
   };
 
-  // Timer du jeu
+  // Timer du jeu - CORRIGÉ
   useEffect(() => {
     if (!isPlaying || gameOver) return;
 
     const timer = setInterval(() => {
       setTimeLeft(prev => {
-        if (prev <= 1) {
-          setIsPlaying(false);
-          setGameOver(true);
-          
-          if (score >= 200) {
-            setMessage(`Excellent ! Score final: ${score} points ! 🎉`);
-            setTimeout(() => onWin(score), 1500);
-          } else {
-            setMessage(`Temps écoulé ! Score final: ${score} points`);
-            setTimeout(() => onLose(), 1500);
-          }
+        const newTime = prev - 1;
+        if (newTime <= 0) {
+          // Récupérer le score actuel via un callback
+          setScore(currentScore => {
+            if (currentScore >= 200) {
+              handleWin(currentScore);
+            } else {
+              handleLose(currentScore, `Temps écoulé ! Score final: ${currentScore} points`);
+            }
+            return currentScore;
+          });
           return 0;
         }
-        return prev - 1;
+        return newTime;
       });
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [isPlaying, gameOver, score, onWin, onLose]);
+  }, [isPlaying, gameOver, handleWin, handleLose]); // Dépendances simplifiées
 
   // Apparition des cibles
   useEffect(() => {
@@ -118,17 +133,17 @@ export function ReactionGame({ onWin, onLose }: ReactionGameProps) {
     }, 800);
 
     return () => clearInterval(spawnInterval);
-  }, [isPlaying, gameOver]);
+  }, [isPlaying, gameOver, spawnTarget]);
 
   // Vérifier les échecs
   useEffect(() => {
-    if (misses >= 10) {
-      setIsPlaying(false);
-      setGameOver(true);
-      setMessage(`Trop de ratés ! Score final: ${score} points 😔`);
-      setTimeout(() => onLose(), 1500);
+    if (misses >= 10 && isPlaying) {
+      setScore(currentScore => {
+        handleLose(currentScore, `Trop de ratés ! Score final: ${currentScore} points`);
+        return currentScore;
+      });
     }
-  }, [misses, score, onLose]);
+  }, [misses, isPlaying, handleLose]);
 
   return (
     <Card className="w-full max-w-2xl mx-auto">
@@ -145,7 +160,7 @@ export function ReactionGame({ onWin, onLose }: ReactionGameProps) {
             <p className="text-xs text-muted-foreground">Points</p>
           </div>
           <div>
-            <p className="text-lg font-semibold">{timeLeft}s</p>
+            <p className="text-lg font-semibold text-blue-600">{timeLeft}s</p>
             <p className="text-xs text-muted-foreground">Temps</p>
           </div>
           <div>
@@ -166,11 +181,11 @@ export function ReactionGame({ onWin, onLose }: ReactionGameProps) {
           {targets.map(target => (
             <div
               key={target.id}
-              className="absolute w-10 h-10 bg-red-500 rounded-full cursor-pointer hover:bg-red-400 transition-all duration-100 hover:scale-110 animate-pulse shadow-lg"
+              className="absolute w-10 h-10 bg-red-500 rounded-full cursor-pointer hover:bg-red-400 transition-all duration-100 hover:scale-110 shadow-lg"
               style={{
                 left: target.x - 20,
                 top: target.y - 20,
-                animation: 'pulse 0.5s ease-in-out infinite'
+                animation: 'pulse 0.8s ease-in-out infinite'
               }}
               onClick={() => handleTargetClick(target)}
             />
@@ -181,6 +196,14 @@ export function ReactionGame({ onWin, onLose }: ReactionGameProps) {
               <p className="text-gray-500 text-center">
                 La zone de jeu apparaîtra ici<br/>
                 Cliquez sur "Commencer" pour jouer !
+              </p>
+            </div>
+          )}
+
+          {isPlaying && targets.length === 0 && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <p className="text-gray-400 text-sm">
+                Attendez l'apparition des cibles...
               </p>
             </div>
           )}
@@ -199,8 +222,9 @@ export function ReactionGame({ onWin, onLose }: ReactionGameProps) {
         )}
 
         <div className="text-center text-sm text-muted-foreground">
-          <p>Objectif: 100 points en 10 secondes</p>
+          <p>Objectif: 200 points en 30 secondes</p>
           <p>Points: Réaction &lt;500ms = 20pts, &lt;800ms = 15pts, autres = 10pts</p>
+          <p>Maximum 10 ratés autorisés</p>
         </div>
 
         <Button 

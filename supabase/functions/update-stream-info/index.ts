@@ -6,6 +6,40 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Fonction pour configurer EventSub automatiquement
+async function setupEventSubForStreamer(twitchId: string) {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    
+    console.log(`🚀 Configuration automatique EventSub pour streamer ${twitchId}`);
+    
+    const response = await fetch(`${supabaseUrl}/functions/v1/setup-twitch-eventsub`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+      },
+      body: JSON.stringify({
+        action: 'setup',
+        broadcasterUserId: twitchId
+      }),
+    });
+
+    const result = await response.json();
+    
+    if (result.success) {
+      console.log(`✅ EventSub configuré automatiquement pour ${twitchId}:`, result.subscriptions);
+    } else {
+      console.error(`❌ Échec configuration EventSub pour ${twitchId}:`, result.error);
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('Erreur lors de la configuration EventSub automatique:', error);
+    return { success: false, error: error.message };
+  }
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -56,7 +90,7 @@ serve(async (req) => {
     // Get all streamers from database
     const { data: streamers, error: streamersError } = await supabase
       .from('streamers')
-      .select('id, twitch_id, is_live');
+      .select('id, twitch_id, is_live, status');
 
     if (streamersError) {
       throw streamersError;
@@ -120,16 +154,36 @@ serve(async (req) => {
 
     console.log(`📺 Found ${allStreamData.length} live streams`);
 
-    // Update streamers in database
+    // Update streamers in database and setup EventSub for newly live streamers
     let updatedCount = 0;
+    let eventSubSetupCount = 0;
     
     for (const streamer of streamers) {
       const twitchStream = allStreamData.find(stream => stream.user_id === streamer.twitch_id);
+      const isCurrentlyLive = !!twitchStream;
+      const wasLive = streamer.is_live || streamer.status === 'live';
       
+      // Déterminer le nouveau statut
+      let newStatus = streamer.status;
+      if (isCurrentlyLive && !wasLive) {
+        newStatus = 'live';
+        console.log(`🟢 ${streamer.twitch_id} vient de passer en live`);
+      } else if (!isCurrentlyLive && wasLive) {
+        newStatus = 'offline';
+        console.log(`🔴 ${streamer.twitch_id} n'est plus en live`);
+      }
+
       const updateData = {
-        is_live: !!twitchStream,
+        is_live: isCurrentlyLive,
+        status: newStatus,
         stream_title: twitchStream?.title || null,
       };
+
+      // Si le streamer vient de passer en live, ajouter les timestamps
+      if (isCurrentlyLive && !wasLive) {
+        updateData.stream_started_at = new Date().toISOString();
+        updateData.pause_started_at = null;
+      }
 
       const { error: updateError } = await supabase
         .from('streamers')
@@ -143,17 +197,30 @@ serve(async (req) => {
         if (twitchStream) {
           console.log(`✅ Updated ${streamer.twitch_id}: "${twitchStream.title}"`);
         }
+
+        // 🚀 NOUVEAU: Configuration automatique EventSub pour les nouveaux streams live
+        if (isCurrentlyLive && !wasLive && streamer.twitch_id) {
+          console.log(`🎯 Nouveau stream détecté, configuration EventSub...`);
+          const eventSubResult = await setupEventSubForStreamer(streamer.twitch_id);
+          if (eventSubResult.success) {
+            eventSubSetupCount++;
+          }
+        }
       }
     }
 
     console.log(`🎉 Updated ${updatedCount} streamers successfully`);
+    if (eventSubSetupCount > 0) {
+      console.log(`🔔 EventSub configuré pour ${eventSubSetupCount} nouveaux streams`);
+    }
 
     return new Response(
       JSON.stringify({ 
         message: 'Stream info updated successfully',
         updated: updatedCount,
         liveStreams: allStreamData.length,
-        totalStreamers: streamers.length
+        totalStreamers: streamers.length,
+        eventSubConfigured: eventSubSetupCount
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
