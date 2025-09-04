@@ -58,6 +58,7 @@ interface DetailedStreamerRequest extends StreamerRequest {
   };
 }
 
+// Liste des jeux prédéfinis mise à jour avec les nouveaux jeux
 const predefinedGames = [
   {
     id: "guess_number",
@@ -66,16 +67,40 @@ const predefinedGames = [
     description: "Les viewers doivent deviner le nombre mystère.",
   },
   {
-    id: "click_race",
-    component_code: "click_race", 
-    name: "Course aux clics",
-    description: "Le premier à cliquer 100 fois l'emporte.",
+    id: "memory_game",
+    component_code: "memory_game",
+    name: "Jeu de Mémoire",
+    description: "Trouvez toutes les paires de cartes correspondantes.",
   },
   {
-    id: "random_emote",
-    component_code: "random_emote",
-    name: "Émote aléatoire", 
-    description: "Le premier à poster l'émote du jour gagne.",
+    id: "tic_tac_toe",
+    component_code: "tic_tac_toe",
+    name: "Tic Tac Toe",
+    description: "Alignez 3 X pour gagner contre l'ordinateur.",
+  },
+  {
+    id: "simon_game",
+    component_code: "simon_game",
+    name: "Simon Game",
+    description: "Mémorisez et reproduisez la séquence de couleurs.",
+  },
+  {
+    id: "snake_game",
+    component_code: "snake_game",
+    name: "Snake Game",
+    description: "Dirigez le serpent pour manger la nourriture.",
+  },
+  {
+    id: "reaction_game",
+    component_code: "reaction_game",
+    name: "Jeu de Réflexes",
+    description: "Cliquez rapidement sur les cercles qui apparaissent.",
+  },
+  {
+    id: "hangman",
+    component_code: "hangman",
+    name: "Pendu",
+    description: "Devinez le mot mystère lettre par lettre.",
   },
 ];
 
@@ -370,6 +395,7 @@ export default function AdminPanel() {
     }
   };
 
+  // FONCTION CORRIGÉE - handleAddMinigame
   const handleAddMinigame = async () => {
     if (!newMinigameName.trim()) {
       toast({
@@ -383,7 +409,7 @@ export default function AdminPanel() {
     try {
       const componentCode = newMinigameName.toLowerCase().replace(/\s+/g, "_");
 
-      // Vérifier si le mini-jeu existe déjà
+      // Vérifier si le mini-jeu existe déjà 
       const { data: existingGame, error: existingError } = await supabase
         .from("minigames")
         .select("id")
@@ -403,18 +429,26 @@ export default function AdminPanel() {
         throw existingError;
       }
 
-      // Créer le nouveau mini-jeu avec la structure correcte
-      const { error } = await supabase.from("minigames").insert({
+      // Créer le nouveau mini-jeu SEULEMENT avec les colonnes qui existent
+      const minigameData = {
         name: newMinigameName,
         component_code: componentCode,
         description: newMinigameDescription || `Mini-jeu ${newMinigameName}`,
         is_active: true,
-        created_by: user.id,
-        max_chances: 3,
-        max_attempts: 12
-      });
+        created_by: user.id
+        // Supprimé: max_chances et max_attempts car ils causent l'erreur 400
+      };
 
-      if (error) throw error;
+      console.log('Données à insérer:', minigameData);
+
+      const { error } = await supabase
+        .from("minigames")
+        .insert([minigameData]); // Utilisation d'un tableau pour l'insertion
+
+      if (error) {
+        console.error('Erreur Supabase détaillée:', error);
+        throw error;
+      }
 
       toast({
         title: "Mini-jeu ajouté",
@@ -509,9 +543,10 @@ export default function AdminPanel() {
     }
   };
 
+  // FONCTION CORRIGÉE - handleAddPredefinedGame
   const handleAddPredefinedGame = async (game: typeof predefinedGames[0]) => {
     try {
-      // Vérifier si le jeu existe déjà
+      // Vérifier si le jeu existe déjà 
       const { data: existingGame } = await supabase
         .from("minigames")
         .select("id")
@@ -527,17 +562,26 @@ export default function AdminPanel() {
         return;
       }
 
-      const { error } = await supabase.from("minigames").insert({
+      // Données simplifiées pour éviter l'erreur 400
+      const minigameData = {
         name: game.name,
         component_code: game.component_code,
         description: game.description,
         is_active: true,
-        created_by: user.id,
-        max_chances: 3,
-        max_attempts: 12
-      });
+        created_by: user.id
+        // Supprimé: max_chances et max_attempts
+      };
 
-      if (error) throw error;
+      console.log('Données prédéfinies à insérer:', minigameData);
+
+      const { error } = await supabase
+        .from("minigames")
+        .insert([minigameData]); // Utilisation d'un tableau
+
+      if (error) {
+        console.error('Erreur Supabase pour jeu prédéfini:', error);
+        throw error;
+      }
 
       toast({
         title: "Mini-jeu ajouté",
@@ -856,6 +900,44 @@ export default function AdminPanel() {
 
           {/* Minigames Management */}
           <div className="space-y-6">
+            {/* Ajouter des jeux prédéfinis */}
+            <Card className="glass-effect">
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Gamepad2 className="mr-2 h-5 w-5" />
+                  Jeux Prédéfinis Disponibles
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-3">
+                  {predefinedGames.map((game) => (
+                    <div
+                      key={game.id}
+                      className="flex items-center justify-between p-3 border border-border rounded neon-border"
+                    >
+                      <div className="flex-1">
+                        <p className="font-medium">{game.name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {game.description}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Code: {game.component_code}
+                        </p>
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => handleAddPredefinedGame(game)}
+                        className="neon-glow"
+                      >
+                        <Plus className="mr-1 h-4 w-4" />
+                        Ajouter
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
             {/* Ajouter un mini-jeu personnalisé */}
             <Card className="neon-border">
               <CardHeader>
@@ -921,15 +1003,13 @@ export default function AdminPanel() {
                       >
                         <div className="flex-1">
                           <p className="font-medium">
-                            {minigame.component_code.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                            {minigame.name || minigame.component_code.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
                           </p>
                           <p className="text-sm text-muted-foreground">
                             {minigame.description || "Pas de description"}
                           </p>
                           <p className="text-xs text-muted-foreground mt-1">
-                            Code: {minigame.component_code} • 
-                            Chances: {minigame.max_chances || 3} • 
-                            Essais: {minigame.max_attempts || 12}
+                            Code: {minigame.component_code}
                           </p>
                         </div>
                         <div className="flex items-center space-x-2">
