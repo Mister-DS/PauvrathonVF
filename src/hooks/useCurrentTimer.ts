@@ -7,26 +7,45 @@ export function useCurrentTimer(streamerId: string) {
   useEffect(() => {
     if (!streamerId) return;
 
-    // Récupérer la valeur initiale
-    supabase
-      .from('current_timer')
-      .select('seconds')
-      .eq('streamer_id', streamerId)
-      .single()
-      .then(({ data, error }) => {
-        if (!error && data) setSeconds(data.seconds);
-      });
+    // Get streamer's current timer data from streamers table
+    const fetchTimer = async () => {
+      const { data, error } = await supabase
+        .from('streamers')
+        .select('initial_duration, total_time_added, total_elapsed_time')
+        .eq('id', streamerId)
+        .single();
 
-    // Écouter les changements en temps réel
+      if (!error && data) {
+        const remaining = (data.initial_duration + data.total_time_added) - data.total_elapsed_time;
+        setSeconds(Math.max(0, remaining));
+      }
+    };
+
+    fetchTimer();
+
+    // Listen for real-time changes to streamer data
     const subscription = supabase
-      .from(`current_timer:streamer_id=eq.${streamerId}`)
-      .on('UPDATE', (payload) => {
-        setSeconds(payload.new.seconds);
-      })
+      .channel('streamer-timer')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'streamers',
+          filter: `id=eq.${streamerId}`,
+        },
+        (payload) => {
+          if (payload.new) {
+            const data = payload.new as any;
+            const remaining = (data.initial_duration + data.total_time_added) - data.total_elapsed_time;
+            setSeconds(Math.max(0, remaining));
+          }
+        }
+      )
       .subscribe();
 
     return () => {
-      supabase.removeSubscription(subscription);
+      supabase.removeChannel(subscription);
     };
   }, [streamerId]);
 

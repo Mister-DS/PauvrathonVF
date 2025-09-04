@@ -12,6 +12,7 @@ interface UniversalTimerProps {
   formatStyle?: 'long' | 'short' | 'colon';
   showStatus?: boolean;
   className?: string;
+  streamerId?: string; // Optional prop for compatibility
 }
 
 export const UniversalTimer = ({
@@ -24,7 +25,8 @@ export const UniversalTimer = ({
   totalPausedDuration = 0,
   formatStyle = 'colon',
   showStatus = false,
-  className = ''
+  className = '',
+  streamerId // Accept but ignore for compatibility
 }: UniversalTimerProps) => {
   const [timeRemaining, setTimeRemaining] = useState(initialDuration);
   const [displayTime, setDisplayTime] = useState<string>('');

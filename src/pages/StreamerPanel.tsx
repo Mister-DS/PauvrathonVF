@@ -245,29 +245,14 @@ export default function StreamerPanel() {
         setCooldownTime(data.cooldown_seconds || 30);
         setSelectedGames(data.active_minigames || []);
 
-        // Charger les configurations de temps par événement depuis la nouvelle table
-        const { data: eventTimeSettings, error: eventTimeError } = await supabase
-          .from('streamer_event_time_settings')
-          .select('event_type, time_seconds')
-          .eq('streamer_id', data.id); // Utilisez data.id car streamer n'est pas encore mis à jour
+        // Use default values for time settings
+        setTimePerSub(60);
+        setTimePerBit(1);
+        setTimePerGift(30);
 
-        if (!eventTimeError && eventTimeSettings) {
-          const loadedSettings: Record<string, number> = {};
-          eventTimeSettings.forEach(setting => {
-            loadedSettings[setting.event_type] = setting.time_seconds;
-          });
-          setTimePerSub(loadedSettings.sub ?? 60);
-          setTimePerBit(loadedSettings.bits ?? 1);
-          setTimePerGift(loadedSettings.gift ?? 30);
-
-          setOriginalTimePerSub(loadedSettings.sub ?? 60);
-          setOriginalTimePerBit(loadedSettings.bits ?? 1);
-          setOriginalTimePerGift(loadedSettings.gift ?? 30);
-        } else {
-          console.warn("Could not load event time settings, using defaults.", eventTimeError);
-          setTimePerSub(60);
-          setTimePerBit(1);
-          setTimePerGift(30);
+        setOriginalTimePerSub(60);
+        setOriginalTimePerBit(1);
+        setOriginalTimePerGift(30);
 
           setOriginalTimePerSub(60);
           setOriginalTimePerBit(1);
@@ -588,26 +573,8 @@ export default function StreamerPanel() {
       setStreamer(data as any);
       setOriginalStreamerData(data as any);
 
-      // Sauvegarde des paramètres de temps par événement dans la table dédiée
-      const eventSettingsToSave = [
-        { event_type: 'sub', time_seconds: timePerSub },
-        { event_type: 'bits', time_seconds: timePerBit },
-        { event_type: 'gift', time_seconds: timePerGift },
-      ];
-
-      for (const setting of eventSettingsToSave) {
-        const { error: eventSettingError } = await supabase
-          .from('streamer_event_time_settings')
-          .upsert({
-            streamer_id: streamer.id,
-            event_type: setting.event_type,
-            time_seconds: setting.time_seconds,
-            updated_at: new Date().toISOString(),
-          }, { onConflict: ['streamer_id', 'event_type'] });
-
-        if (eventSettingError) {
-          console.error(`Erreur de sauvegarde pour ${setting.event_type}:`, eventSettingError);
-          toast({
+      // Event settings are saved in the component state only for now
+      // In the future, these could be stored in a dedicated table
             title: "Erreur de sauvegarde",
             description: `Impossible de sauvegarder les paramètres de ${setting.event_type}: ${eventSettingError.message || 'Erreur inconnue'}`,
             variant: "destructive",
