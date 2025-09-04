@@ -889,11 +889,12 @@ export default function StreamerPanel() {
                       <Clock className="mr-2 h-5 w-5" />
                       Configuration du temps
                     </CardTitle>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => toggleSection('timeConfig')}
-                    >
+                    {/* Peut-être une section séparée pour l'overlay si tu veux */}
+<Button
+  variant="ghost"
+  size="icon"
+  onClick={() => toggleSection('links')}
+>
                       {openSections.timeConfig ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                     </Button>
                   </CardHeader>
