@@ -178,27 +178,27 @@ export type Database = {
       }
       streamer_event_time_settings: {
         Row: {
+          config: Json
           created_at: string | null
           event_type: string
           id: string
           streamer_id: string | null
-          time_seconds: number
           updated_at: string | null
         }
         Insert: {
+          config?: Json
           created_at?: string | null
           event_type: string
           id?: string
           streamer_id?: string | null
-          time_seconds: number
           updated_at?: string | null
         }
         Update: {
+          config?: Json
           created_at?: string | null
           event_type?: string
           id?: string
           streamer_id?: string | null
-          time_seconds?: number
           updated_at?: string | null
         }
         Relationships: [
@@ -402,6 +402,54 @@ export type Database = {
           },
         ]
       }
+      time_additions: {
+        Row: {
+          created_at: string
+          event_data: Json
+          event_type: string
+          id: string
+          player_name: string | null
+          processed_at: string | null
+          streamer_id: string
+          time_seconds: number
+        }
+        Insert: {
+          created_at?: string
+          event_data: Json
+          event_type: string
+          id?: string
+          player_name?: string | null
+          processed_at?: string | null
+          streamer_id: string
+          time_seconds: number
+        }
+        Update: {
+          created_at?: string
+          event_data?: Json
+          event_type?: string
+          id?: string
+          player_name?: string | null
+          processed_at?: string | null
+          streamer_id?: string
+          time_seconds?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "time_additions_streamer_id_fkey"
+            columns: ["streamer_id"]
+            isOneToOne: false
+            referencedRelation: "streamers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "time_additions_streamer_id_fkey"
+            columns: ["streamer_id"]
+            isOneToOne: false
+            referencedRelation: "streamers_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_follows: {
         Row: {
           created_at: string
@@ -519,6 +567,13 @@ export type Database = {
     Functions: {
       add_time_to_streamer: {
         Args:
+          | {
+              p_event_data?: Json
+              p_event_type?: string
+              p_player_name?: string
+              p_streamer_id: string
+              p_time_seconds: number
+            }
           | { p_streamer_id: string; p_time_to_add: number }
           | { streamer_id: string; time_to_add: number }
         Returns: undefined
@@ -577,6 +632,14 @@ export type Database = {
           is_active: boolean
           name: string
         }[]
+      }
+      get_time_for_event: {
+        Args: {
+          p_event_data?: Json
+          p_event_type: string
+          p_streamer_id: string
+        }
+        Returns: number
       }
       increment_clicks: {
         Args: { p_streamer_id: string } | { streamer_id: string }
