@@ -190,3 +190,68 @@ export interface GameSession {
   started_at: string;
   completed_at?: string | null;
 }
+
+// Twitch EventSub Types
+export interface TwitchEventSubEvent {
+  subscription: {
+    id: string;
+    type: string;
+    version: string;
+    status: string;
+    cost: number;
+    condition: Record<string, any>;
+    transport: {
+      method: string;
+      callback: string;
+    };
+    created_at: string;
+  };
+  event: Record<string, any>;
+}
+
+export interface TwitchSubEvent {
+  user_id: string;
+  user_login: string;
+  user_name: string;
+  broadcaster_user_id: string;
+  broadcaster_user_login: string;
+  broadcaster_user_name: string;
+  tier: string;
+  is_gift: boolean;
+}
+
+export interface TwitchBitsEvent {
+  user_id: string;
+  user_login: string;
+  user_name: string;
+  broadcaster_user_id: string;
+  broadcaster_user_login: string;
+  broadcaster_user_name: string;
+  bits: number;
+  total_bits: number;
+  message: string;
+}
+
+export interface TwitchGiftSubEvent {
+  user_id: string;
+  user_login: string;
+  user_name: string;
+  broadcaster_user_id: string;
+  broadcaster_user_login: string;
+  broadcaster_user_name: string;
+  total: number;
+  tier: string;
+  cumulative_total: number | null;
+  is_anonymous: boolean;
+}
+
+export interface TimeAddition {
+  id: string;
+  streamer_id: string;
+  event_type: string;
+  event_data: Record<string, any>;
+  time_seconds: number;
+  player_name?: string;
+  created_at: string;
+  processed_at?: string;
+}
