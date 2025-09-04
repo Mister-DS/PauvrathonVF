@@ -900,50 +900,12 @@ export default function AdminPanel() {
 
           {/* Minigames Management */}
           <div className="space-y-6">
-            {/* Ajouter des jeux prédéfinis */}
-            <Card className="glass-effect">
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Gamepad2 className="mr-2 h-5 w-5" />
-                  Jeux Prédéfinis Disponibles
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-3">
-                  {predefinedGames.map((game) => (
-                    <div
-                      key={game.id}
-                      className="flex items-center justify-between p-3 border border-border rounded neon-border"
-                    >
-                      <div className="flex-1">
-                        <p className="font-medium">{game.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {game.description}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Code: {game.component_code}
-                        </p>
-                      </div>
-                      <Button
-                        size="sm"
-                        onClick={() => handleAddPredefinedGame(game)}
-                        className="neon-glow"
-                      >
-                        <Plus className="mr-1 h-4 w-4" />
-                        Ajouter
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
             {/* Ajouter un mini-jeu personnalisé */}
             <Card className="neon-border">
               <CardHeader>
                 <CardTitle className="flex items-center">
                   <Plus className="mr-2 h-5 w-5" />
-                  Ajouter un Mini-jeu Personnalisé
+                  Ajouter un Mini-jeu
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
