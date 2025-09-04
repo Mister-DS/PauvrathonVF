@@ -33,7 +33,7 @@ import {
   ClipboardCheck,
   Copy,
   Loader2,
-  Star, // Ajout de l'icône Star
+  Star,
   Monitor,
   AlertCircle,
   Trophy,
@@ -43,7 +43,9 @@ import {
   Users,
   PlusCircle,
   Trash2,
-  Maximize
+  Maximize,
+  ChevronDown, // Import de l'icône ChevronDown
+  ChevronUp // Import de l'icône ChevronUp
 } from 'lucide-react';
 
 interface StreamerSettings {
@@ -68,7 +70,6 @@ interface StreamerSettings {
   total_elapsed_time: number;
   total_paused_duration: number;
   total_clicks?: number;
-  // Ajout des champs pour les gains de temps par événement
   time_per_sub_tier1?: number;
   time_per_sub_tier2?: number;
   time_per_sub_tier3?: number;
@@ -76,7 +77,6 @@ interface StreamerSettings {
   time_per_donations_tiers?: { amount: number; time: number }[];
 }
 
-// Interface pour les statistiques des contributeurs
 interface SubathonStat {
   id: string;
   streamer_id: string;
@@ -89,7 +89,6 @@ interface SubathonStat {
   created_at: string;
 }
 
-// Interface pour la configuration de l'overlay
 interface OverlayConfig {
   showTimer: boolean;
   showProgress: boolean;
@@ -102,7 +101,6 @@ interface OverlayConfig {
   statsPosition: 'left' | 'right';
 }
 
-// Interface pour les paramètres de temps par événement (pour les écouteurs de changements)
 interface StreamerEventTimeSetting {
   event_type: string;
   time_seconds: number;
@@ -126,7 +124,6 @@ const formatTime = (seconds: number) => {
   return `${mins}m ${secs}s`;
 };
 
-// Lecteur vidéo Twitch
 const TwitchPlayer = ({ twitchUsername }: { twitchUsername: string | undefined }) => {
   useEffect(() => {
     if (!twitchUsername) return;
@@ -195,7 +192,6 @@ export default function StreamerPanel() {
   const [originalOverlayConfig, setOriginalOverlayConfig] = useState<OverlayConfig>(defaultConfig);
   const [hasUnsavedOverlayChanges, setHasUnsavedOverlayChanges] = useState(false);
 
-  // États pour la configuration du Pauvrathon
   const [timeMode, setTimeMode] = useState('fixed');
   const [initialHours, setInitialHours] = useState(2);
   const [initialMinutes, setInitialMinutes] = useState(0);
@@ -206,28 +202,42 @@ export default function StreamerPanel() {
   const [cooldownTime, setCooldownTime] = useState(30);
   const [selectedGames, setSelectedGames] = useState<string[]>([]);
 
-  // Nouveaux états pour la configuration du temps par événement
   const [timePerSubTier1, setTimePerSubTier1] = useState(60);
   const [timePerSubTier2, setTimePerSubTier2] = useState(120);
   const [timePerSubTier3, setTimePerSubTier3] = useState(180);
   const [timePerBitsTiers, setTimePerBitsTiers] = useState<{ amount: number; time: number }[]>([]);
   const [timePerDonationsTiers, setTimePerDonationsTiers] = useState<{ amount: number; time: number }[]>([]);
 
-  // États pour stocker les valeurs originales des temps par événement pour la détection des changements
   const [originalTimePerSubTier1, setOriginalTimePerSubTier1] = useState(60);
   const [originalTimePerSubTier2, setOriginalTimePerSubTier2] = useState(120);
   const [originalTimePerSubTier3, setOriginalTimePerSubTier3] = useState(180);
   const [originalTimePerBitsTiers, setOriginalTimePerBitsTiers] = useState<{ amount: number; time: number }[]>([]);
   const [originalTimePerDonationsTiers, setOriginalTimePerDonationsTiers] = useState<{ amount: number; time: number }[]>([]);
 
-  // URLs
   const [pauvrathonUrl, setPauvrathonUrl] = useState('');
   const [overlayUrl, setOverlayUrl] = useState('');
   const navigate = useNavigate();
 
+  // Nouveaux états pour gérer l'ouverture/fermeture des sections
+  const [openSections, setOpenSections] = useState({
+    timeConfig: true,
+    minigames: true,
+    eventTimeGains: true,
+    overlayConfig: true,
+    statisticsGeneral: true, // Ajouté pour les stats générales
+    topContributors: true, // Ajouté pour le top contributeurs
+    streamInfo: true, // Ajouté pour les infos du stream
+    links: true,
+  });
+
   if (!user || (profile?.role !== 'streamer' && profile?.role !== 'admin')) {
     return <Navigate to="/" replace />;
   }
+
+  // Fonction pour basculer l'état d'une section
+  const toggleSection = (section: keyof typeof openSections) => {
+    setOpenSections(prev => ({ ...prev, [section]: !prev[section] }));
+  };
 
   const fetchStreamerData = useCallback(async () => {
     if (!user) return;
@@ -256,14 +266,12 @@ export default function StreamerPanel() {
         setCooldownTime(data.cooldown_seconds || 30);
         setSelectedGames(data.active_minigames || []);
 
-        // Set values for time settings from fetched data or defaults
         setTimePerSubTier1(data.time_per_sub_tier1 ?? 60);
         setTimePerSubTier2(data.time_per_sub_tier2 ?? 120);
         setTimePerSubTier3(data.time_per_sub_tier3 ?? 180);
         setTimePerBitsTiers(data.time_per_bits_tiers || []);
         setTimePerDonationsTiers(data.time_per_donations_tiers || []);
 
-        // Set original values for change detection
         setOriginalTimePerSubTier1(data.time_per_sub_tier1 ?? 60);
         setOriginalTimePerSubTier2(data.time_per_sub_tier2 ?? 120);
         setOriginalTimePerSubTier3(data.time_per_sub_tier3 ?? 180);
@@ -307,7 +315,6 @@ export default function StreamerPanel() {
     try {
       console.log('Fetching stats for streamer:', streamer.id);
 
-      // Récupération des statistiques
       const { data: statsData, error: statsError } = await supabase
         .from('subathon_stats')
         .select('*')
@@ -328,11 +335,10 @@ export default function StreamerPanel() {
         return;
       }
 
-      // Utiliser directement player_twitch_username au lieu de chercher dans profiles
       const mappedStats = statsData.map(stat => ({
         id: stat.id,
         streamer_id: stat.streamer_id,
-        profile_id: stat.player_twitch_username, // Utilise directement le nom d'utilisateur
+        profile_id: stat.player_twitch_username,
         profile_twitch_display_name: stat.player_twitch_username || `Joueur ${stat.id?.slice(0, 8) || 'Inconnu'}`,
         time_contributed: stat.time_contributed || 0,
         clicks_contributed: stat.clicks_contributed || 0,
@@ -448,7 +454,7 @@ export default function StreamerPanel() {
           'postgres_changes',
           { event: '*', schema: 'public', table: 'subathon_stats', filter: `streamer_id=eq.${streamer.id}` },
           () => {
-            fetchStats(); // Re-fetch stats on any change
+            fetchStats();
           }
         )
         .subscribe();
@@ -464,7 +470,6 @@ export default function StreamerPanel() {
         )
         .subscribe();
 
-      // Écouter les changements sur streamer_event_time_settings (si cette table est toujours utilisée)
       const eventTimeSettingsChannel = supabase
         .channel(`public:streamer_event_time_settings:streamer_id=eq.${streamer.id}`)
         .on(
@@ -472,8 +477,6 @@ export default function StreamerPanel() {
           { event: 'UPDATE', schema: 'public', table: 'streamer_event_time_settings', filter: `streamer_id=eq.${streamer.id}` },
           (payload) => {
             const updatedSetting = payload.new as StreamerEventTimeSetting;
-            // This part might need adjustment if event_type is not granular enough for tiers
-            // For now, we'll assume direct updates to streamer settings are primary
             console.log("StreamerEventTimeSetting updated:", updatedSetting);
           }
         )
@@ -597,7 +600,6 @@ export default function StreamerPanel() {
       setStreamer(data as any);
       setOriginalStreamerData(data as any);
 
-      // Mettre à jour les valeurs originales après sauvegarde réussie
       setOriginalTimePerSubTier1(timePerSubTier1);
       setOriginalTimePerSubTier2(timePerSubTier2);
       setOriginalTimePerSubTier3(timePerSubTier3);
@@ -644,7 +646,6 @@ export default function StreamerPanel() {
             pause_started_at: null
           };
         } else {
-          // Suppression des statistiques pour remettre à zéro le classement
           const { error: deleteError } = await supabase
             .from('subathon_stats')
             .delete()
@@ -659,7 +660,7 @@ export default function StreamerPanel() {
             });
           } else {
             console.log('Statistiques réinitialisées avec succès');
-            setStats([]); // Vider immédiatement les stats dans l'interface
+            setStats([]);
             toast({
               title: "Statistiques réinitialisées",
               description: "Le classement des contributeurs a été remis à zéro.",
@@ -883,208 +884,214 @@ export default function StreamerPanel() {
 
               <TabsContent value="configuration">
                 <Card>
-                  <CardHeader>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="flex items-center">
                       <Clock className="mr-2 h-5 w-5" />
                       Configuration du temps
                     </CardTitle>
-                    <CardDescription>
-                      Définissez les paramètres de temps pour le Pauvrathon
-                    </CardDescription>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => toggleSection('timeConfig')}
+                    >
+                      {openSections.timeConfig ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </Button>
                   </CardHeader>
-                  <CardContent className="space-y-6">
-                    {/* Temps initial */}
-                    <div className="space-y-4">
-                      <div className="flex items-center">
-                        <Timer className="h-5 w-5 mr-2 text-muted-foreground" />
-                        <h3 className="text-lg font-medium">Temps initial</h3>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label htmlFor="initial_hours">Heures</Label>
-                          <Input
-                            id="initial_hours"
-                            type="number"
-                            min="0"
-                            max="23"
-                            value={initialHours}
-                            onChange={(e) => setInitialHours(parseInt(e.target.value) || 0)}
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="initial_minutes">Minutes</Label>
-                          <Input
-                            id="initial_minutes"
-                            type="number"
-                            min="0"
-                            max="59"
-                            value={initialMinutes}
-                            onChange={(e) => setInitialMinutes(parseInt(e.target.value) || 0)}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="p-3 bg-muted/30 rounded-lg text-sm text-muted-foreground">
-                        Durée totale: <span className="font-medium">{initialHours}h {initialMinutes}m</span> ({(initialHours * 3600) + (initialMinutes * 60)} secondes)
-                      </div>
-                    </div>
-
-                    <Separator />
-
-                    {/* Configuration du temps ajouté */}
-                    <div className="space-y-4">
-                      <div className="flex items-center">
-                        <Clock className="h-5 w-5 mr-2 text-muted-foreground" />
-                        <h3 className="text-lg font-medium">Temps ajouté par victoire</h3>
-                      </div>
-
-                      <RadioGroup
-                        value={timeMode}
-                        onValueChange={setTimeMode}
-                        className="grid grid-cols-2 gap-4"
-                      >
-                        <div className="flex items-center space-x-2 p-4 rounded-lg border">
-                          <RadioGroupItem value="fixed" id="fixed" />
-                          <Label htmlFor="fixed" className="flex-1 cursor-pointer">
-                            <div className="flex items-center">
-                              <Clock className="mr-2 h-4 w-4" />
-                              Temps fixe
-                            </div>
-                          </Label>
+                  {openSections.timeConfig && (
+                    <CardContent className="space-y-6">
+                      {/* Temps initial */}
+                      <div className="space-y-4">
+                        <div className="flex items-center">
+                          <Timer className="h-5 w-5 mr-2 text-muted-foreground" />
+                          <h3 className="text-lg font-medium">Temps initial</h3>
                         </div>
 
-                        <div className="flex items-center space-x-2 p-4 rounded-lg border">
-                          <RadioGroupItem value="random" id="random" />
-                          <Label htmlFor="random" className="flex-1 cursor-pointer">
-                            <div className="flex items-center">
-                              <Gamepad2 className="mr-2 h-4 w-4" />
-                              Temps aléatoire
-                            </div>
-                          </Label>
-                        </div>
-                      </RadioGroup>
-
-                      {timeMode === 'fixed' ? (
-                        <div>
-                          <Label htmlFor="fixed_time">Temps ajouté fixe (secondes)</Label>
-                          <div className="grid grid-cols-[1fr_80px] gap-4 items-center">
-                            <Slider
-                              value={[fixedTime]}
-                              min={1}
-                              max={300}
-                              step={1}
-                              onValueChange={(value) => setFixedTime(value[0])}
-                            />
-                            <Input
-                              id="fixed_time"
-                              type="number"
-                              min="1"
-                              max="300"
-                              value={fixedTime}
-                              onChange={(e) => setFixedTime(parseInt(e.target.value) || 1)}
-                            />
-                          </div>
-                          <p className="text-sm text-muted-foreground mt-2">
-                            À chaque victoire, {fixedTime} secondes seront ajoutées au timer
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
                           <div>
-                            <Label>Plage de temps aléatoire (secondes)</Label>
-                            <div className="grid grid-cols-2 gap-4 mt-2">
-                              <div>
-                                <Label htmlFor="min_random_time" className="text-sm">Minimum</Label>
-                                <Input
-                                  id="min_random_time"
-                                  type="number"
-                                  min="1"
-                                  max={maxRandomTime}
-                                  value={minRandomTime}
-                                  onChange={(e) => setMinRandomTime(parseInt(e.target.value) || 1)}
-                                />
-                              </div>
-                              <div>
-                                <Label htmlFor="max_random_time" className="text-sm">Maximum</Label>
-                                <Input
-                                  id="max_random_time"
-                                  type="number"
-                                  min={minRandomTime}
-                                  max="300"
-                                  value={maxRandomTime}
-                                  onChange={(e) => setMaxRandomTime(parseInt(e.target.value) || minRandomTime)}
-                                />
-                              </div>
-                            </div>
-                          </div>
-                          <p className="text-sm text-muted-foreground">
-                            À chaque victoire, entre {minRandomTime} et {maxRandomTime} secondes seront ajoutées aléatoirement
-                          </p>
-                        </div>
-                      )}
-                    </div>
-
-                    <Separator />
-
-                    {/* Configuration des clics et du cooldown */}
-                    <div className="space-y-4">
-                      <div className="flex items-center">
-                        <ClipboardCheck className="h-5 w-5 mr-2 text-muted-foreground" />
-                        <h3 className="text-lg font-medium">Paramètres de jeu</h3>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label htmlFor="clicks_required">Clics requis pour déclencher un jeu</Label>
-                          <div className="grid grid-cols-[1fr_80px] gap-4 items-center mt-2">
-                            <Slider
-                              value={[clicksRequired]}
-                              min={10}
-                              max={500}
-                              step={10}
-                              onValueChange={(value) => setClicksRequired(value[0])}
-                            />
+                            <Label htmlFor="initial_hours">Heures</Label>
                             <Input
-                              id="clicks_required"
-                              type="number"
-                              min="10"
-                              max="500"
-                              value={clicksRequired}
-                              onChange={(e) => setClicksRequired(parseInt(e.target.value) || 10)}
-                            />
-                          </div>
-                          <p className="text-sm text-muted-foreground mt-1">
-                            Nombre de clics nécessaires pour déclencher un mini-jeu
-                          </p>
-                        </div>
-
-                        <div>
-                          <Label htmlFor="cooldown_time">Temps de cooldown (secondes)</Label>
-                          <div className="grid grid-cols-[1fr_80px] gap-4 items-center mt-2">
-                            <Slider
-                              value={[cooldownTime]}
-                              min={0}
-                              max={300}
-                              step={5}
-                              onValueChange={(value) => setCooldownTime(value[0])}
-                            />
-                            <Input
-                              id="cooldown_time"
+                              id="initial_hours"
                               type="number"
                               min="0"
-                              max="300"
-                              value={cooldownTime}
-                              onChange={(e) => setCooldownTime(parseInt(e.target.value) || 0)}
+                              max="23"
+                              value={initialHours}
+                              onChange={(e) => setInitialHours(parseInt(e.target.value) || 0)}
                             />
                           </div>
-                          <p className="text-sm text-muted-foreground mt-1">
-                            Délai entre la fin d'un jeu et la possibilité d'en déclencher un nouveau
-                          </p>
+                          <div>
+                            <Label htmlFor="initial_minutes">Minutes</Label>
+                            <Input
+                              id="initial_minutes"
+                              type="number"
+                              min="0"
+                              max="59"
+                              value={initialMinutes}
+                              onChange={(e) => setInitialMinutes(parseInt(e.target.value) || 0)}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="p-3 bg-muted/30 rounded-lg text-sm text-muted-foreground">
+                          Durée totale: <span className="font-medium">{initialHours}h {initialMinutes}m</span> ({(initialHours * 3600) + (initialMinutes * 60)} secondes)
                         </div>
                       </div>
-                    </div>
-                  </CardContent>
+
+                      <Separator />
+
+                      {/* Configuration du temps ajouté */}
+                      <div className="space-y-4">
+                        <div className="flex items-center">
+                          <Clock className="h-5 w-5 mr-2 text-muted-foreground" />
+                          <h3 className="text-lg font-medium">Temps ajouté par victoire</h3>
+                        </div>
+
+                        <RadioGroup
+                          value={timeMode}
+                          onValueChange={setTimeMode}
+                          className="grid grid-cols-2 gap-4"
+                        >
+                          <div className="flex items-center space-x-2 p-4 rounded-lg border">
+                            <RadioGroupItem value="fixed" id="fixed" />
+                            <Label htmlFor="fixed" className="flex-1 cursor-pointer">
+                              <div className="flex items-center">
+                                <Clock className="mr-2 h-4 w-4" />
+                                Temps fixe
+                              </div>
+                            </Label>
+                          </div>
+
+                          <div className="flex items-center space-x-2 p-4 rounded-lg border">
+                            <RadioGroupItem value="random" id="random" />
+                            <Label htmlFor="random" className="flex-1 cursor-pointer">
+                              <div className="flex items-center">
+                                <Gamepad2 className="mr-2 h-4 w-4" />
+                                Temps aléatoire
+                              </div>
+                            </Label>
+                          </div>
+                        </RadioGroup>
+
+                        {timeMode === 'fixed' ? (
+                          <div>
+                            <Label htmlFor="fixed_time">Temps ajouté fixe (secondes)</Label>
+                            <div className="grid grid-cols-[1fr_80px] gap-4 items-center">
+                              <Slider
+                                value={[fixedTime]}
+                                min={1}
+                                max={300}
+                                step={1}
+                                onValueChange={(value) => setFixedTime(value[0])}
+                              />
+                              <Input
+                                id="fixed_time"
+                                type="number"
+                                min="1"
+                                max="300"
+                                value={fixedTime}
+                                onChange={(e) => setFixedTime(parseInt(e.target.value) || 1)}
+                              />
+                            </div>
+                            <p className="text-sm text-muted-foreground mt-2">
+                              À chaque victoire, {fixedTime} secondes seront ajoutées au timer
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            <div>
+                              <Label>Plage de temps aléatoire (secondes)</Label>
+                              <div className="grid grid-cols-2 gap-4 mt-2">
+                                <div>
+                                  <Label htmlFor="min_random_time" className="text-sm">Minimum</Label>
+                                  <Input
+                                    id="min_random_time"
+                                    type="number"
+                                    min="1"
+                                    max={maxRandomTime}
+                                    value={minRandomTime}
+                                    onChange={(e) => setMinRandomTime(parseInt(e.target.value) || 1)}
+                                  />
+                                </div>
+                                <div>
+                                  <Label htmlFor="max_random_time" className="text-sm">Maximum</Label>
+                                  <Input
+                                    id="max_random_time"
+                                    type="number"
+                                    min={minRandomTime}
+                                    max="300"
+                                    value={maxRandomTime}
+                                    onChange={(e) => setMaxRandomTime(parseInt(e.target.value) || minRandomTime)}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                            <p className="text-sm text-muted-foreground">
+                              À chaque victoire, entre {minRandomTime} et {maxRandomTime} secondes seront ajoutées aléatoirement
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      <Separator />
+
+                      {/* Configuration des clics et du cooldown */}
+                      <div className="space-y-4">
+                        <div className="flex items-center">
+                          <ClipboardCheck className="h-5 w-5 mr-2 text-muted-foreground" />
+                          <h3 className="text-lg font-medium">Paramètres de jeu</h3>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor="clicks_required">Clics requis pour déclencher un jeu</Label>
+                            <div className="grid grid-cols-[1fr_80px] gap-4 items-center mt-2">
+                              <Slider
+                                value={[clicksRequired]}
+                                min={10}
+                                max={500}
+                                step={10}
+                                onValueChange={(value) => setClicksRequired(value[0])}
+                              />
+                              <Input
+                                id="clicks_required"
+                                type="number"
+                                min="10"
+                                max="500"
+                                value={clicksRequired}
+                                onChange={(e) => setClicksRequired(parseInt(e.target.value) || 10)}
+                              />
+                            </div>
+                            <p className="text-sm text-muted-foreground mt-1">
+                              Nombre de clics nécessaires pour déclencher un mini-jeu
+                            </p>
+                          </div>
+
+                          <div>
+                            <Label htmlFor="cooldown_time">Temps de cooldown (secondes)</Label>
+                            <div className="grid grid-cols-[1fr_80px] gap-4 items-center mt-2">
+                              <Slider
+                                value={[cooldownTime]}
+                                min={0}
+                                max={300}
+                                step={5}
+                                onValueChange={(value) => setCooldownTime(value[0])}
+                              />
+                              <Input
+                                id="cooldown_time"
+                                type="number"
+                                min="0"
+                                max="300"
+                                value={cooldownTime}
+                                onChange={(e) => setCooldownTime(parseInt(e.target.value) || 0)}
+                              />
+                            </div>
+                            <p className="text-sm text-muted-foreground mt-1">
+                              Délai entre la fin d'un jeu et la possibilité d'en déclencher un nouveau
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  )}
                   <CardFooter className="flex justify-end pt-6">
                     <Button
                       onClick={handleSaveSettings}
@@ -1097,57 +1104,63 @@ export default function StreamerPanel() {
                 </Card>
 
                 <Card className="mt-6">
-                  <CardHeader>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="flex items-center">
                       <Gamepad2 className="mr-2 h-5 w-5" />
                       Sélection des mini-jeux
                     </CardTitle>
-                    <CardDescription>
-                      Choisissez les mini-jeux qui seront disponibles pendant le Pauvrathon
-                    </CardDescription>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => toggleSection('minigames')}
+                    >
+                      {openSections.minigames ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </Button>
                   </CardHeader>
-                  <CardContent>
-                    {availableMinigames.length === 0 ? (
-                      <div className="text-center py-8 text-muted-foreground">
-                        <Gamepad2 className="mx-auto h-12 w-12 mb-4 opacity-50" />
-                        <p>Aucun mini-jeu disponible</p>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {availableMinigames.map((minigame) => (
-                          <div
-                            key={minigame.id}
-                            className="flex items-start space-x-2"
-                          >
-                            <Checkbox
-                              id={`minigame-${minigame.id}`}
-                              checked={selectedGames.includes(minigame.component_code)}
-                              onCheckedChange={(checked) =>
-                                handleMinigameToggle(minigame.component_code, checked)
-                              }
-                              className="mt-1"
-                            />
-                            <div className="flex-1">
-                              <Label
-                                htmlFor={`minigame-${minigame.id}`}
-                                className="cursor-pointer font-medium block mb-1"
-                              >
-                                {minigame.component_code}
-                                {!minigame.is_active && (
-                                  <Badge variant="outline" className="ml-2 text-xs">Inactif</Badge>
+                  {openSections.minigames && (
+                    <CardContent>
+                      {availableMinigames.length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <Gamepad2 className="mx-auto h-12 w-12 mb-4 opacity-50" />
+                          <p>Aucun mini-jeu disponible</p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {availableMinigames.map((minigame) => (
+                            <div
+                              key={minigame.id}
+                              className="flex items-start space-x-2"
+                            >
+                              <Checkbox
+                                id={`minigame-${minigame.id}`}
+                                checked={selectedGames.includes(minigame.component_code)}
+                                onCheckedChange={(checked) =>
+                                  handleMinigameToggle(minigame.component_code, checked)
+                                }
+                                className="mt-1"
+                              />
+                              <div className="flex-1">
+                                <Label
+                                  htmlFor={`minigame-${minigame.id}`}
+                                  className="cursor-pointer font-medium block mb-1"
+                                >
+                                  {minigame.component_code}
+                                  {!minigame.is_active && (
+                                    <Badge variant="outline" className="ml-2 text-xs">Inactif</Badge>
+                                  )}
+                                </Label>
+                                {minigame.description && (
+                                  <p className="text-sm text-muted-foreground">
+                                    {minigame.description}
+                                  </p>
                                 )}
-                              </Label>
-                              {minigame.description && (
-                                <p className="text-sm text-muted-foreground">
-                                  {minigame.description}
-                                </p>
-                              )}
+                              </div>
                             </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  )}
                   <CardFooter className="flex justify-end border-t pt-6">
                     <Button
                       onClick={handleSaveSettings}
@@ -1159,154 +1172,159 @@ export default function StreamerPanel() {
                   </CardFooter>
                 </Card>
 
-                {/* Nouvelle Card pour la configuration des gains de temps par événement */}
                 <Card className="mt-6">
-                  <CardHeader>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="flex items-center">
                       <Star className="mr-2 h-5 w-5" />
                       Configuration des gains de temps par événement
                     </CardTitle>
-                    <CardDescription>
-                      Définissez le temps ajouté au Pauvrathon pour chaque type d'événement Twitch (subs, bits, dons).
-                    </CardDescription>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => toggleSection('eventTimeGains')}
+                    >
+                      {openSections.eventTimeGains ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </Button>
                   </CardHeader>
-                  <CardContent className="space-y-6">
-                    {/* Subs Tiers */}
-                    <div className="space-y-4">
-                      <h4 className="text-md font-medium flex items-center">
-                        <Users className="h-4 w-4 mr-2 text-muted-foreground" />
-                        Abonnements (Subs)
-                      </h4>
-                      <div>
-                        <Label htmlFor="time_per_sub_tier1">Temps ajouté par Sub Tier 1 (secondes)</Label>
-                        <Input
-                          id="time_per_sub_tier1"
-                          type="number"
-                          min="0"
-                          value={timePerSubTier1}
-                          onChange={(e) => setTimePerSubTier1(parseInt(e.target.value) || 0)}
-                        />
-                        <p className="text-sm text-muted-foreground mt-1">
-                          Secondes ajoutées pour chaque abonnement de Tier 1.
-                        </p>
-                      </div>
-                      <div>
-                        <Label htmlFor="time_per_sub_tier2">Temps ajouté par Sub Tier 2 (secondes)</Label>
-                        <Input
-                          id="time_per_sub_tier2"
-                          type="number"
-                          min="0"
-                          value={timePerSubTier2}
-                          onChange={(e) => setTimePerSubTier2(parseInt(e.target.value) || 0)}
-                        />
-                        <p className="text-sm text-muted-foreground mt-1">
-                          Secondes ajoutées pour chaque abonnement de Tier 2.
-                        </p>
-                      </div>
-                      <div>
-                        <Label htmlFor="time_per_sub_tier3">Temps ajouté par Sub Tier 3 (secondes)</Label>
-                        <Input
-                          id="time_per_sub_tier3"
-                          type="number"
-                          min="0"
-                          value={timePerSubTier3}
-                          onChange={(e) => setTimePerSubTier3(parseInt(e.target.value) || 0)}
-                        />
-                        <p className="text-sm text-muted-foreground mt-1">
-                          Secondes ajoutées pour chaque abonnement de Tier 3.
-                        </p>
-                      </div>
-                    </div>
-
-                    <Separator />
-
-                    {/* Bits Tiers */}
-                    <div className="space-y-4">
-                      <h4 className="text-md font-medium flex items-center">
-                        <Star className="h-4 w-4 mr-2 text-muted-foreground" />
-                        Bits
-                      </h4>
-                      {timePerBitsTiers.map((tier, index) => (
-                        <div key={index} className="flex items-end gap-2">
-                          <div className="flex-1">
-                            <Label htmlFor={`bits_amount_${index}`}>Montant des Bits</Label>
-                            <Input
-                              id={`bits_amount_${index}`}
-                              type="number"
-                              min="0"
-                              value={tier.amount}
-                              onChange={(e) => updateTier('bits', index, 'amount', parseInt(e.target.value) || 0)}
-                            />
-                          </div>
-                          <div className="flex-1">
-                            <Label htmlFor={`bits_time_${index}`}>Temps ajouté (secondes)</Label>
-                            <Input
-                              id={`bits_time_${index}`}
-                              type="number"
-                              min="0"
-                              value={tier.time}
-                              onChange={(e) => updateTier('bits', index, 'time', parseInt(e.target.value) || 0)}
-                            />
-                          </div>
-                          <Button variant="destructive" size="icon" onClick={() => removeTier('bits', index)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                  {openSections.eventTimeGains && (
+                    <CardContent className="space-y-6">
+                      {/* Subs Tiers */}
+                      <div className="space-y-4">
+                        <h4 className="text-md font-medium flex items-center">
+                          <Users className="h-4 w-4 mr-2 text-muted-foreground" />
+                          Abonnements (Subs)
+                        </h4>
+                        <div>
+                          <Label htmlFor="time_per_sub_tier1">Temps ajouté par Sub Tier 1 (secondes)</Label>
+                          <Input
+                            id="time_per_sub_tier1"
+                            type="number"
+                            min="0"
+                            value={timePerSubTier1}
+                            onChange={(e) => setTimePerSubTier1(parseInt(e.target.value) || 0)}
+                          />
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Secondes ajoutées pour chaque abonnement de Tier 1.
+                          </p>
                         </div>
-                      ))}
-                      <Button variant="outline" onClick={() => addTier('bits')}>
-                        <PlusCircle className="h-4 w-4 mr-2" />
-                        Ajouter un palier de Bits
-                      </Button>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Définissez des paliers de bits et le temps correspondant à ajouter.
-                      </p>
-                    </div>
-
-                    <Separator />
-
-                    {/* Donations Tiers */}
-                    <div className="space-y-4">
-                      <h4 className="text-md font-medium flex items-center">
-                        <Trophy className="h-4 w-4 mr-2 text-muted-foreground" />
-                        Dons (Donations)
-                      </h4>
-                      {timePerDonationsTiers.map((tier, index) => (
-                        <div key={index} className="flex items-end gap-2">
-                          <div className="flex-1">
-                            <Label htmlFor={`donations_amount_${index}`}>Montant du Don (€)</Label>
-                            <Input
-                              id={`donations_amount_${index}`}
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={tier.amount}
-                              onChange={(e) => updateTier('donations', index, 'amount', parseFloat(e.target.value) || 0)}
-                            />
-                          </div>
-                          <div className="flex-1">
-                            <Label htmlFor={`donations_time_${index}`}>Temps ajouté (secondes)</Label>
-                            <Input
-                              id={`donations_time_${index}`}
-                              type="number"
-                              min="0"
-                              value={tier.time}
-                              onChange={(e) => updateTier('donations', index, 'time', parseInt(e.target.value) || 0)}
-                            />
-                          </div>
-                          <Button variant="destructive" size="icon" onClick={() => removeTier('donations', index)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                        <div>
+                          <Label htmlFor="time_per_sub_tier2">Temps ajouté par Sub Tier 2 (secondes)</Label>
+                          <Input
+                            id="time_per_sub_tier2"
+                            type="number"
+                            min="0"
+                            value={timePerSubTier2}
+                            onChange={(e) => setTimePerSubTier2(parseInt(e.target.value) || 0)}
+                          />
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Secondes ajoutées pour chaque abonnement de Tier 2.
+                          </p>
                         </div>
-                      ))}
-                      <Button variant="outline" onClick={() => addTier('donations')}>
-                        <PlusCircle className="h-4 w-4 mr-2" />
-                        Ajouter un palier de Don
-                      </Button>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Définissez des paliers de dons et le temps correspondant à ajouter.
-                      </p>
-                    </div>
-                  </CardContent>
+                        <div>
+                          <Label htmlFor="time_per_sub_tier3">Temps ajouté par Sub Tier 3 (secondes)</Label>
+                          <Input
+                            id="time_per_sub_tier3"
+                            type="number"
+                            min="0"
+                            value={timePerSubTier3}
+                            onChange={(e) => setTimePerSubTier3(parseInt(e.target.value) || 0)}
+                          />
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Secondes ajoutées pour chaque abonnement de Tier 3.
+                          </p>
+                        </div>
+                      </div>
+
+                      <Separator />
+
+                      {/* Bits Tiers */}
+                      <div className="space-y-4">
+                        <h4 className="text-md font-medium flex items-center">
+                          <Star className="h-4 w-4 mr-2 text-muted-foreground" />
+                          Bits
+                        </h4>
+                        {timePerBitsTiers.map((tier, index) => (
+                          <div key={index} className="flex items-end gap-2">
+                            <div className="flex-1">
+                              <Label htmlFor={`bits_amount_${index}`}>Montant des Bits</Label>
+                              <Input
+                                id={`bits_amount_${index}`}
+                                type="number"
+                                min="0"
+                                value={tier.amount}
+                                onChange={(e) => updateTier('bits', index, 'amount', parseInt(e.target.value) || 0)}
+                              />
+                            </div>
+                            <div className="flex-1">
+                              <Label htmlFor={`bits_time_${index}`}>Temps ajouté (secondes)</Label>
+                              <Input
+                                id={`bits_time_${index}`}
+                                type="number"
+                                min="0"
+                                value={tier.time}
+                                onChange={(e) => updateTier('bits', index, 'time', parseInt(e.target.value) || 0)}
+                              />
+                            </div>
+                            <Button variant="destructive" size="icon" onClick={() => removeTier('bits', index)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                        <Button variant="outline" onClick={() => addTier('bits')}>
+                          <PlusCircle className="h-4 w-4 mr-2" />
+                          Ajouter un palier de Bits
+                        </Button>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Définissez des paliers de bits et le temps correspondant à ajouter.
+                        </p>
+                      </div>
+
+                      <Separator />
+
+                      {/* Donations Tiers */}
+                      <div className="space-y-4">
+                        <h4 className="text-md font-medium flex items-center">
+                          <Trophy className="h-4 w-4 mr-2 text-muted-foreground" />
+                          Dons (Donations)
+                        </h4>
+                        {timePerDonationsTiers.map((tier, index) => (
+                          <div key={index} className="flex items-end gap-2">
+                            <div className="flex-1">
+                              <Label htmlFor={`donations_amount_${index}`}>Montant du Don (€)</Label>
+                              <Input
+                                id={`donations_amount_${index}`}
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={tier.amount}
+                                onChange={(e) => updateTier('donations', index, 'amount', parseFloat(e.target.value) || 0)}
+                              />
+                            </div>
+                            <div className="flex-1">
+                              <Label htmlFor={`donations_time_${index}`}>Temps ajouté (secondes)</Label>
+                              <Input
+                                id={`donations_time_${index}`}
+                                type="number"
+                                min="0"
+                                value={tier.time}
+                                onChange={(e) => updateTier('donations', index, 'time', parseInt(e.target.value) || 0)}
+                              />
+                            </div>
+                            <Button variant="destructive" size="icon" onClick={() => removeTier('donations', index)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                        <Button variant="outline" onClick={() => addTier('donations')}>
+                          <PlusCircle className="h-4 w-4 mr-2" />
+                          Ajouter un palier de Don
+                        </Button>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Définissez des paliers de dons et le temps correspondant à ajouter.
+                        </p>
+                      </div>
+                    </CardContent>
+                  )}
                   <CardFooter className="flex justify-end border-t pt-6">
                     <Button
                       onClick={handleSaveSettings}
@@ -1319,150 +1337,155 @@ export default function StreamerPanel() {
                 </Card>
               </TabsContent>
 
-              {/* Nouvelle Tab pour la configuration de l'Overlay */}
               <TabsContent value="overlay">
                 <Card>
-                  <CardHeader>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="flex items-center">
                       <LayoutDashboard className="mr-2 h-5 w-5" />
                       Configuration de l'Overlay
                     </CardTitle>
-                    <CardDescription>
-                      Personnalisez l'affichage de l'overlay sur votre stream.
-                    </CardDescription>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => toggleSection('overlayConfig')}
+                    >
+                      {openSections.overlayConfig ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </Button>
                   </CardHeader>
-                  <CardContent className="space-y-6">
-                    {/* Affichage des éléments */}
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-medium flex items-center">
-                        <Eye className="h-5 w-5 mr-2 text-muted-foreground" />
-                        Éléments à afficher
-                      </h3>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="flex items-center space-x-2">
-                          <Checkbox
-                            id="showTimer"
-                            checked={overlayConfig.showTimer}
-                            onCheckedChange={(checked) => updateOverlayConfig('showTimer', checked)}
-                          />
-                          <Label htmlFor="showTimer">Timer Principal</Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <Checkbox
-                            id="showProgress"
-                            checked={overlayConfig.showProgress}
-                            onCheckedChange={(checked) => updateOverlayConfig('showProgress', checked)}
-                          />
-                          <Label htmlFor="showProgress">Progression</Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <Checkbox
-                            id="showStats"
-                            checked={overlayConfig.showStats}
-                            onCheckedChange={(checked) => updateOverlayConfig('showStats', checked)}
-                          />
-                          <Label htmlFor="showStats">Statistiques</Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <Checkbox
-                            id="showTimeAdded"
-                            checked={overlayConfig.showTimeAdded}
-                            onCheckedChange={(checked) => updateOverlayConfig('showTimeAdded', checked)}
-                          />
-                          <Label htmlFor="showTimeAdded">Temps Gagné</Label>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <Checkbox
-                            id="showTopPlayer"
-                            checked={overlayConfig.showTopPlayer}
-                            onCheckedChange={(checked) => updateOverlayConfig('showTopPlayer', checked)}
-                          />
-                          <Label htmlFor="showTopPlayer">Top Joueur</Label>
-                        </div>
-                      </div>
-                    </div>
-
-                    <Separator />
-
-                    {/* Taille du timer */}
-                    {overlayConfig.showTimer && (
+                  {openSections.overlayConfig && (
+                    <CardContent className="space-y-6">
+                      {/* Affichage des éléments */}
                       <div className="space-y-4">
                         <h3 className="text-lg font-medium flex items-center">
-                          <Maximize className="h-5 w-5 mr-2 text-muted-foreground" />
-                          Taille du Timer Principal
+                          <Eye className="h-5 w-5 mr-2 text-muted-foreground" />
+                          Éléments à afficher
                         </h3>
-                        <Label>Taille: {overlayConfig.timerSize} (plus grand)</Label>
-                        <Slider
-                          value={[overlayConfig.timerSize]}
-                          min={4}
-                          max={8}
-                          step={1}
-                          onValueChange={(value) => updateOverlayConfig('timerSize', value[0])}
-                        />
-                      </div>
-                    )}
-
-                    <Separator />
-
-                    {/* Positions */}
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-medium flex items-center">
-                        <MoveHorizontal className="h-5 w-5 mr-2 text-muted-foreground" />
-                        Positions des éléments
-                      </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                          <Label htmlFor="timerPosition">Position du Timer Principal</Label>
-                          <Select
-                            value={overlayConfig.timerPosition}
-                            onValueChange={(value: 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left') => updateOverlayConfig('timerPosition', value)}
-                          >
-                            <SelectTrigger className="w-full">
-                              <SelectValue placeholder="Sélectionner une position" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="top-right">Haut Droite</SelectItem>
-                              <SelectItem value="top-left">Haut Gauche</SelectItem>
-                              <SelectItem value="bottom-right">Bas Droite</SelectItem>
-                              <SelectItem value="bottom-left">Bas Gauche</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <Label htmlFor="progressPosition">Position de la Progression</Label>
-                          <Select
-                            value={overlayConfig.progressPosition}
-                            onValueChange={(value: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right') => updateOverlayConfig('progressPosition', value)}
-                          >
-                            <SelectTrigger className="w-full">
-                              <SelectValue placeholder="Sélectionner une position" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="top-left">Haut Gauche</SelectItem>
-                              <SelectItem value="top-right">Haut Droite</SelectItem>
-                              <SelectItem value="bottom-left">Bas Gauche</SelectItem>
-                              <SelectItem value="bottom-right">Bas Droite</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <Label htmlFor="statsPosition">Position des Statistiques</Label>
-                          <Select
-                            value={overlayConfig.statsPosition}
-                            onValueChange={(value: 'left' | 'right') => updateOverlayConfig('statsPosition', value)}
-                          >
-                            <SelectTrigger className="w-full">
-                              <SelectValue placeholder="Sélectionner une position" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="left">Gauche</SelectItem>
-                              <SelectItem value="right">Droite</SelectItem>
-                            </SelectContent>
-                          </Select>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="flex items-center space-x-2">
+                            <Checkbox
+                              id="showTimer"
+                              checked={overlayConfig.showTimer}
+                              onCheckedChange={(checked) => updateOverlayConfig('showTimer', checked)}
+                            />
+                            <Label htmlFor="showTimer">Timer Principal</Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Checkbox
+                              id="showProgress"
+                              checked={overlayConfig.showProgress}
+                              onCheckedChange={(checked) => updateOverlayConfig('showProgress', checked)}
+                            />
+                            <Label htmlFor="showProgress">Progression</Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Checkbox
+                              id="showStats"
+                              checked={overlayConfig.showStats}
+                              onCheckedChange={(checked) => updateOverlayConfig('showStats', checked)}
+                            />
+                            <Label htmlFor="showStats">Statistiques</Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Checkbox
+                              id="showTimeAdded"
+                              checked={overlayConfig.showTimeAdded}
+                              onCheckedChange={(checked) => updateOverlayConfig('showTimeAdded', checked)}
+                            />
+                            <Label htmlFor="showTimeAdded">Temps Gagné</Label>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Checkbox
+                              id="showTopPlayer"
+                              checked={overlayConfig.showTopPlayer}
+                              onCheckedChange={(checked) => updateOverlayConfig('showTopPlayer', checked)}
+                            />
+                            <Label htmlFor="showTopPlayer">Top Joueur</Label>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </CardContent>
+
+                      <Separator />
+
+                      {/* Taille du timer */}
+                      {overlayConfig.showTimer && (
+                        <div className="space-y-4">
+                          <h3 className="text-lg font-medium flex items-center">
+                            <Maximize className="h-5 w-5 mr-2 text-muted-foreground" />
+                            Taille du Timer Principal
+                          </h3>
+                          <Label>Taille: {overlayConfig.timerSize} (plus grand)</Label>
+                          <Slider
+                            value={[overlayConfig.timerSize]}
+                            min={4}
+                            max={8}
+                            step={1}
+                            onValueChange={(value) => updateOverlayConfig('timerSize', value[0])}
+                          />
+                        </div>
+                      )}
+
+                      <Separator />
+
+                      {/* Positions */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-medium flex items-center">
+                          <MoveHorizontal className="h-5 w-5 mr-2 text-muted-foreground" />
+                          Positions des éléments
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <Label htmlFor="timerPosition">Position du Timer Principal</Label>
+                            <Select
+                              value={overlayConfig.timerPosition}
+                              onValueChange={(value: 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left') => updateOverlayConfig('timerPosition', value)}
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Sélectionner une position" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="top-right">Haut Droite</SelectItem>
+                                <SelectItem value="top-left">Haut Gauche</SelectItem>
+                                <SelectItem value="bottom-right">Bas Droite</SelectItem>
+                                <SelectItem value="bottom-left">Bas Gauche</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label htmlFor="progressPosition">Position de la Progression</Label>
+                            <Select
+                              value={overlayConfig.progressPosition}
+                              onValueChange={(value: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right') => updateOverlayConfig('progressPosition', value)}
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Sélectionner une position" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="top-left">Haut Gauche</SelectItem>
+                                <SelectItem value="top-right">Haut Droite</SelectItem>
+                                <SelectItem value="bottom-left">Bas Gauche</SelectItem>
+                                <SelectItem value="bottom-right">Bas Droite</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label htmlFor="statsPosition">Position des Statistiques</Label>
+                            <Select
+                              value={overlayConfig.statsPosition}
+                              onValueChange={(value: 'left' | 'right') => updateOverlayConfig('statsPosition', value)}
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Sélectionner une position" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="left">Gauche</SelectItem>
+                                <SelectItem value="right">Droite</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  )}
                   <CardFooter className="flex justify-end pt-6">
                     <Button
                       onClick={() => saveOverlayConfig(overlayConfig)}
@@ -1475,272 +1498,313 @@ export default function StreamerPanel() {
                 </Card>
               </TabsContent>
 
-              {/* Contenu de l'onglet Statistiques */}
               <TabsContent value="statistics">
                 <div className="space-y-6">
-                  {/* Statistiques générales */}
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <Card>
-                      <CardContent className="p-4">
-                        <div className="flex items-center space-x-2">
-                          <Clock className="h-5 w-5 text-blue-500" />
-                          <div>
-                            <p className="text-sm font-medium text-muted-foreground">Temps total ajouté</p>
-                            <p className="text-2xl font-bold text-blue-500">
-                              {formatTime(streamer?.total_time_added || 0)}
-                            </p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card>
-                      <CardContent className="p-4">
-                        <div className="flex items-center space-x-2">
-                          <Star className="h-5 w-5 text-yellow-500" />
-                          <div>
-                            <p className="text-sm font-medium text-muted-foreground">Clics actuels</p>
-                            <p className="text-2xl font-bold text-yellow-500">
-                              {streamer?.current_clicks || 0}
-                            </p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card>
-                      <CardContent className="p-4">
-                        <div className="flex items-center space-x-2">
-                          <Users className="h-5 w-5 text-green-500" />
-                          <div>
-                            <p className="text-sm font-medium text-muted-foreground">Total contributeurs</p>
-                            <p className="text-2xl font-bold text-green-500">
-                              {stats.length}
-                            </p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-
-                    <Card>
-                      <CardContent className="p-4">
-                        <div className="flex items-center space-x-2">
-                          <Gamepad2 className="h-5 w-5 text-purple-500" />
-                          <div>
-                            <p className="text-sm font-medium text-muted-foreground">Total clics</p>
-                            <p className="text-2xl font-bold text-purple-500">
-                              {streamer?.total_clicks || 0}
-                            </p>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
-
-                  {/* Top 10 Contributeurs */}
                   <Card>
-                    <CardHeader>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="flex items-center">
+                        <BarChart3 className="mr-2 h-5 w-5" />
+                        Statistiques Générales
+                      </CardTitle>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => toggleSection('statisticsGeneral')}
+                      >
+                        {openSections.statisticsGeneral ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                      </Button>
+                    </CardHeader>
+                    {openSections.statisticsGeneral && (
+                      <CardContent>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                          <Card>
+                            <CardContent className="p-4">
+                              <div className="flex items-center space-x-2">
+                                <Clock className="h-5 w-5 text-blue-500" />
+                                <div>
+                                  <p className="text-sm font-medium text-muted-foreground">Temps total ajouté</p>
+                                  <p className="text-2xl font-bold text-blue-500">
+                                    {formatTime(streamer?.total_time_added || 0)}
+                                  </p>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+
+                          <Card>
+                            <CardContent className="p-4">
+                              <div className="flex items-center space-x-2">
+                                <Star className="h-5 w-5 text-yellow-500" />
+                                <div>
+                                  <p className="text-sm font-medium text-muted-foreground">Clics actuels</p>
+                                  <p className="text-2xl font-bold text-yellow-500">
+                                    {streamer?.current_clicks || 0}
+                                  </p>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+
+                          <Card>
+                            <CardContent className="p-4">
+                              <div className="flex items-center space-x-2">
+                                <Users className="h-5 w-5 text-green-500" />
+                                <div>
+                                  <p className="text-sm font-medium text-muted-foreground">Total contributeurs</p>
+                                  <p className="text-2xl font-bold text-green-500">
+                                    {stats.length}
+                                  </p>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+
+                          <Card>
+                            <CardContent className="p-4">
+                              <div className="flex items-center space-x-2">
+                                <Gamepad2 className="h-5 w-5 text-purple-500" />
+                                <div>
+                                  <p className="text-sm font-medium text-muted-foreground">Total clics</p>
+                                  <p className="text-2xl font-bold text-purple-500">
+                                    {streamer?.total_clicks || 0}
+                                  </p>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        </div>
+                      </CardContent>
+                    )}
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                       <CardTitle className="flex items-center">
                         <BarChart3 className="mr-2 h-5 w-5" />
                         Top 10 Contributeurs
                       </CardTitle>
-                      <CardDescription>
-                        Classement des joueurs ayant contribué le plus de temps au Pauvrathon (remis à zéro à chaque nouveau stream)
-                      </CardDescription>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => toggleSection('topContributors')}
+                      >
+                        {openSections.topContributors ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                      </Button>
                     </CardHeader>
-                    <CardContent>
-                      {stats.length === 0 ? (
-                        <div className="text-center py-8 text-muted-foreground">
-                          <Star className="mx-auto h-12 w-12 mb-4 opacity-50" />
-                          <p>Aucune statistique disponible</p>
-                          <p className="text-sm">Les statistiques apparaîtront une fois que les viewers commenceront à jouer</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          {stats.slice(0, 10).map((stat, index) => {
-                            const timeInMinutes = Math.floor(stat.time_contributed / 60);
-                            const timeInSeconds = stat.time_contributed % 60;
-                            const maxTimeContributed = Math.max(...stats.map(s => s.time_contributed));
-                            const progressPercentage = maxTimeContributed > 0 ? (stat.time_contributed / maxTimeContributed) * 100 : 0;
+                    {openSections.topContributors && (
+                      <CardContent>
+                        {stats.length === 0 ? (
+                          <div className="text-center py-8 text-muted-foreground">
+                            <Star className="mx-auto h-12 w-12 mb-4 opacity-50" />
+                            <p>Aucune statistique disponible</p>
+                            <p className="text-sm">Les statistiques apparaîtront une fois que les viewers commenceront à jouer</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {stats.slice(0, 10).map((stat, index) => {
+                              const timeInMinutes = Math.floor(stat.time_contributed / 60);
+                              const timeInSeconds = stat.time_contributed % 60;
+                              const maxTimeContributed = Math.max(...stats.map(s => s.time_contributed));
+                              const progressPercentage = maxTimeContributed > 0 ? (stat.time_contributed / maxTimeContributed) * 100 : 0;
 
-                            return (
-                              <div key={stat.id} className="relative">
-                                <div className="flex items-center space-x-4 relative z-10 bg-background p-3 rounded-lg border">
-                                  <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 border-2 border-primary/20">
-                                    {index < 3 ? (
-                                      <Trophy className={`w-4 h-4 ${
-                                        index === 0 ? 'text-yellow-500' :
-                                        index === 1 ? 'text-gray-400' :
-                                        'text-orange-600'
-                                      }`} />
-                                    ) : (
-                                      <span className="text-sm font-bold text-primary">{index + 1}</span>
-                                    )}
-                                  </div>
+                              return (
+                                <div key={stat.id} className="relative">
+                                  <div className="flex items-center space-x-4 relative z-10 bg-background p-3 rounded-lg border">
+                                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 border-2 border-primary/20">
+                                      {index < 3 ? (
+                                        <Trophy className={`w-4 h-4 ${
+                                          index === 0 ? 'text-yellow-500' :
+                                          index === 1 ? 'text-gray-400' :
+                                          'text-orange-600'
+                                        }`} />
+                                      ) : (
+                                        <span className="text-sm font-bold text-primary">{index + 1}</span>
+                                      )}
+                                    </div>
 
-                                  <div className="flex-1 min-w-0">
-                                    <p className="font-semibold truncate">{stat.profile_twitch_display_name}</p>
-                                    <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-                                      <span className="flex items-center">
-                                        <Clock className="w-3 h-3 mr-1" />
-                                        {timeInMinutes}m {timeInSeconds}s
-                                      </span>
-                                      <span className="flex items-center">
-                                        <Star className="w-3 h-3 mr-1" />
-                                        {stat.clicks_contributed || 0} clics
-                                      </span>
-                                      <span className="flex items-center">
-                                        <Trophy className="w-3 h-3 mr-1" />
-                                        {stat.games_won || 0} victoires
-                                      </span>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="font-semibold truncate">{stat.profile_twitch_display_name}</p>
+                                      <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+                                        <span className="flex items-center">
+                                          <Clock className="w-3 h-3 mr-1" />
+                                          {timeInMinutes}m {timeInSeconds}s
+                                        </span>
+                                        <span className="flex items-center">
+                                          <Star className="w-3 h-3 mr-1" />
+                                          {stat.clicks_contributed || 0} clics
+                                        </span>
+                                        <span className="flex items-center">
+                                          <Trophy className="w-3 h-3 mr-1" />
+                                          {stat.games_won || 0} victoires
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    <div className="text-right">
+                                      <Badge variant={index < 3 ? "default" : "secondary"} className="mb-1">
+                                        #{index + 1}
+                                      </Badge>
+                                      <p className="text-xs text-muted-foreground">
+                                        {((stat.time_contributed / Math.max(1, stats.reduce((total, s) => total + s.time_contributed, 0))) * 100).toFixed(1)}%
+                                      </p>
                                     </div>
                                   </div>
 
-                                  <div className="text-right">
-                                    <Badge variant={index < 3 ? "default" : "secondary"} className="mb-1">
-                                      #{index + 1}
-                                    </Badge>
-                                    <p className="text-xs text-muted-foreground">
-                                      {((stat.time_contributed / Math.max(1, stats.reduce((total, s) => total + s.time_contributed, 0))) * 100).toFixed(1)}%
-                                    </p>
-                                  </div>
+                                  <div
+                                    className="absolute top-0 left-0 h-full bg-primary/5 rounded-lg transition-all duration-300"
+                                    style={{ width: `${progressPercentage}%` }}
+                                  />
                                 </div>
-
-                                <div
-                                  className="absolute top-0 left-0 h-full bg-primary/5 rounded-lg transition-all duration-300"
-                                  style={{ width: `${progressPercentage}%` }}
-                                />
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </CardContent>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </CardContent>
+                    )}
                   </Card>
 
-                  {/* Informations sur le stream actuel */}
                   <Card>
-                    <CardHeader>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                       <CardTitle className="flex items-center">
                         <Radio className="mr-2 h-5 w-5" />
                         Informations du stream
                       </CardTitle>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => toggleSection('streamInfo')}
+                      >
+                        {openSections.streamInfo ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                      </Button>
                     </CardHeader>
-                    <CardContent>
-                      <div className="grid md:grid-cols-3 gap-4">
-                        <div className="space-y-2">
-                          <p className="text-sm font-medium text-muted-foreground">Statut actuel</p>
-                          <Badge variant={
-                            streamer?.status === 'live' ? 'default' :
-                            streamer?.status === 'paused' ? 'secondary' :
-                            streamer?.status === 'ended' ? 'destructive' : 'outline'
-                          }>
-                            {streamer?.status === 'live' ? '🔴 En direct' :
-                             streamer?.status === 'paused' ? '⏸️ En pause' :
-                             streamer?.status === 'ended' ? '🏁 Terminé' : '⚫ Hors ligne'}
-                          </Badge>
-                        </div>
-
-                        <div className="space-y-2">
-                          <p className="text-sm font-medium text-muted-foreground">Durée initiale configurée</p>
-                          <p className="font-medium">{formatTime(streamer?.initial_duration || 0)}</p>
-                        </div>
-
-                        <div className="space-y-2">
-                          <p className="text-sm font-medium text-muted-foreground">Mini-jeux actifs</p>
-                          <p className="font-medium">{streamer?.active_minigames?.length || 0} jeu(x)</p>
-                        </div>
-
-                        {streamer?.stream_started_at && (
+                    {openSections.streamInfo && (
+                      <CardContent>
+                        <div className="grid md:grid-cols-3 gap-4">
                           <div className="space-y-2">
-                            <p className="text-sm font-medium text-muted-foreground">Démarré le</p>
-                            <p className="font-medium">
-                              {new Date(streamer.stream_started_at).toLocaleDateString('fr-FR', {
-                                day: 'numeric',
-                                month: 'long',
-                                hour: '2-digit',
-                                minute: '2-digit'
-                              })}
-                            </p>
+                            <p className="text-sm font-medium text-muted-foreground">Statut actuel</p>
+                            <Badge variant={
+                              streamer?.status === 'live' ? 'default' :
+                              streamer?.status === 'paused' ? 'secondary' :
+                              streamer?.status === 'ended' ? 'destructive' : 'outline'
+                            }>
+                              {streamer?.status === 'live' ? '🔴 En direct' :
+                               streamer?.status === 'paused' ? '⏸️ En pause' :
+                               streamer?.status === 'ended' ? '🏁 Terminé' : '⚫ Hors ligne'}
+                            </Badge>
                           </div>
-                        )}
 
-                        <div className="space-y-2">
-                          <p className="text-sm font-medium text-muted-foreground">Mode de temps</p>
-                          <Badge variant="outline">
-                            {streamer?.time_mode === 'fixed' ? `Fixe (${streamer.time_increment}s)` :
-                             `Aléatoire (${streamer.min_random_time || streamer.time_increment || 10}-${streamer.max_random_time}s)`}
-                          </Badge>
-                        </div>
+                          <div className="space-y-2">
+                            <p className="text-sm font-medium text-muted-foreground">Durée initiale configurée</p>
+                            <p className="font-medium">{formatTime(streamer?.initial_duration || 0)}</p>
+                          </div>
 
-                        <div className="space-y-2">
-                          <p className="text-sm font-medium text-muted-foreground">Clics requis</p>
-                          <p className="font-medium">{streamer?.clicks_required || 100} clics</p>
+                          <div className="space-y-2">
+                            <p className="text-sm font-medium text-muted-foreground">Mini-jeux actifs</p>
+                            <p className="font-medium">{streamer?.active_minigames?.length || 0} jeu(x)</p>
+                          </div>
+
+                          {streamer?.stream_started_at && (
+                            <div className="space-y-2">
+                              <p className="text-sm font-medium text-muted-foreground">Démarré le</p>
+                              <p className="font-medium">
+                                {new Date(streamer.stream_started_at).toLocaleDateString('fr-FR', {
+                                  day: 'numeric',
+                                  month: 'long',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </p>
+                            </div>
+                          )}
+
+                          <div className="space-y-2">
+                            <p className="text-sm font-medium text-muted-foreground">Mode de temps</p>
+                            <Badge variant="outline">
+                              {streamer?.time_mode === 'fixed' ? `Fixe (${streamer.time_increment}s)` :
+                               `Aléatoire (${streamer.min_random_time || streamer.time_increment || 10}-${streamer.max_random_time}s)`}
+                            </Badge>
+                          </div>
+
+                          <div className="space-y-2">
+                            <p className="text-sm font-medium text-muted-foreground">Clics requis</p>
+                            <p className="font-medium">{streamer?.clicks_required || 100} clics</p>
+                          </div>
                         </div>
-                      </div>
-                    </CardContent>
+                      </CardContent>
+                    )}
                   </Card>
                 </div>
               </TabsContent>
 
-              {/* Contenu de l'onglet Liens & Overlay */}
               <TabsContent value="links">
                 <div className="grid gap-6 md:grid-cols-2">
                   <Card>
-                    <CardHeader>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                       <CardTitle className="flex items-center">
                         <Eye className="mr-2 h-5 w-5" />
                         Page Pauvrathon
                       </CardTitle>
-                      <CardDescription>
-                        Lien vers la page publique de votre Pauvrathon
-                      </CardDescription>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => toggleSection('links')}
+                      >
+                        {openSections.links ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                      </Button>
                     </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="flex items-center space-x-2">
-                        <Input
-                          value={pauvrathonUrl}
-                          readOnly
-                          className="text-sm"
-                        />
-                        <Button size="icon" onClick={copyPauvrathonLink}>
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                        <Button asChild size="icon" variant="outline">
-                          <a href={pauvrathonUrl} target="_blank" rel="noopener noreferrer">
-                            <ExternalLink className="h-4 w-4" />
-                          </a>
-                        </Button>
-                      </div>
-                    </CardContent>
+                    {openSections.links && (
+                      <CardContent className="space-y-4">
+                        <div className="flex items-center space-x-2">
+                          <Input
+                            value={pauvrathonUrl}
+                            readOnly
+                            className="text-sm"
+                          />
+                          <Button size="icon" onClick={copyPauvrathonLink}>
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                          <Button asChild size="icon" variant="outline">
+                            <a href={pauvrathonUrl} target="_blank" rel="noopener noreferrer">
+                              <ExternalLink className="h-4 w-4" />
+                            </a>
+                          </Button>
+                        </div>
+                      </CardContent>
+                    )}
                   </Card>
                   <Card>
-                    <CardHeader>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                       <CardTitle className="flex items-center">
                         <Monitor className="mr-2 h-5 w-5" />
                         Overlay Twitch
                       </CardTitle>
-                      <CardDescription>
-                        Lien à utiliser comme "Source de navigation" dans OBS/Streamlabs
-                      </CardDescription>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => toggleSection('links')} {/* Peut-être une section séparée pour l'overlay si tu veux */}
+                      >
+                        {openSections.links ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                      </Button>
                     </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="flex items-center space-x-2">
-                        <Input
-                          value={overlayUrl}
-                          readOnly
-                          className="text-sm"
-                        />
-                        <Button size="icon" onClick={copyOverlayLink}>
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                        <Button asChild size="icon" variant="outline">
-                          <a href={overlayUrl} target="_blank" rel="noopener noreferrer">
-                            <ExternalLink className="h-4 w-4" />
-                          </a>
-                        </Button>
-                      </div>
-                    </CardContent>
+                    {openSections.links && (
+                      <CardContent className="space-y-4">
+                        <div className="flex items-center space-x-2">
+                          <Input
+                            value={overlayUrl}
+                            readOnly
+                            className="text-sm"
+                          />
+                          <Button size="icon" onClick={copyOverlayLink}>
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                          <Button asChild size="icon" variant="outline">
+                            <a href={overlayUrl} target="_blank" rel="noopener noreferrer">
+                              <ExternalLink className="h-4 w-4" />
+                            </a>
+                          </Button>
+                        </div>
+                      </CardContent>
+                    )}
                   </Card>
                 </div>
               </TabsContent>
@@ -1775,9 +1839,8 @@ export default function StreamerPanel() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {/* Assurez-vous que UniversalTimer reçoit le streamer.id */}
                 <UniversalTimer
-                    streamerId={streamer.id} // Passez l'ID du streamer
+                    streamerId={streamer.id}
                     status={streamer?.status}
                     streamStartedAt={streamer?.stream_started_at}
                     pauseStartedAt={streamer?.pause_started_at}
