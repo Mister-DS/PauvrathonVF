@@ -421,7 +421,7 @@ const PauvrathonPage = () => {
         return;
       }
 
-      setStreamer(data as Streamer);
+      setStreamer(data as unknown as Streamer);
       setIsStreamerOwner(user?.id === data.user_id);
 
       // Initialiser le temps temps réel avec la valeur de la base

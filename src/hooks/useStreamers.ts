@@ -141,7 +141,7 @@ export function useStreamers() {
       });
 
       console.log('✅ Streamers Pauvrathon chargés:', transformedData.length);
-      setStreamers(transformedData as Streamer[]);
+      setStreamers(transformedData as unknown as Streamer[]);
 
     } catch (error) {
       console.error('❌ Erreur lors du chargement des streamers:', error);

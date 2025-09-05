@@ -287,6 +287,7 @@ export type Database = {
           total_elapsed_time: number | null
           total_paused_duration: number | null
           total_time_added: number | null
+          twitch_eventsub_subscriptions: string[] | null
           twitch_id: string
           updated_at: string
           user_id: string
@@ -312,6 +313,7 @@ export type Database = {
           total_elapsed_time?: number | null
           total_paused_duration?: number | null
           total_time_added?: number | null
+          twitch_eventsub_subscriptions?: string[] | null
           twitch_id: string
           updated_at?: string
           user_id: string
@@ -337,6 +339,7 @@ export type Database = {
           total_elapsed_time?: number | null
           total_paused_duration?: number | null
           total_time_added?: number | null
+          twitch_eventsub_subscriptions?: string[] | null
           twitch_id?: string
           updated_at?: string
           user_id?: string
@@ -535,31 +538,43 @@ export type Database = {
     Views: {
       streamers_public: {
         Row: {
+          clicks_required: number | null
           created_at: string | null
+          current_clicks: number | null
           id: string | null
           is_live: boolean | null
           status: string | null
           stream_started_at: string | null
           stream_title: string | null
+          total_time_added: number | null
           twitch_id: string | null
+          updated_at: string | null
         }
         Insert: {
+          clicks_required?: number | null
           created_at?: string | null
+          current_clicks?: number | null
           id?: string | null
           is_live?: boolean | null
           status?: string | null
           stream_started_at?: string | null
           stream_title?: string | null
+          total_time_added?: number | null
           twitch_id?: string | null
+          updated_at?: string | null
         }
         Update: {
+          clicks_required?: number | null
           created_at?: string | null
+          current_clicks?: number | null
           id?: string | null
           is_live?: boolean | null
           status?: string | null
           stream_started_at?: string | null
           stream_title?: string | null
+          total_time_added?: number | null
           twitch_id?: string | null
+          updated_at?: string | null
         }
         Relationships: []
       }
@@ -644,6 +659,10 @@ export type Database = {
       increment_clicks: {
         Args: { p_streamer_id: string } | { streamer_id: string }
         Returns: undefined
+      }
+      is_admin: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
       }
       update_player_stats: {
         Args: {

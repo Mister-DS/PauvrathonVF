@@ -30,6 +30,8 @@ interface StreamerData {
   total_elapsed_time: number;
   current_clicks: number;
   clicks_required: number;
+  created_at: string;
+  updated_at: string;
   total_clicks: number;
   active_minigames: string[];
 }

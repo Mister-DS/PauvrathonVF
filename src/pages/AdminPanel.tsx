@@ -498,6 +498,31 @@ export default function AdminPanel() {
     }
   };
 
+  // Jeux prédéfinis
+  const predefinedGames = [
+    {
+      name: "Guess Number",
+      description: "Devinez le nombre mystère",
+      component_code: "guess_number",
+      max_attempts: 3,
+      max_chances: 12
+    },
+    {
+      name: "Hangman", 
+      description: "Jeu du pendu",
+      component_code: "hangman",
+      max_attempts: 3,
+      max_chances: 6
+    },
+    {
+      name: "Memory Game",
+      description: "Jeu de mémoire",
+      component_code: "memory_game", 
+      max_attempts: 3,
+      max_chances: 12
+    }
+  ];
+
   // FONCTION CORRIGÉE - handleAddPredefinedGame
   const handleAddPredefinedGame = async (game: typeof predefinedGames[0]) => {
     try {

@@ -266,17 +266,18 @@ export default function StreamerPanel() {
         setCooldownTime(data.cooldown_seconds || 30);
         setSelectedGames(data.active_minigames || []);
 
-        setTimePerSubTier1(data.time_per_sub_tier1 ?? 60);
-        setTimePerSubTier2(data.time_per_sub_tier2 ?? 120);
-        setTimePerSubTier3(data.time_per_sub_tier3 ?? 180);
-        setTimePerBitsTiers(data.time_per_bits_tiers || []);
-        setTimePerDonationsTiers(data.time_per_donations_tiers || []);
+        // Configuration EventSub - à implémenter plus tard
+        setTimePerSubTier1(60);
+        setTimePerSubTier2(120);
+        setTimePerSubTier3(180);
+        setTimePerBitsTiers([]);
+        setTimePerDonationsTiers([]);
 
-        setOriginalTimePerSubTier1(data.time_per_sub_tier1 ?? 60);
-        setOriginalTimePerSubTier2(data.time_per_sub_tier2 ?? 120);
-        setOriginalTimePerSubTier3(data.time_per_sub_tier3 ?? 180);
-        setOriginalTimePerBitsTiers(data.time_per_bits_tiers || []);
-        setOriginalTimePerDonationsTiers(data.time_per_donations_tiers || []);
+        setOriginalTimePerSubTier1(60);
+        setOriginalTimePerSubTier2(120);
+        setOriginalTimePerSubTier3(180);
+        setOriginalTimePerBitsTiers([]);
+        setOriginalTimePerDonationsTiers([]);
       }
     } catch (error: any) {
       console.error('Error fetching streamer data:', error);
