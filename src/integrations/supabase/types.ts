@@ -593,6 +593,10 @@ export type Database = {
           | { streamer_id: string; time_to_add: number }
         Returns: undefined
       }
+      cleanup_expired_tokens: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
       create_admin_streamer_profile: {
         Args: Record<PropertyKey, never>
         Returns: undefined
@@ -656,8 +660,20 @@ export type Database = {
         }
         Returns: number
       }
+      get_user_token: {
+        Args: { p_user_id: string }
+        Returns: {
+          encrypted_access_token: string
+          encrypted_refresh_token: string
+          token_expires_at: string
+        }[]
+      }
       increment_clicks: {
         Args: { p_streamer_id: string } | { streamer_id: string }
+        Returns: undefined
+      }
+      invalidate_user_tokens: {
+        Args: Record<PropertyKey, never>
         Returns: undefined
       }
       is_admin: {
@@ -694,6 +710,14 @@ export type Database = {
               p_time_contributed?: number
             }
         Returns: undefined
+      }
+      upsert_user_token: {
+        Args: {
+          p_encrypted_access_token: string
+          p_encrypted_refresh_token: string
+          p_token_expires_at?: string
+        }
+        Returns: string
       }
     }
     Enums: {
