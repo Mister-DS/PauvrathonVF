@@ -662,11 +662,7 @@ export type Database = {
       }
       get_user_token: {
         Args: { p_user_id: string }
-        Returns: {
-          encrypted_access_token: string
-          encrypted_refresh_token: string
-          token_expires_at: string
-        }[]
+        Returns: Database["public"]["CompositeTypes"]["user_token_type"]
       }
       increment_clicks: {
         Args: { p_streamer_id: string } | { streamer_id: string }
@@ -724,7 +720,11 @@ export type Database = {
       user_role: "viewer" | "streamer" | "admin"
     }
     CompositeTypes: {
-      [_ in never]: never
+      user_token_type: {
+        encrypted_access_token: string | null
+        encrypted_refresh_token: string | null
+        token_expires_at: string | null
+      }
     }
   }
 }
