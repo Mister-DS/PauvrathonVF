@@ -627,29 +627,29 @@ export type Database = {
         Args: { minigame_id: string }
         Returns: {
           code: string
+          component_code: string
           description: string
           id: string
           is_active: boolean
-          name: string
         }[]
       }
       get_safe_minigames: {
         Args: Record<PropertyKey, never>
         Returns: {
+          component_code: string
           created_at: string
           description: string
           id: string
           is_active: boolean
-          name: string
         }[]
       }
       get_safe_minigames_public: {
         Args: Record<PropertyKey, never>
         Returns: {
+          component_code: string
           description: string
           id: string
           is_active: boolean
-          name: string
         }[]
       }
       get_time_for_event: {
