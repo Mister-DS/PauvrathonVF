@@ -1,12 +1,16 @@
-import { useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Navigation } from '@/components/Navigation';
+import { SubscriptionCard } from '@/components/SubscriptionCard';
+import { SubscriptionBadge } from '@/components/SubscriptionBadge';
 import { useAuth } from '@/contexts/AuthContext';
 import { useStreamerStatus } from '@/hooks/useStreamerStatus';
+import { useSubscription } from '@/hooks/useSubscription';
+import { useToast } from '@/hooks/use-toast';
 import {
   User,
   Calendar,
@@ -20,6 +24,28 @@ import {
 export default function Profile() {
   const { user, profile, signOut, connectTwitch, twitchUser } = useAuth();
   const { isLive } = useStreamerStatus(user?.id);
+  const { checkSubscription } = useSubscription();
+  const { toast } = useToast();
+  const [searchParams] = useSearchParams();
+
+  // Handle checkout success/cancellation
+  useEffect(() => {
+    const checkout = searchParams.get('checkout');
+    if (checkout === 'success') {
+      toast({
+        title: "Abonnement activé !",
+        description: "Merci pour votre abonnement. Votre badge sera visible sous peu.",
+      });
+      // Refresh subscription status
+      checkSubscription();
+    } else if (checkout === 'cancelled') {
+      toast({
+        title: "Abonnement annulé",
+        description: "Vous pouvez réessayer à tout moment.",
+        variant: "destructive",
+      });
+    }
+  }, [searchParams, toast, checkSubscription]);
 
   // Redirect if not authenticated
   if (!user) {
@@ -60,9 +86,12 @@ export default function Profile() {
                       )}
                     </div>
                   <div>
-                    <CardTitle className="text-2xl">
-                      {profile?.twitch_display_name || 'Utilisateur'}
-                    </CardTitle>
+                    <div className="flex items-center">
+                      <CardTitle className="text-2xl">
+                        {profile?.twitch_display_name || 'Utilisateur'}
+                      </CardTitle>
+                      <SubscriptionBadge />
+                    </div>
                     <p className="text-muted-foreground">
                       {profile?.twitch_username ? `@${profile.twitch_username}` : 'Pas de Twitch connecté'}
                     </p>
@@ -122,6 +151,9 @@ export default function Profile() {
             </Card>
           )}
           
+          {/* Subscription Management */}
+          <SubscriptionCard />
+
           {/* Recent Activity */}
           <Card>
             <CardHeader>

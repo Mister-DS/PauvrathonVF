@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { SubscriptionBadge } from '@/components/SubscriptionBadge';
 import {
   NavigationMenu,
   NavigationMenuItem,
@@ -98,6 +99,7 @@ export function Navigation() {
                 <Button variant="ghost" className="w-full justify-start">
                   <User className="mr-2 h-4 w-4" />
                   Profil
+                  <SubscriptionBadge />
                 </Button>
               </Link>
               <Button variant="ghost" className="w-full justify-start" onClick={() => { signOut(); setIsOpen(false); }}>
@@ -177,6 +179,7 @@ export function Navigation() {
                         {profile?.twitch_display_name?.charAt(0) || 'U'}
                       </AvatarFallback>
                     </Avatar>
+                    <SubscriptionBadge />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="w-56" align="end" forceMount>
