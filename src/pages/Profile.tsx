@@ -170,7 +170,7 @@ export default function Profile() {
                  Pauvrathon vous plaît ? Soutenez le développement du projet !
                </p>
                <Button 
-                 onClick={() => window.open(`https://www.paypal.com/donate/?business=dierickxsimon109%40gmail.com&no_recurring=0&currency_code=EUR`, '_blank')}
+                 onClick={() => window.open(`https://www.paypal.com/donate/?business=dierickxsimon198%40gmail.com&no_recurring=0&currency_code=EUR`, '_blank')}
                  className="w-full sm:w-auto"
                >
                  <Heart className="mr-2 h-4 w-4" />

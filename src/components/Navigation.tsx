@@ -108,7 +108,7 @@ export function Navigation() {
                 variant="outline" 
                 className="w-full justify-start mt-2" 
                 onClick={() => {
-                  window.open(`https://www.paypal.com/donate/?business=dierickxsimon109%40gmail.com&no_recurring=0&currency_code=EUR`, '_blank');
+                  window.open(`https://www.paypal.com/donate/?business=dierickxsimon198%40gmail.com&no_recurring=0&currency_code=EUR`, '_blank');
                   setIsOpen(false);
                 }}
               >
@@ -157,7 +157,7 @@ export function Navigation() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => window.open(`https://www.paypal.com/donate/?business=dierickxsimon109%40gmail.com&no_recurring=0&currency_code=EUR`, '_blank')}
+              onClick={() => window.open(`https://www.paypal.com/donate/?business=dierickxsimon198%40gmail.com&no_recurring=0&currency_code=EUR`, '_blank')}
               className="hidden sm:flex items-center"
             >
               <Heart className="mr-2 h-4 w-4 text-red-500" />
