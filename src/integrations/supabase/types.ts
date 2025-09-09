@@ -101,6 +101,39 @@ export type Database = {
         }
         Relationships: []
       }
+      monthly_badges: {
+        Row: {
+          badge_type: string
+          created_at: string
+          expires_at: string
+          granted_at: string
+          id: string
+          is_active: boolean
+          month_year: string
+          user_id: string
+        }
+        Insert: {
+          badge_type?: string
+          created_at?: string
+          expires_at: string
+          granted_at?: string
+          id?: string
+          is_active?: boolean
+          month_year: string
+          user_id: string
+        }
+        Update: {
+          badge_type?: string
+          created_at?: string
+          expires_at?: string
+          granted_at?: string
+          id?: string
+          is_active?: boolean
+          month_year?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       overlay_configs: {
         Row: {
           config: Json
@@ -405,6 +438,42 @@ export type Database = {
           },
         ]
       }
+      subscribers: {
+        Row: {
+          created_at: string
+          email: string
+          id: string
+          stripe_customer_id: string | null
+          subscribed: boolean
+          subscription_end: string | null
+          subscription_tier: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          id?: string
+          stripe_customer_id?: string | null
+          subscribed?: boolean
+          subscription_end?: string | null
+          subscription_tier?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          id?: string
+          stripe_customer_id?: string | null
+          subscribed?: boolean
+          subscription_end?: string | null
+          subscription_tier?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       time_additions: {
         Row: {
           created_at: string
@@ -660,9 +729,21 @@ export type Database = {
         }
         Returns: number
       }
+      get_user_badge_status: {
+        Args: { p_user_id: string }
+        Returns: {
+          badge_expires_at: string
+          current_month_badge: boolean
+          has_active_badge: boolean
+        }[]
+      }
       get_user_token: {
         Args: { p_user_id: string }
         Returns: Database["public"]["CompositeTypes"]["user_token_type"]
+      }
+      grant_monthly_badge: {
+        Args: { p_user_id: string }
+        Returns: undefined
       }
       increment_clicks: {
         Args: { p_streamer_id: string } | { streamer_id: string }
@@ -675,6 +756,10 @@ export type Database = {
       is_admin: {
         Args: Record<PropertyKey, never>
         Returns: boolean
+      }
+      revoke_expired_badges: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
       }
       update_player_stats: {
         Args: {
