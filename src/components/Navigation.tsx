@@ -8,7 +8,7 @@ import {
   NavigationMenuItem,
   NavigationMenuList,
 } from '@/components/ui/navigation-menu';
-import { User, Settings, Shield, LogOut, Menu, X } from 'lucide-react';
+import { User, Settings, Shield, LogOut, Menu, X, Heart } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -104,6 +104,17 @@ export function Navigation() {
                 <LogOut className="mr-2 h-4 w-4" />
                 Déconnexion
               </Button>
+              <Button 
+                variant="outline" 
+                className="w-full justify-start mt-2" 
+                onClick={() => {
+                  window.open(`https://www.paypal.com/donate/?business=dierickxsimon109%40gmail.com&no_recurring=0&currency_code=EUR`, '_blank');
+                  setIsOpen(false);
+                }}
+              >
+                <Heart className="mr-2 h-4 w-4 text-red-500" />
+                Soutenir le dev
+              </Button>
             </div>
           )}
         </div>
@@ -142,6 +153,17 @@ export function Navigation() {
           </div>
 
           <div className="flex items-center space-x-4">
+            {/* Support Button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.open(`https://www.paypal.com/donate/?business=dierickxsimon109%40gmail.com&no_recurring=0&currency_code=EUR`, '_blank')}
+              className="hidden sm:flex items-center"
+            >
+              <Heart className="mr-2 h-4 w-4 text-red-500" />
+              Soutenir
+            </Button>
+            
             {/* Mobile Menu */}
             {user && isMobile && <MobileMenu />}
             

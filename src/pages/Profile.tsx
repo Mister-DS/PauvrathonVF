@@ -13,7 +13,8 @@ import {
   LogOut,
   AlertTriangle,
   Shield,
-  Star
+  Star,
+  Heart
 } from 'lucide-react';
 
 export default function Profile() {
@@ -154,7 +155,29 @@ export default function Profile() {
                 </Button>
               </CardContent>
             </Card>
-          )}
+           )}
+
+           {/* Support the Developer */}
+           <Card>
+             <CardHeader>
+               <CardTitle className="flex items-center">
+                 <Heart className="mr-2 h-5 w-5 text-red-500" />
+                 Soutenir le Développeur
+               </CardTitle>
+             </CardHeader>
+             <CardContent>
+               <p className="text-muted-foreground mb-4">
+                 Pauvrathon vous plaît ? Soutenez le développement du projet !
+               </p>
+               <Button 
+                 onClick={() => window.open(`https://www.paypal.com/donate/?business=dierickxsimon109%40gmail.com&no_recurring=0&currency_code=EUR`, '_blank')}
+                 className="w-full sm:w-auto"
+               >
+                 <Heart className="mr-2 h-4 w-4" />
+                 Faire un don PayPal
+               </Button>
+             </CardContent>
+           </Card>
         </div>
       </div>
     </div>
