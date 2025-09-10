@@ -103,8 +103,10 @@ export type Database = {
       }
       monthly_badges: {
         Row: {
+          badge_design: Json | null
           badge_type: string
           created_at: string
+          display_name: string | null
           expires_at: string
           granted_at: string
           id: string
@@ -113,8 +115,10 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          badge_design?: Json | null
           badge_type?: string
           created_at?: string
+          display_name?: string | null
           expires_at: string
           granted_at?: string
           id?: string
@@ -123,8 +127,10 @@ export type Database = {
           user_id: string
         }
         Update: {
+          badge_design?: Json | null
           badge_type?: string
           created_at?: string
+          display_name?: string | null
           expires_at?: string
           granted_at?: string
           id?: string
@@ -702,6 +708,10 @@ export type Database = {
           is_active: boolean
         }[]
       }
+      get_monthly_badge_design: {
+        Args: { month_year: string }
+        Returns: Json
+      }
       get_safe_minigames: {
         Args: Record<PropertyKey, never>
         Returns: {
@@ -732,7 +742,9 @@ export type Database = {
       get_user_badge_status: {
         Args: { p_user_id: string }
         Returns: {
+          all_badges: Json
           badge_expires_at: string
+          current_display_badge: Json
           current_month_badge: boolean
           has_active_badge: boolean
         }[]
@@ -743,6 +755,10 @@ export type Database = {
       }
       grant_monthly_badge: {
         Args: { p_user_id: string }
+        Returns: undefined
+      }
+      grant_role_badge: {
+        Args: { p_role: string; p_user_id: string }
         Returns: undefined
       }
       increment_clicks: {

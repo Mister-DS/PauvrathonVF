@@ -1,11 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { Json } from '@/integrations/supabase/types';
 
 interface BadgeStatus {
   has_active_badge: boolean;
   current_month_badge: boolean;
   badge_expires_at: string | null;
+  current_display_badge: Json | null;
+  all_badges: Json | null;
 }
 
 export function useBadgeStatus() {
@@ -19,6 +22,8 @@ export function useBadgeStatus() {
         has_active_badge: false,
         current_month_badge: false,
         badge_expires_at: null,
+        current_display_badge: null,
+        all_badges: null,
       });
       return;
     }

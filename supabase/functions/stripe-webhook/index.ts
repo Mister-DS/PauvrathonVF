@@ -85,8 +85,8 @@ serve(async (req) => {
         const { data: profile } = await supabaseClient
           .from('profiles')
           .select('user_id')
-          .eq('twitch_username', customer.email) // This might need to be adjusted based on your profile structure
-          .single();
+          .eq('twitch_username', customer.email)
+          .maybeSingle();
 
         if (!profile) {
           logStep("No user profile found for customer email", { email: customer.email });
@@ -172,8 +172,8 @@ serve(async (req) => {
         const { data: profile } = await supabaseClient
           .from('profiles')
           .select('user_id')
-          .eq('twitch_username', customer.email) // This might need to be adjusted
-          .single();
+          .eq('twitch_username', customer.email)
+          .maybeSingle();
 
         if (!profile) {
           logStep("No user profile found for customer email", { email: customer.email });
