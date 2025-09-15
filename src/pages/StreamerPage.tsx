@@ -39,6 +39,7 @@ import { toast } from "sonner";
 
 export default function StreamerPage() {
   const { streamerId } = useParams();
+  console.log('StreamerPage loaded with streamerId:', streamerId);
   const { user } = useAuth();
   const { data: streamers, isLoading } = useStreamers();
   const [streamer, setStreamer] = useState(null);
