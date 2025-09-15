@@ -19,7 +19,8 @@ import {
   Star,
   ArrowRight,
   Sparkles,
-  TrendingUp
+  TrendingUp,
+  Play
 } from "lucide-react";
 
 export default function Home() {
@@ -62,7 +63,7 @@ export default function Home() {
               <div className="mb-6">
                 <Badge className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-4 py-2 text-sm font-medium animate-pulse">
                   <Sparkles className="w-4 h-4 mr-2" />
-                  Révolutionnez votre streaming
+                  Nouvelle génération de streaming interactif
                 </Badge>
               </div>
 
@@ -77,11 +78,11 @@ export default function Home() {
               </div>
               
               <p className="text-xl md:text-2xl text-gray-300 mb-8 max-w-4xl mx-auto leading-relaxed">
-                La plateforme interactive révolutionnaire où{" "}
+                La plateforme interactive où{" "}
                 <span className="text-transparent bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text font-semibold">
-                  vos clics prolongent le stream
+                  vos actions prolongent le stream
                 </span>
-                {" "}! Participez aux mini-jeux et faites durer l'aventure de vos streamers préférés.
+                {" "}! Participez aux mini-jeux et influencez directement la durée des diffusions de vos streamers préférés.
               </p>
               
               <div className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-12">
@@ -89,7 +90,7 @@ export default function Home() {
                   <Link to="/decouverte" className="group">
                     <Button size="lg" className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-8 py-4 text-lg font-semibold rounded-xl shadow-2xl hover:shadow-purple-500/25 transform hover:scale-105 transition-all duration-300">
                       <Users className="mr-2 h-5 w-5" />
-                      Découvrir les Pauvrathons
+                      Découvrir les Streamers
                       <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
                     </Button>
                   </Link>
@@ -104,20 +105,12 @@ export default function Home() {
                 )}
               </div>
 
-              {/* Stats rapides */}
-              <div className="flex flex-wrap justify-center gap-8 text-center">
-                <div>
-                  <div className="text-3xl font-bold text-purple-400">500+</div>
-                  <div className="text-sm text-gray-400">Streamers actifs</div>
-                </div>
-                <div>
-                  <div className="text-3xl font-bold text-pink-400">10k+</div>
-                  <div className="text-sm text-gray-400">Heures ajoutées</div>
-                </div>
-                <div>
-                  <div className="text-3xl font-bold text-blue-400">50k+</div>
-                  <div className="text-sm text-gray-400">Joueurs</div>
-                </div>
+              {/* Description du concept */}
+              <div className="max-w-2xl mx-auto">
+                <p className="text-gray-400 text-lg">
+                  Un concept unique : plus la communauté participe aux défis, plus le stream dure longtemps. 
+                  Chaque mini-jeu réussi ajoute du temps au compteur en direct.
+                </p>
               </div>
             </div>
           </ResponsiveLayout>
@@ -131,10 +124,10 @@ export default function Home() {
                 Comment ça marche
               </Badge>
               <h2 className="text-4xl md:text-6xl font-bold mb-4 bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
-                Simple comme un clic
+                Le principe est simple
               </h2>
               <p className="text-xl text-gray-400 max-w-2xl mx-auto">
-                Trois étapes pour révolutionner votre expérience de streaming
+                Une nouvelle façon d'interagir avec vos streamers préférés
               </p>
             </div>
             
@@ -142,13 +135,13 @@ export default function Home() {
               <Card className="bg-gradient-to-br from-purple-900/50 to-pink-900/30 border-purple-500/30 backdrop-blur-xl hover:border-purple-400/50 transition-all duration-500 hover:scale-105 hover:shadow-2xl hover:shadow-purple-500/20 group">
                 <CardHeader className="text-center pb-4">
                   <div className="mx-auto w-20 h-20 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
-                    <Users className="h-10 w-10 text-white" />
+                    <Play className="h-10 w-10 text-white" />
                   </div>
-                  <CardTitle className="text-2xl font-bold text-white">Découvrir</CardTitle>
+                  <CardTitle className="text-2xl font-bold text-white">Regarder</CardTitle>
                 </CardHeader>
                 <CardContent className="text-center">
                   <CardDescription className="text-gray-300 text-lg leading-relaxed">
-                    Explorez une bibliothèque infinie de streamers en live et découvrez leurs Pauvrathons uniques.
+                    Découvrez des streamers passionnés qui utilisent Pauvrathon pour créer des expériences uniques.
                   </CardDescription>
                 </CardContent>
               </Card>
@@ -162,7 +155,7 @@ export default function Home() {
                 </CardHeader>
                 <CardContent className="text-center">
                   <CardDescription className="text-gray-300 text-lg leading-relaxed">
-                    Cliquez, jouez et maîtrisez des mini-jeux addictifs pour débloquer du temps de stream bonus.
+                    Jouez aux mini-jeux disponibles sur la page du streamer pour ajouter du temps au compteur.
                   </CardDescription>
                 </CardContent>
               </Card>
@@ -170,13 +163,13 @@ export default function Home() {
               <Card className="bg-gradient-to-br from-pink-900/50 to-orange-900/30 border-pink-500/30 backdrop-blur-xl hover:border-pink-400/50 transition-all duration-500 hover:scale-105 hover:shadow-2xl hover:shadow-pink-500/20 group">
                 <CardHeader className="text-center pb-4">
                   <div className="mx-auto w-20 h-20 bg-gradient-to-br from-pink-500 to-orange-500 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
-                    <Trophy className="h-10 w-10 text-white" />
+                    <Timer className="h-10 w-10 text-white" />
                   </div>
-                  <CardTitle className="text-2xl font-bold text-white">Dominer</CardTitle>
+                  <CardTitle className="text-2xl font-bold text-white">Prolonger</CardTitle>
                 </CardHeader>
                 <CardContent className="text-center">
                   <CardDescription className="text-gray-300 text-lg leading-relaxed">
-                    Créez votre empire streaming, configurez vos défis et regardez votre communauté grandir.
+                    Chaque succès ajoute du temps au stream en direct. Plus la communauté joue, plus ça dure !
                   </CardDescription>
                 </CardContent>
               </Card>
@@ -184,89 +177,116 @@ export default function Home() {
           </ResponsiveLayout>
         </section>
 
-        {/* Process Section */}
+        {/* Mini-games Section */}
         <section className="py-16 relative">
           <div className="absolute inset-0 bg-gradient-to-r from-purple-900/20 to-pink-900/20 backdrop-blur-sm"></div>
           <ResponsiveLayout>
             <div className="text-center mb-16 relative">
               <Badge className="bg-gradient-to-r from-green-600 to-teal-600 text-white px-4 py-2 text-sm font-medium mb-6">
-                Processus simplifié
+                Mini-jeux disponibles
               </Badge>
               <h2 className="text-4xl md:text-6xl font-bold mb-4 bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
-                Votre parcours en 4 étapes
+                Des défis pour tous
               </h2>
+              <p className="text-xl text-gray-400 max-w-2xl mx-auto">
+                Chaque jeu complété ajoute du temps précieux au stream
+              </p>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 relative">
-              {/* Ligne de connexion */}
-              <div className="hidden lg:block absolute top-16 left-1/2 transform -translate-x-1/2 w-full h-0.5 bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500"></div>
-              
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {[
-                { num: "1", title: "Se connecter", desc: "Connexion Twitch sécurisée en un clic", color: "from-purple-500 to-purple-600", icon: Zap },
-                { num: "2", title: "Explorer", desc: "Découvrez des streamers passionnants", color: "from-blue-500 to-blue-600", icon: Target },
-                { num: "3", title: "Jouer", desc: "Mini-jeux addictifs et gratifiants", color: "from-pink-500 to-pink-600", icon: Gamepad2 },
-                { num: "4", title: "Impacter", desc: "Prolongez et enrichissez l'expérience", color: "from-orange-500 to-orange-600", icon: TrendingUp }
-              ].map(({ num, title, desc, color, icon: Icon }, index) => (
-                <div key={index} className="text-center relative">
-                  <div className={`mx-auto w-24 h-24 bg-gradient-to-br ${color} rounded-full flex items-center justify-center mb-6 text-2xl font-bold text-white shadow-2xl border-4 border-white/20 hover:scale-110 transition-transform duration-300 relative z-10`}>
-                    <Icon className="w-8 h-8" />
-                  </div>
-                  <h3 className="text-2xl font-bold mb-3 text-white">{title}</h3>
-                  <p className="text-gray-300 leading-relaxed">{desc}</p>
-                </div>
+                { title: "Nombre Mystère", desc: "Devinez le bon nombre", icon: Target, color: "from-purple-500 to-purple-600" },
+                { title: "Pendu", desc: "Trouvez le mot caché", icon: Gamepad2, color: "from-blue-500 to-blue-600" },
+                { title: "Mémoire", desc: "Mémorisez les séquences", icon: Star, color: "from-pink-500 to-pink-600" },
+                { title: "Réflexes", desc: "Testez votre rapidité", icon: Zap, color: "from-orange-500 to-orange-600" },
+                { title: "Simon", desc: "Répétez les motifs", icon: MousePointer, color: "from-green-500 to-green-600" },
+                { title: "Snake", desc: "Jeu classique revisité", icon: TrendingUp, color: "from-teal-500 to-teal-600" },
+                { title: "Tic-Tac-Toe", desc: "Stratégie pure", icon: Trophy, color: "from-red-500 to-red-600" },
+                { title: "Plus à venir...", desc: "De nouveaux défis bientôt", icon: Sparkles, color: "from-gray-500 to-gray-600" }
+              ].map(({ title, desc, icon: Icon, color }, index) => (
+                <Card key={index} className="bg-gradient-to-br from-gray-900/80 to-gray-800/60 border-gray-700/50 backdrop-blur-xl hover:border-gray-600/50 transition-all duration-300 hover:scale-105">
+                  <CardHeader className="text-center pb-2">
+                    <div className={`mx-auto w-12 h-12 bg-gradient-to-br ${color} rounded-xl flex items-center justify-center mb-3`}>
+                      <Icon className="h-6 w-6 text-white" />
+                    </div>
+                    <CardTitle className="text-lg font-bold text-white">{title}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-center pt-0">
+                    <CardDescription className="text-gray-400 text-sm">
+                      {desc}
+                    </CardDescription>
+                  </CardContent>
+                </Card>
               ))}
             </div>
           </ResponsiveLayout>
         </section>
 
-        {/* Impact Section */}
+        {/* For Streamers Section */}
         <section className="py-16">
           <ResponsiveLayout>
-            <div className="grid lg:grid-cols-3 gap-12 items-center">
-              <div className="lg:col-span-2">
+            <div className="grid lg:grid-cols-2 gap-12 items-center">
+              <div>
                 <Badge className="bg-gradient-to-r from-teal-600 to-cyan-600 text-white px-4 py-2 text-sm font-medium mb-6">
-                  Impact communautaire
+                  Pour les streamers
                 </Badge>
                 <h2 className="text-4xl md:text-5xl font-bold mb-6 bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
-                  Chaque clic compte,<br />chaque jeu transforme
+                  Créez votre propre<br />expérience Pauvrathon
                 </h2>
                 <p className="text-xl text-gray-300 leading-relaxed mb-8">
-                  Rejoignez une révolution interactive où votre participation directe façonne l'avenir du streaming. 
-                  Votre engagement ne se contente pas de divertir : il crée de véritables moments de communauté.
+                  Configurez vos propres règles, choisissez quels mini-jeux activer, et regardez votre communauté 
+                  s'engager comme jamais. Chaque victoire de vos viewers ajoute du temps à votre stream en direct.
                 </p>
-                <div className="flex flex-wrap gap-4">
-                  <div className="flex items-center gap-2 text-green-400">
-                    <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                    <span>Temps réel</span>
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-6 h-6 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
+                      <span className="text-white text-sm font-bold">✓</span>
+                    </div>
+                    <span className="text-gray-300">Dashboard personnalisé pour configurer vos règles</span>
                   </div>
-                  <div className="flex items-center gap-2 text-blue-400">
-                    <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
-                    <span>Impact mesurable</span>
+                  <div className="flex items-center gap-3">
+                    <div className="w-6 h-6 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
+                      <span className="text-white text-sm font-bold">✓</span>
+                    </div>
+                    <span className="text-gray-300">Overlay OBS intégré pour afficher le timer en direct</span>
                   </div>
-                  <div className="flex items-center gap-2 text-purple-400">
-                    <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
-                    <span>Communauté active</span>
+                  <div className="flex items-center gap-3">
+                    <div className="w-6 h-6 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full flex items-center justify-center">
+                      <span className="text-white text-sm font-bold">✓</span>
+                    </div>
+                    <span className="text-gray-300">Système de badges pour récompenser votre communauté</span>
                   </div>
                 </div>
               </div>
               
               <div className="space-y-6">
-                {[
-                  { icon: Users, title: "Communauté", value: "50k+", desc: "Joueurs actifs chaque jour", color: "text-purple-400" },
-                  { icon: Timer, title: "Temps ajouté", value: "10k", desc: "Heures de stream prolongées", color: "text-pink-400" },
-                  { icon: Gamepad2, title: "Mini-jeux", value: "100+", desc: "Défis uniques disponibles", color: "text-blue-400" }
-                ].map(({ icon: Icon, title, value, desc, color }, index) => (
-                  <div key={index} className="bg-gradient-to-r from-gray-900/50 to-gray-800/30 backdrop-blur-xl rounded-2xl p-6 border border-gray-700/50 hover:border-gray-600/50 transition-all duration-300">
-                    <div className="flex items-center gap-4">
-                      <Icon className={`h-12 w-12 ${color}`} />
-                      <div>
-                        <div className={`text-2xl font-bold ${color}`}>{value}</div>
-                        <div className="text-white font-semibold">{title}</div>
-                        <div className="text-sm text-gray-400">{desc}</div>
-                      </div>
+                <Card className="bg-gradient-to-r from-gray-900/50 to-gray-800/30 backdrop-blur-xl rounded-2xl p-6 border border-gray-700/50">
+                  <div className="flex items-center gap-4">
+                    <Clock className="h-12 w-12 text-purple-400" />
+                    <div>
+                      <div className="text-white font-semibold">Timer en temps réel</div>
+                      <div className="text-sm text-gray-400">Affichage dynamique du temps restant</div>
                     </div>
                   </div>
-                ))}
+                </Card>
+                <Card className="bg-gradient-to-r from-gray-900/50 to-gray-800/30 backdrop-blur-xl rounded-2xl p-6 border border-gray-700/50">
+                  <div className="flex items-center gap-4">
+                    <Gamepad2 className="h-12 w-12 text-pink-400" />
+                    <div>
+                      <div className="text-white font-semibold">Mini-jeux configurables</div>
+                      <div className="text-sm text-gray-400">Choisissez les défis pour votre audience</div>
+                    </div>
+                  </div>
+                </Card>
+                <Card className="bg-gradient-to-r from-gray-900/50 to-gray-800/30 backdrop-blur-xl rounded-2xl p-6 border border-gray-700/50">
+                  <div className="flex items-center gap-4">
+                    <Users className="h-12 w-12 text-blue-400" />
+                    <div>
+                      <div className="text-white font-semibold">Engagement communautaire</div>
+                      <div className="text-sm text-gray-400">Participation active de vos viewers</div>
+                    </div>
+                  </div>
+                </Card>
               </div>
             </div>
           </ResponsiveLayout>
@@ -280,7 +300,7 @@ export default function Home() {
               <div className="mb-8">
                 <Badge className="bg-gradient-to-r from-yellow-600 to-orange-600 text-white px-4 py-2 text-sm font-medium animate-pulse">
                   <Star className="w-4 h-4 mr-2" />
-                  Rejoignez la révolution
+                  Prêt à commencer ?
                 </Badge>
               </div>
               
@@ -289,7 +309,7 @@ export default function Home() {
               </h2>
               
               <p className="text-xl text-gray-300 mb-8 max-w-3xl mx-auto leading-relaxed">
-                Ne regardez plus passivement. <span className="text-transparent bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text font-bold">Participez, influencez, transformez</span> l'expérience streaming avec Pauvrathon.
+                Rejoignez la nouvelle génération de streaming interactif. <span className="text-transparent bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text font-bold">Participez, influencez, prolongez</span> les streams de vos créateurs préférés.
               </p>
               
               <div className="flex flex-col sm:flex-row gap-6 justify-center items-center">
@@ -297,7 +317,7 @@ export default function Home() {
                   <Link to="/decouverte" className="group">
                     <Button size="lg" className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-12 py-6 text-xl font-bold rounded-2xl shadow-2xl hover:shadow-purple-500/30 transform hover:scale-105 transition-all duration-300">
                       <Sparkles className="mr-3 h-6 w-6" />
-                      Découvrir maintenant
+                      Découvrir les streamers
                       <ArrowRight className="ml-3 h-6 w-6 group-hover:translate-x-2 transition-transform" />
                     </Button>
                   </Link>
@@ -305,19 +325,15 @@ export default function Home() {
                   <Link to="/auth" className="group">
                     <Button size="lg" className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white px-12 py-6 text-xl font-bold rounded-2xl shadow-2xl hover:shadow-purple-500/30 transform hover:scale-105 transition-all duration-300">
                       <Zap className="mr-3 h-6 w-6" />
-                      Commencer l'aventure
+                      Commencer maintenant
                       <ArrowRight className="ml-3 h-6 w-6 group-hover:translate-x-2 transition-transform" />
                     </Button>
                   </Link>
                 )}
-                
-                <p className="text-sm text-gray-400 sm:hidden">
-                  Gratuit • Pas d'inscription complexe • Résultats instantanés
-                </p>
               </div>
               
-              <p className="hidden sm:block text-sm text-gray-400 mt-6">
-                Gratuit • Pas d'inscription complexe • Résultats instantanés
+              <p className="text-sm text-gray-400 mt-6">
+                Gratuit • Connexion Twitch simple • Résultats instantanés
               </p>
             </div>
           </ResponsiveLayout>
