@@ -132,8 +132,9 @@ export default function StreamerPage() {
     );
   }
 
-  const isLive = streamerStatus?.is_live || false;
-  const viewerCount = streamerStatus?.viewer_count || 0;
+  // Utilise les données du streamer directement depuis useStreamers
+  const isLive = streamer?.status === 'live' || false;
+  const viewerCount = 0; // Sera mis à jour quand useStreamerStatus fonctionnera
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white">
