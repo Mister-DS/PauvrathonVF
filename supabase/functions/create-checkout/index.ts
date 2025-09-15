@@ -56,7 +56,7 @@ serve(async (req) => {
 
     // Get price ID from request body or use default
     const body = await req.json().catch(() => ({}));
-    const priceId = body.priceId || Deno.env.get("STRIPE_PRICE_ID") || "price_PLACEHOLDER"; // Will be replaced when user provides real price ID
+    const priceId = body.priceId || Deno.env.get("STRIPE_PRICE_ID") || "price_1S5lLhFUW4dKyHVfTy2Yb22x"; // 4,50€/mois
 
     logStep("Creating checkout session", { priceId });
 

@@ -85,7 +85,7 @@ serve(async (req) => {
         const { data: profile } = await supabaseClient
           .from('profiles')
           .select('user_id')
-          .eq('twitch_username', customer.email)
+          .eq('email', customer.email)
           .maybeSingle();
 
         if (!profile) {
@@ -172,7 +172,7 @@ serve(async (req) => {
         const { data: profile } = await supabaseClient
           .from('profiles')
           .select('user_id')
-          .eq('twitch_username', customer.email)
+          .eq('email', customer.email)
           .maybeSingle();
 
         if (!profile) {
