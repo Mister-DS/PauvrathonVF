@@ -13,9 +13,9 @@ import Profile from "./pages/Profile";
 import StreamerRequest from "./pages/StreamerRequest";
 import StreamerPanel from "./pages/StreamerPanel";
 import AdminPanel from "./pages/AdminPanel";
-import PauvrathonPage from "./pages/PauvrathonPage";
 import NotFound from "./pages/NotFound";
 import StreamOverlay from "./pages/StreamOverlay";
+import StreamerPage from "@/pages/StreamerPage";
 
 const queryClient = new QueryClient();
 
@@ -34,11 +34,10 @@ const App = () => (
             <Route path="/suivis" element={<Following />} />
             <Route path="/profil" element={<Profile />} />
             <Route path="/demande-streamer" element={<StreamerRequest />} />
-            <Route path="/streamer" element={<StreamerPanel />} />
+            <Route path="/dashboard" element={<StreamerPanel />} />
             <Route path="/admin" element={<AdminPanel />} />
-            <Route path="/streamer/:id" element={<PauvrathonPage />} />
+            <Route path="/streamer/:streamerId" element={<StreamerPage />} />
             <Route path="/overlay/:id" element={<StreamOverlay />} />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
