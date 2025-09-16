@@ -88,23 +88,15 @@ export default function StreamOverlay() {
   const { isConnected } = useRealtimeTimer({
     streamerId: id,
     onTimeAdded: (timeAddition) => {
-      console.log('Nouvel événement Twitch reçu:', timeAddition);
-      
       // Ajouter à la liste des time_additions
       addTimeAddition(timeAddition);
       
       // Mettre à jour le temps total en temps réel
       setRealtimeTimeAdded(prev => prev + (timeAddition.time_seconds || 0));
       
-      // Notification visuelle (optionnel)
-      if (timeAddition.player_name) {
-        console.log(`+${timeAddition.time_seconds}s ajoutés par ${timeAddition.player_name} (${timeAddition.event_type})`);
-      }
-      
       setLastUpdate(new Date());
     },
     onStreamerUpdate: (updatedStreamer) => {
-      console.log('Streamer mis à jour:', updatedStreamer);
       setStreamer(prev => ({
         ...prev,
         ...updatedStreamer,
@@ -122,8 +114,6 @@ export default function StreamOverlay() {
     if (!id) return;
 
     try {
-      console.log('Fetching streamer data for ID:', id);
-      
       const { data: streamerData, error: streamerError } = await supabase
         .from('streamers')
         .select('*')
@@ -131,14 +121,12 @@ export default function StreamOverlay() {
         .single();
 
       if (streamerError) {
-        console.error('Erreur streamer:', streamerError);
         setError(`Erreur streamer: ${streamerError.message}`);
         setConnectionStatus('disconnected');
         return;
       }
       
       if (streamerData) {
-        console.log('Streamer data loaded:', streamerData);
         const mappedData = {
           ...streamerData,
           status: streamerData.status as 'offline' | 'live' | 'paused' | 'ended',
@@ -155,7 +143,6 @@ export default function StreamOverlay() {
         await fetchPlayerStats();
       }
     } catch (error) {
-      console.error('Error fetching overlay data:', error);
       setError('Erreur de connexion');
       setConnectionStatus('disconnected');
     } finally {
@@ -166,13 +153,10 @@ export default function StreamOverlay() {
   // Fonction pour récupérer les statistiques des joueurs avec les noms
   const fetchPlayerStats = async () => {
     if (!id) {
-      console.log('No streamer ID provided');
       return;
     }
 
     try {
-      console.log('Fetching player stats for streamer:', id);
-      
       // Récupération des stats
       const { data: statsData, error: statsError } = await supabase
         .from('subathon_stats')
@@ -182,14 +166,10 @@ export default function StreamOverlay() {
         .limit(10);
 
       if (statsError) {
-        console.error('Erreur lors de la récupération des stats:', statsError);
         return;
       }
 
-      console.log('Raw stats data:', statsData);
-
       if (!statsData || statsData.length === 0) {
-        console.log('No stats found');
         setStats([]);
         return;
       }
@@ -197,7 +177,7 @@ export default function StreamOverlay() {
       // Utiliser directement player_twitch_username au lieu de chercher dans profiles
       const mappedStats = statsData.map(stat => ({
         id: stat.id,
-        profile_id: stat.player_twitch_username, // Utilise directement le nom d'utilisateur
+        profile_id: stat.player_twitch_username,
         profile_twitch_display_name: stat.player_twitch_username || `Joueur ${stat.id?.slice(0, 8) || 'Inconnu'}`,
         time_contributed: stat.time_contributed || 0,
         clicks_contributed: stat.clicks_contributed || 0,
@@ -205,11 +185,9 @@ export default function StreamOverlay() {
         games_played: stat.games_played || 0
       })) as PlayerStat[];
       
-      console.log('Final mapped stats:', mappedStats);
       setStats(mappedStats);
       
     } catch (error) {
-      console.error('Erreur lors de la récupération des stats:', error);
       setError('Impossible de charger les statistiques');
     }
   };
@@ -219,8 +197,6 @@ export default function StreamOverlay() {
     if (!id) return;
     
     try {
-      console.log('Loading overlay config for streamer:', id);
-      
       const { data, error } = await supabase
         .from('overlay_configs')
         .select('*')
@@ -228,21 +204,17 @@ export default function StreamOverlay() {
         .maybeSingle();
 
       if (error) {
-        console.log('No overlay config found or error:', error.message);
         setConfig(defaultConfig);
         return;
       }
 
       if (data?.config) {
-        console.log('Overlay config loaded:', data.config);
         const configData = typeof data.config === 'object' ? data.config : {};
         setConfig({ ...defaultConfig, ...configData });
       } else {
-        console.log('Using default config');
         setConfig(defaultConfig);
       }
     } catch (error) {
-      console.log('Error loading overlay config:', error);
       setConfig(defaultConfig);
     }
   };
@@ -250,8 +222,6 @@ export default function StreamOverlay() {
   // Setup initial et abonnements temps réel
   useEffect(() => {
     if (!id) return;
-    
-    console.log('Setting up overlay for streamer:', id);
     
     // Chargement initial
     loadOverlayConfig();
@@ -272,7 +242,6 @@ export default function StreamOverlay() {
           'postgres_changes',
           { event: 'UPDATE', schema: 'public', table: 'overlay_configs', filter: `streamer_id=eq.${id}` },
           (payload) => {
-            console.log('Real-time overlay config update:', payload.new);
             if (payload.new && (payload.new as any).config) {
               setConfig({ ...defaultConfig, ...(payload.new as any).config });
             }
@@ -280,7 +249,7 @@ export default function StreamOverlay() {
         )
         .subscribe();
     } catch (error) {
-      console.log('Could not subscribe to overlay config changes:', error);
+      // Silently fail
     }
 
     return () => {
@@ -413,7 +382,7 @@ export default function StreamOverlay() {
                   streamStartedAt={streamer.stream_started_at}
                   pauseStartedAt={streamer.pause_started_at}
                   initialDuration={streamer.initial_duration || 7200}
-                  totalTimeAdded={realtimeTimeAdded} // Utiliser le temps temps réel
+                  totalTimeAdded={realtimeTimeAdded}
                   totalElapsedTime={streamer.total_elapsed_time || 0}
                   formatStyle="colon"
                   showStatus={false}
