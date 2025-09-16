@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
 import Home from "./pages/Home";
 import Auth from "./pages/Auth";
@@ -36,6 +36,8 @@ const App = () => (
             <Route path="/demande-streamer" element={<StreamerRequest />} />
             <Route path="/dashboard" element={<StreamerPanel />} />
             <Route path="/admin" element={<AdminPanel />} />
+            {/* Redirection de /streamer vers /decouverte */}
+            <Route path="/streamer" element={<Navigate to="/decouverte" replace />} />
             <Route path="/streamer/:streamerId" element={<StreamerPage />} />
             <Route path="/overlay/:id" element={<StreamOverlay />} />
             <Route path="*" element={<NotFound />} />
