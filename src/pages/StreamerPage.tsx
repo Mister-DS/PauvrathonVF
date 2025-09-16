@@ -39,81 +39,50 @@ import { toast } from "sonner";
 
 export default function StreamerPage() {
   const { streamerId } = useParams();
-  console.log('StreamerPage loaded with streamerId:', streamerId);
   const { user } = useAuth();
-  const { streamers, loading } = useStreamers();
+  const { data: streamers, isLoading } = useStreamers();
   const [streamer, setStreamer] = useState(null);
   const [activeGame, setActiveGame] = useState(null);
   const [gameStats, setGameStats] = useState({ wins: 0, attempts: 0 });
   
-  const { isLive: streamerIsLive } = useStreamerStatus(streamer?.id);
-  const currentTimer = useCurrentTimer(streamer?.id || '');
+  const { data: streamerStatus } = useStreamerStatus(streamerId);
+  const { data: currentTimer } = useCurrentTimer(streamerId);
 
   useEffect(() => {
     if (streamers && streamerId) {
-      const foundStreamer = streamers.find(s => 
-        s.id === streamerId || 
-        s.profile?.twitch_username === streamerId || 
-        s.profiles?.twitch_username === streamerId
-      );
+      const foundStreamer = streamers.find(s => s.id === streamerId || s.twitch_username === streamerId);
       setStreamer(foundStreamer);
     }
   }, [streamers, streamerId]);
 
-  const handleGameWin = async (score: number) => {
+  const handleGameComplete = async (gameType: string, won: boolean, timeAdded: number = 0) => {
     if (!streamer || !user) return;
 
     try {
       // Enregistrer le résultat du jeu
       const { error } = await supabase
-        .from('game_sessions')
+        .from('game_results')
         .insert({
-          player_twitch_username: user.user_metadata?.user_name || user.email?.split('@')[0],
+          user_id: user.id,
           streamer_id: streamer.id,
-          minigame_name: activeGame || 'unknown',
-          status: 'completed',
-          game_data: { score, won: true }
+          game_type: gameType,
+          won: won,
+          time_added: timeAdded
         });
 
       if (error) throw error;
 
       // Mettre à jour les stats locales
       setGameStats(prev => ({
-        wins: prev.wins + 1,
+        wins: won ? prev.wins + 1 : prev.wins,
         attempts: prev.attempts + 1
       }));
 
-      toast.success(`Bravo ! Score: ${score}`);
-    } catch (error) {
-      console.error('Erreur lors de l\'enregistrement du résultat:', error);
-      toast.error("Erreur lors de l'enregistrement du résultat");
-    }
-  };
-
-  const handleGameLose = async () => {
-    if (!streamer || !user) return;
-
-    try {
-      // Enregistrer le résultat du jeu
-      const { error } = await supabase
-        .from('game_sessions')
-        .insert({
-          player_twitch_username: user.user_metadata?.user_name || user.email?.split('@')[0],
-          streamer_id: streamer.id,
-          minigame_name: activeGame || 'unknown',
-          status: 'completed',
-          game_data: { won: false }
-        });
-
-      if (error) throw error;
-
-      // Mettre à jour les stats locales
-      setGameStats(prev => ({
-        wins: prev.wins,
-        attempts: prev.attempts + 1
-      }));
-
-      toast.info("Dommage ! Réessayez !");
+      if (won && timeAdded > 0) {
+        toast.success(`Bravo ! +${timeAdded} secondes ajoutées au timer !`);
+      } else if (won) {
+        toast.success("Félicitations !");
+      }
     } catch (error) {
       console.error('Erreur lors de l\'enregistrement du résultat:', error);
       toast.error("Erreur lors de l'enregistrement du résultat");
@@ -133,7 +102,7 @@ export default function StreamerPage() {
     }
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
         <div className="text-center">
@@ -163,9 +132,8 @@ export default function StreamerPage() {
     );
   }
 
-  // Utilise les données du streamer directement depuis useStreamers
-  const isLive = streamer?.status === 'live' || streamerIsLive || false;
-  const viewerCount = 0; // Sera mis à jour quand useStreamerStatus fonctionnera
+  const isLive = streamerStatus?.is_live || false;
+  const viewerCount = streamerStatus?.viewer_count || 0;
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white">
@@ -188,7 +156,11 @@ export default function StreamerPage() {
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2">
                     <h1 className="text-3xl lg:text-4xl font-bold">{streamer.display_name}</h1>
-                    {/* Badge sera affiché quand les données badge seront disponibles */}
+                    <BadgeRenderer 
+                      userId={streamer.user_id} 
+                      isStreamer={true}
+                      size="lg"
+                    />
                     {isLive && (
                       <Badge className="bg-red-500 animate-pulse">
                         <div className="w-2 h-2 bg-white rounded-full mr-2"></div>
@@ -197,7 +169,7 @@ export default function StreamerPage() {
                     )}
                   </div>
                   
-                  <p className="text-gray-300 text-lg mb-3">@{streamer.profile?.twitch_username || streamer.profiles?.twitch_username || 'N/A'}</p>
+                  <p className="text-gray-300 text-lg mb-3">@{streamer.twitch_username}</p>
                   
                   {streamer.description && (
                     <p className="text-gray-400 max-w-2xl">{streamer.description}</p>
@@ -210,7 +182,7 @@ export default function StreamerPage() {
                 {user && (
                   <FollowButton 
                     streamerId={streamer.id}
-                    variant="default"
+                    className="bg-purple-600 hover:bg-purple-700"
                   />
                 )}
                 
@@ -223,10 +195,10 @@ export default function StreamerPage() {
                   Partager
                 </Button>
 
-                {(streamer.profile?.twitch_username || streamer.profiles?.twitch_username) && (
+                {streamer.twitch_username && (
                   <Button 
                     variant="outline"
-                    onClick={() => window.open(`https://twitch.tv/${streamer.profile?.twitch_username || streamer.profiles?.twitch_username}`, '_blank')}
+                    onClick={() => window.open(`https://twitch.tv/${streamer.twitch_username}`, '_blank')}
                     className="border-purple-500 hover:bg-purple-900"
                   >
                     <ExternalLink className="w-4 h-4 mr-2" />
@@ -268,11 +240,11 @@ export default function StreamerPage() {
               {/* Colonne principale - Stream et Timer */}
               <div className="lg:col-span-2 space-y-6">
                 {/* Player Twitch */}
-                {isLive && (streamer.profile?.twitch_username || streamer.profiles?.twitch_username) && (
+                {isLive && streamer.twitch_username && (
                   <Card className="bg-gray-900/50 border-gray-800">
                     <CardContent className="p-0">
                       <TwitchPlayer 
-                        channel={streamer.profile?.twitch_username || streamer.profiles?.twitch_username || ''}
+                        channel={streamer.twitch_username}
                         height="400"
                       />
                     </CardContent>
@@ -291,17 +263,7 @@ export default function StreamerPage() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <UniversalTimer 
-                      status={streamer.status || 'offline'}
-                      streamStartedAt={streamer.stream_started_at}
-                      pauseStartedAt={streamer.pause_started_at}
-                      initialDuration={streamer.initial_duration || 7200}
-                      totalTimeAdded={streamer.total_time_added || 0}
-                      totalElapsedTime={streamer.total_elapsed_time || 0}
-                      totalPausedDuration={streamer.total_paused_duration || 0}
-                      formatStyle="colon"
-                      showStatus={true}
-                    />
+                    <UniversalTimer streamerId={streamer.id} />
                   </CardContent>
                 </Card>
 
@@ -337,45 +299,59 @@ export default function StreamerPage() {
                         </TabsContent>
 
                         <TabsContent value="guess-number">
-                          <div className="text-center py-8">
-                            <p className="text-gray-400">Jeu "Devinez le nombre" temporairement indisponible</p>
-                          </div>
+                          <DynamicGame 
+                            gameType="guess-number" 
+                            streamerId={streamer.id}
+                            onGameComplete={handleGameComplete}
+                          />
                         </TabsContent>
 
                         <TabsContent value="hangman">
-                          <div className="text-center py-8">
-                            <p className="text-gray-400">Jeu "Pendu" temporairement indisponible</p>
-                          </div>
+                          <DynamicGame 
+                            gameType="hangman" 
+                            streamerId={streamer.id}
+                            onGameComplete={handleGameComplete}
+                          />
                         </TabsContent>
 
                         <TabsContent value="memory">
-                          <div className="text-center py-8">
-                            <p className="text-gray-400">Jeu "Mémoire" temporairement indisponible</p>
-                          </div>
+                          <DynamicGame 
+                            gameType="memory" 
+                            streamerId={streamer.id}
+                            onGameComplete={handleGameComplete}
+                          />
                         </TabsContent>
 
                         <TabsContent value="reaction">
-                          <div className="text-center py-8">
-                            <p className="text-gray-400">Jeu "Réflexes" temporairement indisponible</p>
-                          </div>
+                          <DynamicGame 
+                            gameType="reaction" 
+                            streamerId={streamer.id}
+                            onGameComplete={handleGameComplete}
+                          />
                         </TabsContent>
 
                         <TabsContent value="simon">
-                          <div className="text-center py-8">
-                            <p className="text-gray-400">Jeu "Simon" temporairement indisponible</p>
-                          </div>
+                          <DynamicGame 
+                            gameType="simon" 
+                            streamerId={streamer.id}
+                            onGameComplete={handleGameComplete}
+                          />
                         </TabsContent>
 
                         <TabsContent value="snake">
-                          <div className="text-center py-8">
-                            <p className="text-gray-400">Jeu "Snake" temporairement indisponible</p>
-                          </div>
+                          <DynamicGame 
+                            gameType="snake" 
+                            streamerId={streamer.id}
+                            onGameComplete={handleGameComplete}
+                          />
                         </TabsContent>
 
                         <TabsContent value="tictactoe">
-                          <div className="text-center py-8">
-                            <p className="text-gray-400">Jeu "TicTacToe" temporairement indisponible</p>
-                          </div>
+                          <DynamicGame 
+                            gameType="tictactoe" 
+                            streamerId={streamer.id}
+                            onGameComplete={handleGameComplete}
+                          />
                         </TabsContent>
                       </Tabs>
                     ) : (
@@ -459,11 +435,11 @@ export default function StreamerPage() {
                     <CardTitle className="text-lg">Liens</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-2">
-                    {(streamer.profile?.twitch_username || streamer.profiles?.twitch_username) && (
+                    {streamer.twitch_username && (
                       <Button 
                         variant="outline" 
                         className="w-full justify-start"
-                        onClick={() => window.open(`https://twitch.tv/${streamer.profile?.twitch_username || streamer.profiles?.twitch_username}`, '_blank')}
+                        onClick={() => window.open(`https://twitch.tv/${streamer.twitch_username}`, '_blank')}
                       >
                         <ExternalLink className="w-4 h-4 mr-2" />
                         Chaîne Twitch

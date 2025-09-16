@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
 import Home from "./pages/Home";
 import Auth from "./pages/Auth";
@@ -13,9 +13,9 @@ import Profile from "./pages/Profile";
 import StreamerRequest from "./pages/StreamerRequest";
 import StreamerPanel from "./pages/StreamerPanel";
 import AdminPanel from "./pages/AdminPanel";
+import PauvrathonPage from "./pages/PauvrathonPage";
 import NotFound from "./pages/NotFound";
 import StreamOverlay from "./pages/StreamOverlay";
-import StreamerPage from "@/pages/StreamerPage";
 
 const queryClient = new QueryClient();
 
@@ -34,12 +34,11 @@ const App = () => (
             <Route path="/suivis" element={<Following />} />
             <Route path="/profil" element={<Profile />} />
             <Route path="/demande-streamer" element={<StreamerRequest />} />
-            <Route path="/dashboard" element={<StreamerPanel />} />
+            <Route path="/streamer" element={<StreamerPanel />} />
             <Route path="/admin" element={<AdminPanel />} />
-            {/* Redirection de /streamer vers /decouverte */}
-            <Route path="/streamer" element={<Navigate to="/decouverte" replace />} />
-            <Route path="/streamer/:streamerId" element={<StreamerPage />} />
+            <Route path="/streamer/:id" element={<PauvrathonPage />} />
             <Route path="/overlay/:id" element={<StreamOverlay />} />
+            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
