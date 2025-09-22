@@ -9,7 +9,6 @@ import { SubscriptionCard } from '@/components/SubscriptionCard';
 import { SubscriptionBadge } from '@/components/SubscriptionBadge';
 import { useAuth } from '@/contexts/AuthContext';
 import { useStreamerStatus } from '@/hooks/useStreamerStatus';
-import { useSubscription } from '@/hooks/useSubscription';
 import { useToast } from '@/hooks/use-toast';
 import {
   User,
@@ -24,28 +23,19 @@ import {
 export default function Profile() {
   const { user, profile, signOut, connectTwitch, twitchUser } = useAuth();
   const { isLive } = useStreamerStatus(user?.id);
-  const { checkSubscription } = useSubscription();
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
 
-  // Handle checkout success/cancellation
+  // Handle donation success (if needed for future PayPal integration)
   useEffect(() => {
-    const checkout = searchParams.get('checkout');
-    if (checkout === 'success') {
+    const donation = searchParams.get('donation');
+    if (donation === 'success') {
       toast({
-        title: "Abonnement activé !",
-        description: "Merci pour votre abonnement. Votre badge sera visible sous peu.",
-      });
-      // Refresh subscription status
-      checkSubscription();
-    } else if (checkout === 'cancelled') {
-      toast({
-        title: "Abonnement annulé",
-        description: "Vous pouvez réessayer à tout moment.",
-        variant: "destructive",
+        title: "Merci pour votre don !",
+        description: "Votre soutien nous aide à améliorer Pauvrathon pour tous.",
       });
     }
-  }, [searchParams, toast, checkSubscription]);
+  }, [searchParams, toast]);
 
   // Redirect if not authenticated
   if (!user) {

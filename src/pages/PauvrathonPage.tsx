@@ -417,7 +417,7 @@ const PauvrathonPage = () => {
           description: "Ce streamer n'est pas en direct en ce moment.",
           variant: "destructive",
         });
-        navigate('/discovery', { replace: true });
+        navigate('/decouverte', { replace: true });
         return;
       }
 
@@ -482,7 +482,7 @@ const PauvrathonPage = () => {
         description: "Impossible de charger les données du Pauvrathon.",
         variant: "destructive",
       });
-      navigate('/discovery', { replace: true });
+      navigate('/decouverte', { replace: true });
     } finally {
       setLoading(false);
     }

@@ -363,8 +363,12 @@ export default function StreamOverlay() {
 
   return (
     <div 
-      className="min-h-screen bg-transparent p-4 font-sans overflow-hidden"
-      style={{ transform: `scale(${(config.overlayScale || 100) / 100})`, transformOrigin: 'top left' }}
+      className="min-h-screen p-4 font-sans overflow-hidden"
+      style={{ 
+        transform: `scale(${(config.overlayScale || 100) / 100})`, 
+        transformOrigin: 'top left',
+        backgroundColor: 'transparent'
+      }}
     >
       {/* Timer principal */}
       {config.showTimer && (
